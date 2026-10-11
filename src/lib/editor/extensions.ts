@@ -1,0 +1,151 @@
+import { Extension, type AnyExtension } from '@tiptap/core';
+import StarterKit from '@tiptap/starter-kit';
+import { TaskItem, TaskList } from '@tiptap/extension-list';
+import { CharacterCount, Placeholder } from '@tiptap/extensions';
+import { Details, DetailsContent, DetailsSummary } from '@tiptap/extension-details';
+import { TableKit } from '@tiptap/extension-table';
+import Image from '@tiptap/extension-image';
+import Highlight from '@tiptap/extension-highlight';
+import Typography from '@tiptap/extension-typography';
+import { openUrl } from '@tauri-apps/plugin-opener';
+import { Plugin, PluginKey } from '@tiptap/pm/state';
+import { Callout } from './callout';
+import { Mention, PageLink } from './page-link';
+import { SlashCommand } from './slash';
+import { MentionSuggest } from './mention';
+import { BlockHandle, type BlockHandleOptions } from './block-handle';
+import { ImageDrop } from './images';
+import { ui } from '../ui.svelte';
+
+/** Editor-wide shortcuts that don't belong to a single node type. */
+const Shortcuts = Extension.create({
+  name: 'tdShortcuts',
+  // Run after list/code keymaps so they get the first chance at Tab.
+  priority: 50,
+  addKeyboardShortcuts() {
+    return {
+      'Mod-k': ({ editor }) => {
+        if (editor.state.selection.empty) return false;
+        window.dispatchEvent(new CustomEvent('td:edit-link'));
+        return true;
+      },
+      'Mod-d': ({ editor }) => {
+        // Duplicate the current top-level block.
+        const { $from } = editor.state.selection;
+        if ($from.depth < 1) return false;
+        const node = $from.node(1);
+        const end = $from.after(1);
+        editor.view.dispatch(editor.state.tr.insert(end, node));
+        return true;
+      },
+      // Keep focus inside the editor instead of tabbing to other controls.
+      Tab: () => true,
+      'Shift-Tab': () => true,
+    };
+  },
+});
+
+/**
+ * Enter at the end of an open toggle's summary moves into its body. The
+ * stock handler always inserts a new paragraph, which strands the empty one
+ * a freshly created toggle already has.
+ */
+const ToggleEnter = Extension.create({
+  name: 'toggleEnter',
+  priority: 200,
+  addKeyboardShortcuts() {
+    return {
+      Enter: ({ editor }) => {
+        const { state } = editor;
+        const { $head, empty } = state.selection;
+        if (!empty || $head.parent.type.name !== 'detailsSummary') return false;
+        if ($head.parentOffset !== $head.parent.content.size) return false;
+        const details = $head.node(-1);
+        const contentPos = $head.after();
+        const content = state.doc.nodeAt(contentPos);
+        const first = content?.firstChild;
+        if (!details.attrs.open || content?.type.name !== 'detailsContent') return false;
+        if (!first || first.type.name !== 'paragraph' || first.content.size !== 0) return false;
+        return editor.commands.setTextSelection(contentPos + 2);
+      },
+    };
+  },
+});
+
+/** Ctrl/Cmd-click opens links in the system browser. */
+const LinkOpener = Extension.create({
+  name: 'linkOpener',
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: new PluginKey('linkOpener'),
+        props: {
+          handleClick(_view, _pos, event) {
+            const a = (event.target as HTMLElement).closest('a[href]') as HTMLAnchorElement | null;
+            if (!a) return false;
+            if (event.ctrlKey || event.metaKey || !_view.editable) {
+              event.preventDefault();
+              openUrl(a.href).catch(ui.error);
+              return true;
+            }
+            return false;
+          },
+        },
+      }),
+    ];
+  },
+});
+
+export function buildExtensions(handle: BlockHandleOptions): AnyExtension[] {
+  return [
+    StarterKit.configure({
+      heading: { levels: [1, 2, 3] },
+      dropcursor: { color: 'var(--text)', width: 2 },
+      codeBlock: { enableTabIndentation: true, tabSize: 2, HTMLAttributes: { spellcheck: 'false' } },
+      link: {
+        openOnClick: false,
+        autolink: true,
+        linkOnPaste: true,
+        defaultProtocol: 'https',
+        HTMLAttributes: { rel: 'noopener noreferrer nofollow', target: null },
+      },
+    }),
+    TaskList,
+    TaskItem.configure({ nested: true }),
+    Details.configure({ persist: true, HTMLAttributes: { class: 'toggle' } }),
+    DetailsSummary,
+    DetailsContent,
+    ToggleEnter,
+    TableKit.configure({ table: { resizable: true, cellMinWidth: 80 } }),
+    Image.configure({
+      inline: false,
+      allowBase64: false,
+      resize: { enabled: true, directions: ['left', 'right'], minWidth: 80, minHeight: 40, alwaysPreserveAspectRatio: true },
+    }),
+    Highlight,
+    Typography,
+    CharacterCount,
+    Placeholder.configure({
+      includeChildren: true,
+      showOnlyCurrent: true,
+      placeholder: ({ node, editor, pos }) => {
+        if (node.type.name === 'heading') return `Heading ${node.attrs.level}`;
+        if (node.type.name === 'detailsSummary') return 'Toggle';
+        if (node.type.name === 'codeBlock') return '';
+        const parent = editor.state.doc.resolve(pos).parent;
+        if (['listItem', 'taskItem'].includes(parent.type.name)) return 'List';
+        if (parent.type.name === 'tableCell' || parent.type.name === 'tableHeader') return '';
+        return "Write, or press '/' for commands…";
+      },
+    }),
+    Callout,
+    PageLink,
+    Mention,
+    SlashCommand,
+    MentionSuggest,
+    ImageDrop,
+    LinkOpener,
+    Shortcuts,
+    BlockHandle.configure(handle),
+  ];
+}

@@ -1,0 +1,856 @@
+//! SQLite storage for pages.
+//!
+//! Pages form a tree (`parent_id`), are ordered among their siblings by an
+//! integer `position`, and are soft-deleted into the trash via `deleted_at`.
+//! Page bodies are stored as editor JSON; a plain-text copy lives in an FTS5
+//! index (`pages_fts`, rowid = `pages.rid`) for full-text search.
+
+use rusqlite::{params, Connection, OptionalExtension, Transaction};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+/// Error surfaced to the frontend as a plain string.
+#[derive(Debug)]
+pub struct Error(pub String);
+
+impl<E: std::fmt::Display> From<E> for Error {
+    fn from(e: E) -> Self {
+        Error(e.to_string())
+    }
+}
+
+impl Serialize for Error {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> std::result::Result<S::Ok, S::Error> {
+        s.serialize_str(&self.0)
+    }
+}
+
+pub type Result<T> = std::result::Result<T, Error>;
+
+fn err<T>(msg: &str) -> Result<T> {
+    Err(Error(msg.to_string()))
+}
+
+pub fn now() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
+}
+
+fn new_id() -> String {
+    uuid::Uuid::new_v4().to_string()
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct PageMeta {
+    pub id: String,
+    pub parent_id: Option<String>,
+    pub title: String,
+    pub icon: String,
+    pub position: i64,
+    /// 0 when not a favorite, otherwise the time it was favorited.
+    pub favorite: i64,
+    pub full_width: bool,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub deleted_at: Option<i64>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Page {
+    #[serde(flatten)]
+    pub meta: PageMeta,
+    pub content: String,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct PagePatch {
+    pub title: Option<String>,
+    pub icon: Option<String>,
+    pub content: Option<String>,
+    /// Plain text of the page body, used for search.
+    pub text: Option<String>,
+    pub favorite: Option<bool>,
+    pub full_width: Option<bool>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchHit {
+    pub id: String,
+    pub title: String,
+    pub icon: String,
+    /// Body excerpt; matches are wrapped in \u{1} ... \u{2}.
+    pub snippet: String,
+    pub updated_at: i64,
+}
+
+const META_COLS: &str =
+    "id, parent_id, title, icon, position, favorite, full_width, created_at, updated_at, deleted_at";
+
+fn meta_from_row(r: &rusqlite::Row) -> rusqlite::Result<PageMeta> {
+    Ok(PageMeta {
+        id: r.get(0)?,
+        parent_id: r.get(1)?,
+        title: r.get(2)?,
+        icon: r.get(3)?,
+        position: r.get(4)?,
+        favorite: r.get(5)?,
+        full_width: r.get::<_, i64>(6)? != 0,
+        created_at: r.get(7)?,
+        updated_at: r.get(8)?,
+        deleted_at: r.get(9)?,
+    })
+}
+
+const SCHEMA_V1: &str = "
+CREATE TABLE pages (
+  rid        INTEGER PRIMARY KEY,
+  id         TEXT NOT NULL UNIQUE,
+  parent_id  TEXT REFERENCES pages(id) ON DELETE CASCADE,
+  title      TEXT NOT NULL DEFAULT '',
+  icon       TEXT NOT NULL DEFAULT '',
+  content    TEXT NOT NULL DEFAULT '',
+  position   INTEGER NOT NULL DEFAULT 0,
+  favorite   INTEGER NOT NULL DEFAULT 0,
+  full_width INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  deleted_at INTEGER
+);
+CREATE INDEX pages_parent ON pages(parent_id, position);
+CREATE VIRTUAL TABLE pages_fts USING fts5(title, body, tokenize = 'unicode61 remove_diacritics 2');
+CREATE TRIGGER pages_fts_delete AFTER DELETE ON pages BEGIN
+  DELETE FROM pages_fts WHERE rowid = old.rid;
+END;
+";
+
+const WELCOME_HTML: &str = r#"<p>Thought Desk is a quiet place to write. Everything stays on this computer, in a single local database.</p>
+<h2>The basics</h2>
+<ul data-type="taskList">
+<li data-type="taskItem" data-checked="true"><p>Open this page</p></li>
+<li data-type="taskItem" data-checked="false"><p>Type <code>/</code> on an empty line to insert any block</p></li>
+<li data-type="taskItem" data-checked="false"><p>Select text to format it, or press <code>Ctrl+B</code>, <code>Ctrl+I</code>, <code>Ctrl+U</code></p></li>
+<li data-type="taskItem" data-checked="false"><p>Hover a block and drag the <code>⋮⋮</code> handle to move it</p></li>
+<li data-type="taskItem" data-checked="false"><p>Type <code>@</code> to link to another page</p></li>
+</ul>
+<h2>Markdown shortcuts</h2>
+<p>Start a line with <code>#</code>, <code>##</code> or <code>###</code> for headings, <code>-</code> for bullets, <code>1.</code> for numbers, <code>[]</code> for a to-do, <code>&gt;</code> for a quote, <code>```</code> for code and <code>---</code> for a divider.</p>
+<h2>Keyboard</h2>
+<table><tbody>
+<tr><th><p>Shortcut</p></th><th><p>Action</p></th></tr>
+<tr><td><p>Ctrl+K / Ctrl+P</p></td><td><p>Search and jump to any page</p></td></tr>
+<tr><td><p>Ctrl+N</p></td><td><p>New page</p></td></tr>
+<tr><td><p>Ctrl+\</p></td><td><p>Show or hide the sidebar</p></td></tr>
+<tr><td><p>Alt+← / Alt+→</p></td><td><p>Go back / forward</p></td></tr>
+<tr><td><p>Ctrl+Shift+L</p></td><td><p>Switch between light and dark</p></td></tr>
+</tbody></table>
+<div data-callout="" data-icon="💡"><p>Pages can be nested as deep as you like. Drag pages in the sidebar to reorder them or drop one onto another to nest it.</p></div>
+<p></p>"#;
+
+pub struct Db {
+    conn: Mutex<Connection>,
+    pub data_dir: PathBuf,
+    pub files_dir: PathBuf,
+}
+
+impl Db {
+    pub fn open(data_dir: &Path) -> Result<Self> {
+        std::fs::create_dir_all(data_dir)?;
+        let files_dir = data_dir.join("files");
+        std::fs::create_dir_all(&files_dir)?;
+
+        let conn = Connection::open(data_dir.join("thoughtdesk.db"))?;
+        conn.execute_batch(
+            "PRAGMA journal_mode = WAL;
+             PRAGMA synchronous = NORMAL;
+             PRAGMA foreign_keys = ON;
+             PRAGMA temp_store = MEMORY;
+             PRAGMA cache_size = -4000;",
+        )?;
+        let db = Db {
+            conn: Mutex::new(conn),
+            data_dir: data_dir.to_path_buf(),
+            files_dir,
+        };
+        db.migrate()?;
+        Ok(db)
+    }
+
+    fn conn(&self) -> std::sync::MutexGuard<'_, Connection> {
+        // A panic while holding the lock cannot leave SQLite half-written
+        // (statements are atomic), so a poisoned lock is safe to reuse.
+        self.conn.lock().unwrap_or_else(|p| p.into_inner())
+    }
+
+    fn migrate(&self) -> Result<()> {
+        let mut conn = self.conn();
+        let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+        if version < 1 {
+            let tx = conn.transaction()?;
+            tx.execute_batch(SCHEMA_V1)?;
+            let text = strip_tags(WELCOME_HTML);
+            insert_page(&tx, None, "Getting started", "👋", WELCOME_HTML, &text)?;
+            tx.execute_batch("PRAGMA user_version = 1;")?;
+            tx.commit()?;
+        }
+        Ok(())
+    }
+
+    pub fn list_pages(&self) -> Result<Vec<PageMeta>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare(&format!(
+            "SELECT {META_COLS} FROM pages ORDER BY parent_id, position, created_at"
+        ))?;
+        let rows = stmt.query_map([], meta_from_row)?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    pub fn get_page(&self, id: &str) -> Result<Page> {
+        let conn = self.conn();
+        let page = conn
+            .query_row(
+                &format!("SELECT {META_COLS}, content FROM pages WHERE id = ?1"),
+                [id],
+                |r| {
+                    Ok(Page {
+                        meta: meta_from_row(r)?,
+                        content: r.get(10)?,
+                    })
+                },
+            )
+            .optional()?;
+        match page {
+            Some(p) => Ok(p),
+            None => err("Page not found"),
+        }
+    }
+
+    pub fn create_page(
+        &self,
+        parent_id: Option<&str>,
+        index: Option<usize>,
+        title: &str,
+        icon: &str,
+    ) -> Result<PageMeta> {
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        if let Some(pid) = parent_id {
+            let alive: Option<Option<i64>> = tx
+                .query_row("SELECT deleted_at FROM pages WHERE id = ?1", [pid], |r| r.get(0))
+                .optional()?;
+            if !matches!(alive, Some(None)) {
+                return err("Parent page no longer exists");
+            }
+        }
+        let id = insert_page(&tx, parent_id, title, icon, "", "")?;
+        place(&tx, &id, parent_id, index)?;
+        let meta = meta_by_id(&tx, &id)?;
+        tx.commit()?;
+        Ok(meta)
+    }
+
+    /// Applies a partial update. Returns the page's new `updated_at`.
+    pub fn update_page(&self, id: &str, patch: PagePatch) -> Result<i64> {
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        let rid: Option<i64> = tx
+            .query_row("SELECT rid FROM pages WHERE id = ?1", [id], |r| r.get(0))
+            .optional()?;
+        let Some(rid) = rid else {
+            return err("Page not found");
+        };
+        let ts = now();
+        let mut touched = false;
+
+        if let Some(title) = &patch.title {
+            tx.execute("UPDATE pages SET title = ?1 WHERE rid = ?2", params![title, rid])?;
+            tx.execute("UPDATE pages_fts SET title = ?1 WHERE rowid = ?2", params![title, rid])?;
+            touched = true;
+        }
+        if let Some(icon) = &patch.icon {
+            tx.execute("UPDATE pages SET icon = ?1 WHERE rid = ?2", params![icon, rid])?;
+            touched = true;
+        }
+        if let Some(content) = &patch.content {
+            tx.execute("UPDATE pages SET content = ?1 WHERE rid = ?2", params![content, rid])?;
+            touched = true;
+        }
+        if let Some(text) = &patch.text {
+            tx.execute("UPDATE pages_fts SET body = ?1 WHERE rowid = ?2", params![text, rid])?;
+        }
+        if let Some(fav) = patch.favorite {
+            let v = if fav { ts } else { 0 };
+            tx.execute("UPDATE pages SET favorite = ?1 WHERE rid = ?2", params![v, rid])?;
+        }
+        if let Some(fw) = patch.full_width {
+            tx.execute("UPDATE pages SET full_width = ?1 WHERE rid = ?2", params![fw as i64, rid])?;
+        }
+        if touched {
+            tx.execute("UPDATE pages SET updated_at = ?1 WHERE rid = ?2", params![ts, rid])?;
+        }
+        let updated: i64 =
+            tx.query_row("SELECT updated_at FROM pages WHERE rid = ?1", [rid], |r| r.get(0))?;
+        tx.commit()?;
+        Ok(updated)
+    }
+
+    /// Moves a page under `parent_id` (None = top level) at sibling `index`.
+    pub fn move_page(&self, id: &str, parent_id: Option<&str>, index: usize) -> Result<()> {
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        // Refuse to move a page into itself or one of its descendants.
+        let mut cursor = parent_id.map(str::to_string);
+        while let Some(cur) = cursor {
+            if cur == id {
+                return err("A page can't be moved inside itself");
+            }
+            cursor = tx
+                .query_row("SELECT parent_id FROM pages WHERE id = ?1", [&cur], |r| r.get(0))
+                .optional()?
+                .flatten();
+        }
+        let old_parent: Option<String> = tx
+            .query_row("SELECT parent_id FROM pages WHERE id = ?1", [id], |r| r.get(0))
+            .optional()?
+            .flatten();
+        tx.execute("UPDATE pages SET parent_id = ?1 WHERE id = ?2", params![parent_id, id])?;
+        place(&tx, id, parent_id, Some(index))?;
+        if old_parent.as_deref() != parent_id {
+            renumber(&tx, old_parent.as_deref())?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Duplicates a page and its live sub-pages. Returns the new root.
+    pub fn duplicate_page(&self, id: &str) -> Result<PageMeta> {
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+
+        struct Row {
+            rid: i64,
+            id: String,
+            parent: Option<String>,
+            title: String,
+            icon: String,
+            content: String,
+            full_width: i64,
+        }
+        let mut stmt = tx.prepare(
+            "WITH RECURSIVE sub(id, depth) AS (
+               SELECT id, 0 FROM pages WHERE id = ?1
+               UNION ALL
+               SELECT p.id, sub.depth + 1 FROM pages p JOIN sub ON p.parent_id = sub.id
+               WHERE p.deleted_at IS NULL
+             )
+             SELECT p.rid, p.id, p.parent_id, p.title, p.icon, p.content, p.full_width
+             FROM pages p JOIN sub ON p.id = sub.id
+             ORDER BY sub.depth, p.position",
+        )?;
+        let rows: Vec<Row> = stmt
+            .query_map([id], |r| {
+                Ok(Row {
+                    rid: r.get(0)?,
+                    id: r.get(1)?,
+                    parent: r.get(2)?,
+                    title: r.get(3)?,
+                    icon: r.get(4)?,
+                    content: r.get(5)?,
+                    full_width: r.get(6)?,
+                })
+            })?
+            .collect::<rusqlite::Result<_>>()?;
+        drop(stmt);
+        if rows.is_empty() {
+            return err("Page not found");
+        }
+
+        let map: HashMap<String, String> = rows.iter().map(|r| (r.id.clone(), new_id())).collect();
+        let ts = now();
+        for (i, row) in rows.iter().enumerate() {
+            let new_id = &map[&row.id];
+            let parent = if i == 0 {
+                row.parent.clone()
+            } else {
+                row.parent.as_ref().and_then(|p| map.get(p).cloned())
+            };
+            // Links to duplicated sub-pages should point at the copies.
+            let mut content = row.content.clone();
+            for (old, new) in &map {
+                if content.contains(old.as_str()) {
+                    content = content.replace(old.as_str(), new);
+                }
+            }
+            let title = if i == 0 && !row.title.is_empty() {
+                format!("{} (copy)", row.title)
+            } else {
+                row.title.clone()
+            };
+            tx.execute(
+                "INSERT INTO pages (id, parent_id, title, icon, content, position, full_width, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, (SELECT position FROM pages WHERE id = ?6), ?7, ?8, ?8)",
+                params![new_id, parent, title, row.icon, content, row.id, row.full_width, ts],
+            )?;
+            let new_rid = tx.last_insert_rowid();
+            tx.execute(
+                "INSERT INTO pages_fts (rowid, title, body)
+                 SELECT ?1, ?2, body FROM pages_fts WHERE rowid = ?3",
+                params![new_rid, title, row.rid],
+            )?;
+        }
+
+        // Put the copy right after the original.
+        let root = &rows[0];
+        let index: i64 =
+            tx.query_row("SELECT position FROM pages WHERE id = ?1", [&root.id], |r| r.get(0))?;
+        let new_root = map[&root.id].clone();
+        place(&tx, &new_root, root.parent.as_deref(), Some(index as usize + 1))?;
+        let meta = meta_by_id(&tx, &new_root)?;
+        tx.commit()?;
+        Ok(meta)
+    }
+
+    /// Moves a page and its live descendants to the trash.
+    pub fn trash_page(&self, id: &str) -> Result<i64> {
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        let ts = now();
+        tx.execute(
+            "WITH RECURSIVE sub(id) AS (
+               SELECT id FROM pages WHERE id = ?1
+               UNION ALL
+               SELECT p.id FROM pages p JOIN sub ON p.parent_id = sub.id WHERE p.deleted_at IS NULL
+             )
+             UPDATE pages SET deleted_at = ?2 WHERE id IN sub AND deleted_at IS NULL",
+            params![id, ts],
+        )?;
+        let parent: Option<String> = tx
+            .query_row("SELECT parent_id FROM pages WHERE id = ?1", [id], |r| r.get(0))
+            .optional()?
+            .flatten();
+        renumber(&tx, parent.as_deref())?;
+        tx.commit()?;
+        Ok(ts)
+    }
+
+    /// Restores a trashed page together with the sub-pages trashed with it.
+    pub fn restore_page(&self, id: &str) -> Result<()> {
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        let row: Option<(Option<String>, Option<i64>)> = tx
+            .query_row("SELECT parent_id, deleted_at FROM pages WHERE id = ?1", [id], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
+            .optional()?;
+        let Some((parent, Some(deleted_at))) = row else {
+            return Ok(());
+        };
+        tx.execute(
+            "WITH RECURSIVE sub(id) AS (
+               SELECT id FROM pages WHERE id = ?1
+               UNION ALL
+               SELECT p.id FROM pages p JOIN sub ON p.parent_id = sub.id WHERE p.deleted_at = ?2
+             )
+             UPDATE pages SET deleted_at = NULL WHERE id IN sub",
+            params![id, deleted_at],
+        )?;
+        // If the old parent is itself in the trash, restore to the top level.
+        let parent_alive = match &parent {
+            Some(pid) => tx
+                .query_row("SELECT deleted_at IS NULL FROM pages WHERE id = ?1", [pid], |r| {
+                    r.get::<_, bool>(0)
+                })
+                .optional()?
+                .unwrap_or(false),
+            None => true,
+        };
+        let parent = if parent_alive { parent } else { None };
+        tx.execute("UPDATE pages SET parent_id = ?1 WHERE id = ?2", params![parent, id])?;
+        place(&tx, id, parent.as_deref(), None)?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Permanently deletes a page and everything below it.
+    pub fn delete_page(&self, id: &str) -> Result<()> {
+        self.conn().execute("DELETE FROM pages WHERE id = ?1", [id])?;
+        Ok(())
+    }
+
+    pub fn empty_trash(&self) -> Result<()> {
+        self.conn()
+            .execute("DELETE FROM pages WHERE deleted_at IS NOT NULL", [])?;
+        Ok(())
+    }
+
+    pub fn search(&self, query: &str, limit: usize) -> Result<Vec<SearchHit>> {
+        let conn = self.conn();
+        let limit = limit.clamp(1, 100) as i64;
+        let tokens: Vec<String> = query
+            .split_whitespace()
+            .map(|t| t.replace('"', ""))
+            .filter(|t| !t.is_empty())
+            .collect();
+
+        if tokens.is_empty() {
+            let mut stmt = conn.prepare(
+                "SELECT id, title, icon, updated_at FROM pages
+                 WHERE deleted_at IS NULL ORDER BY updated_at DESC LIMIT ?1",
+            )?;
+            let rows = stmt.query_map([limit], |r| {
+                Ok(SearchHit {
+                    id: r.get(0)?,
+                    title: r.get(1)?,
+                    icon: r.get(2)?,
+                    snippet: String::new(),
+                    updated_at: r.get(3)?,
+                })
+            })?;
+            return Ok(rows.collect::<rusqlite::Result<_>>()?);
+        }
+
+        // Prefix match on every term; title matches weigh much more than body.
+        let fts_query = tokens
+            .iter()
+            .map(|t| format!("\"{t}\"*"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let mut hits: Vec<SearchHit> = Vec::new();
+        if let Ok(mut stmt) = conn.prepare(
+            "SELECT p.id, p.title, p.icon,
+                    snippet(pages_fts, 1, char(1), char(2), '…', 12), p.updated_at
+             FROM pages_fts JOIN pages p ON p.rid = pages_fts.rowid
+             WHERE pages_fts MATCH ?1 AND p.deleted_at IS NULL
+             ORDER BY bm25(pages_fts, 10.0, 1.0) LIMIT ?2",
+        ) {
+            if let Ok(rows) = stmt.query_map(params![fts_query, limit], |r| {
+                Ok(SearchHit {
+                    id: r.get(0)?,
+                    title: r.get(1)?,
+                    icon: r.get(2)?,
+                    snippet: r.get(3)?,
+                    updated_at: r.get(4)?,
+                })
+            }) {
+                hits = rows.filter_map(|r| r.ok()).collect();
+            }
+        }
+
+        // Substring fallback catches what the tokenizer can't (e.g. CJK text,
+        // or a fragment in the middle of a word).
+        if (hits.len() as i64) < limit {
+            let needle = query.trim().to_lowercase();
+            let like = format!(
+                "%{}%",
+                needle.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_")
+            );
+            let mut stmt = conn.prepare(
+                "SELECT p.id, p.title, p.icon, pages_fts.body, p.updated_at
+                 FROM pages_fts JOIN pages p ON p.rid = pages_fts.rowid
+                 WHERE p.deleted_at IS NULL
+                   AND (lower(pages_fts.title) LIKE ?1 ESCAPE '\\' OR lower(pages_fts.body) LIKE ?1 ESCAPE '\\')
+                 ORDER BY p.updated_at DESC LIMIT ?2",
+            )?;
+            let rows = stmt.query_map(params![like, limit], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, String>(3)?,
+                    r.get::<_, i64>(4)?,
+                ))
+            })?;
+            for row in rows.flatten() {
+                if hits.len() as i64 >= limit {
+                    break;
+                }
+                if hits.iter().any(|h| h.id == row.0) {
+                    continue;
+                }
+                hits.push(SearchHit {
+                    id: row.0,
+                    title: row.1,
+                    icon: row.2,
+                    snippet: excerpt(&row.3, &needle),
+                    updated_at: row.4,
+                });
+            }
+        }
+        Ok(hits)
+    }
+
+    /// All page bodies concatenated, used to find unreferenced files.
+    pub fn all_content(&self) -> Result<String> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare("SELECT content FROM pages")?;
+        let mut out = String::new();
+        let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
+        for c in rows.flatten() {
+            out.push_str(&c);
+        }
+        Ok(out)
+    }
+
+    pub fn page_count(&self) -> Result<i64> {
+        Ok(self
+            .conn()
+            .query_row("SELECT count(*) FROM pages WHERE deleted_at IS NULL", [], |r| r.get(0))?)
+    }
+}
+
+fn insert_page(
+    tx: &Transaction,
+    parent_id: Option<&str>,
+    title: &str,
+    icon: &str,
+    content: &str,
+    text: &str,
+) -> Result<String> {
+    let id = new_id();
+    let ts = now();
+    tx.execute(
+        "INSERT INTO pages (id, parent_id, title, icon, content, position, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6, ?6)",
+        params![id, parent_id, title, icon, content, ts],
+    )?;
+    let rid = tx.last_insert_rowid();
+    tx.execute(
+        "INSERT INTO pages_fts (rowid, title, body) VALUES (?1, ?2, ?3)",
+        params![rid, title, text],
+    )?;
+    Ok(id)
+}
+
+fn meta_by_id(tx: &Transaction, id: &str) -> Result<PageMeta> {
+    Ok(tx.query_row(
+        &format!("SELECT {META_COLS} FROM pages WHERE id = ?1"),
+        [id],
+        meta_from_row,
+    )?)
+}
+
+/// Puts `id` at `index` among the live children of `parent` (end if None)
+/// and rewrites sibling positions as 0..n.
+fn place(tx: &Transaction, id: &str, parent: Option<&str>, index: Option<usize>) -> Result<()> {
+    let mut ids: Vec<String> = {
+        let mut stmt = tx.prepare(
+            "SELECT id FROM pages WHERE parent_id IS ?1 AND id != ?2 AND deleted_at IS NULL
+             ORDER BY position, created_at",
+        )?;
+        let rows = stmt.query_map(params![parent, id], |r| r.get(0))?;
+        rows.collect::<rusqlite::Result<_>>()?
+    };
+    let at = index.unwrap_or(ids.len()).min(ids.len());
+    ids.insert(at, id.to_string());
+    write_positions(tx, &ids)
+}
+
+fn renumber(tx: &Transaction, parent: Option<&str>) -> Result<()> {
+    let ids: Vec<String> = {
+        let mut stmt = tx.prepare(
+            "SELECT id FROM pages WHERE parent_id IS ?1 AND deleted_at IS NULL
+             ORDER BY position, created_at",
+        )?;
+        let rows = stmt.query_map(params![parent], |r| r.get(0))?;
+        rows.collect::<rusqlite::Result<_>>()?
+    };
+    write_positions(tx, &ids)
+}
+
+fn write_positions(tx: &Transaction, ids: &[String]) -> Result<()> {
+    let mut stmt = tx.prepare("UPDATE pages SET position = ?1 WHERE id = ?2 AND position != ?1")?;
+    for (i, sid) in ids.iter().enumerate() {
+        stmt.execute(params![i as i64, sid])?;
+    }
+    Ok(())
+}
+
+/// Rough HTML-to-text for the bundled welcome page's search index entry.
+fn strip_tags(html: &str) -> String {
+    let mut out = String::with_capacity(html.len());
+    let mut in_tag = false;
+    for c in html.chars() {
+        match c {
+            '<' => in_tag = true,
+            '>' if in_tag => {
+                in_tag = false;
+                out.push(' ');
+            }
+            _ if !in_tag => out.push(c),
+            _ => {}
+        }
+    }
+    let out = out.replace("&gt;", ">").replace("&lt;", "<").replace("&amp;", "&");
+    out.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// A short window of `body` around the first occurrence of `needle`, with
+/// the match wrapped in the same markers FTS5's snippet() uses.
+fn excerpt(body: &str, needle: &str) -> String {
+    let lower = body.to_lowercase();
+    // Lowercasing can change byte lengths, so only use the match position
+    // when it maps cleanly back onto the original string.
+    let Some(byte_at) = lower.find(needle).filter(|_| lower.len() == body.len()) else {
+        return body.chars().take(90).collect();
+    };
+    let start_chars = body[..byte_at].chars().count();
+    let needle_chars = needle.chars().count();
+    let from = start_chars.saturating_sub(30);
+    let chars: Vec<char> = body.chars().collect();
+    let to = (start_chars + needle_chars + 60).min(chars.len());
+    let mut out = String::new();
+    if from > 0 {
+        out.push('…');
+    }
+    out.extend(&chars[from..start_chars]);
+    out.push('\u{1}');
+    out.extend(&chars[start_chars..start_chars + needle_chars]);
+    out.push('\u{2}');
+    out.extend(&chars[start_chars + needle_chars..to]);
+    if to < chars.len() {
+        out.push('…');
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_db() -> (Db, PathBuf) {
+        let dir = std::env::temp_dir().join(format!("td-test-{}", uuid::Uuid::new_v4().simple()));
+        (Db::open(&dir).expect("open db"), dir)
+    }
+
+    fn children(db: &Db, parent: Option<&str>) -> Vec<String> {
+        let mut pages: Vec<_> = db
+            .list_pages()
+            .unwrap()
+            .into_iter()
+            .filter(|p| p.parent_id.as_deref() == parent && p.deleted_at.is_none())
+            .collect();
+        pages.sort_by_key(|p| p.position);
+        pages.into_iter().map(|p| p.title).collect()
+    }
+
+    #[test]
+    fn seeds_welcome_page_once() {
+        let (db, dir) = temp_db();
+        assert_eq!(children(&db, None), vec!["Getting started"]);
+        drop(db);
+        let db = Db::open(&dir).unwrap();
+        assert_eq!(children(&db, None).len(), 1, "reopening must not seed again");
+    }
+
+    #[test]
+    fn create_orders_and_moves() {
+        let (db, _) = temp_db();
+        let a = db.create_page(None, None, "A", "").unwrap();
+        let b = db.create_page(None, Some(0), "B", "").unwrap();
+        assert_eq!(children(&db, None), vec!["B", "Getting started", "A"]);
+
+        // Nest A under B, then move it back to the top.
+        db.move_page(&a.id, Some(&b.id), 0).unwrap();
+        assert_eq!(children(&db, Some(&b.id)), vec!["A"]);
+        assert_eq!(children(&db, None), vec!["B", "Getting started"]);
+        db.move_page(&a.id, None, 1).unwrap();
+        assert_eq!(children(&db, None), vec!["B", "A", "Getting started"]);
+    }
+
+    #[test]
+    fn refuses_cycles() {
+        let (db, _) = temp_db();
+        let a = db.create_page(None, None, "A", "").unwrap();
+        let b = db.create_page(Some(&a.id), None, "B", "").unwrap();
+        assert!(db.move_page(&a.id, Some(&b.id), 0).is_err());
+        assert!(db.move_page(&a.id, Some(&a.id), 0).is_err());
+    }
+
+    #[test]
+    fn trash_restore_and_delete_subtree() {
+        let (db, _) = temp_db();
+        let a = db.create_page(None, None, "A", "").unwrap();
+        let b = db.create_page(Some(&a.id), None, "B", "").unwrap();
+        let c = db.create_page(Some(&b.id), None, "C", "").unwrap();
+
+        db.trash_page(&a.id).unwrap();
+        let trashed: Vec<_> = db.list_pages().unwrap().into_iter().filter(|p| p.deleted_at.is_some()).collect();
+        assert_eq!(trashed.len(), 3);
+        assert!(db.create_page(Some(&a.id), None, "X", "").is_err(), "can't add under a trashed page");
+
+        db.restore_page(&a.id).unwrap();
+        assert_eq!(children(&db, Some(&b.id)), vec!["C"]);
+
+        // Restoring a child whose parent is still trashed lifts it to the top level.
+        db.trash_page(&a.id).unwrap();
+        db.restore_page(&c.id).unwrap();
+        let c_meta = db.get_page(&c.id).unwrap().meta;
+        assert_eq!(c_meta.parent_id, None);
+        assert!(c_meta.deleted_at.is_none());
+
+        db.delete_page(&a.id).unwrap();
+        assert!(db.get_page(&b.id).is_err(), "children are deleted with the parent");
+        assert!(db.get_page(&c.id).is_ok());
+    }
+
+    #[test]
+    fn update_and_search() {
+        let (db, _) = temp_db();
+        let p = db.create_page(None, None, "Quarterly planning", "").unwrap();
+        db.update_page(
+            &p.id,
+            PagePatch {
+                content: Some("{}".into()),
+                text: Some("Budget for the offsite in Lisbon".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        let by_title = db.search("quart", 10).unwrap();
+        assert_eq!(by_title.first().map(|h| h.id.as_str()), Some(p.id.as_str()));
+
+        let by_body = db.search("lisb", 10).unwrap();
+        assert_eq!(by_body.len(), 1);
+        assert!(by_body[0].snippet.contains('\u{1}'), "snippet marks the match");
+
+        // Mid-word fragments fall back to substring search.
+        assert_eq!(db.search("isbo", 10).unwrap().len(), 1);
+        // Quotes and FTS syntax in queries must not error.
+        assert!(db.search("\"budget\" AND (", 10).is_ok());
+
+        db.trash_page(&p.id).unwrap();
+        assert!(db.search("lisbon", 10).unwrap().is_empty(), "trashed pages are hidden");
+    }
+
+    #[test]
+    fn duplicate_copies_subtree_and_relinks() {
+        let (db, _) = temp_db();
+        let a = db.create_page(None, None, "A", "").unwrap();
+        let b = db.create_page(Some(&a.id), None, "B", "").unwrap();
+        let link = format!("{{\"type\":\"pageLink\",\"attrs\":{{\"id\":\"{}\"}}}}", b.id);
+        db.update_page(&a.id, PagePatch { content: Some(link), ..Default::default() }).unwrap();
+
+        let copy = db.duplicate_page(&a.id).unwrap();
+        assert_eq!(copy.title, "A (copy)");
+        let kids = children(&db, Some(&copy.id));
+        assert_eq!(kids, vec!["B"]);
+        let copied_child = db
+            .list_pages()
+            .unwrap()
+            .into_iter()
+            .find(|p| p.parent_id.as_deref() == Some(copy.id.as_str()))
+            .unwrap();
+        let content = db.get_page(&copy.id).unwrap().content;
+        assert!(content.contains(&copied_child.id), "links point at the copied child");
+        assert!(!content.contains(&b.id));
+    }
+}
