@@ -50,12 +50,13 @@
   }
   strong {
     font-size: var(--fs-callout);
+    line-height: 20px;
     font-weight: var(--fw-600);
     color: var(--text);
   }
   .text {
     max-width: 300px;
-    line-height: 1.45;
+    line-height: 18px;
     text-wrap: balance;
   }
   .actions {

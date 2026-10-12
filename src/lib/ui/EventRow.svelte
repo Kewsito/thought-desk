@@ -94,6 +94,7 @@
   }
   .title {
     font-size: var(--fs-body-ui);
+    line-height: 20px;
     font-weight: var(--fw-500);
     white-space: nowrap;
     overflow: hidden;
@@ -104,6 +105,7 @@
     align-items: center;
     gap: 10px;
     font-size: var(--fs-footnote);
+    line-height: 16px;
     color: var(--text-3);
     white-space: nowrap;
     overflow: hidden;

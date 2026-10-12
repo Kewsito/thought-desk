@@ -671,14 +671,22 @@ kbd {
 
 /* --------------------------------------------- inset grouped lists */
 
+/* Every section heading is exactly 24px tall, with or without a button in
+   it, so headings and the lists under them line up across columns. */
 .group-title {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  height: var(--h-xs);
   margin: 24px 4px 8px;
   font-size: var(--fs-ui);
+  line-height: 16px;
   font-weight: var(--fw-600);
   color: var(--text-2);
+}
+/* 28px buttons overhang the 24px line evenly instead of stretching it. */
+.group-title > .btn {
+  margin: -2px 0;
 }
 .group-title:first-child {
   margin-top: 4px;
@@ -855,6 +863,7 @@ input[type='time']::-webkit-calendar-picker-indicator {
 /* Small uppercase-free section label used in lists and popovers. */
 .eyebrow {
   font-size: var(--fs-caption);
+  line-height: 16px;
   font-weight: var(--fw-600);
   letter-spacing: 0.01em;
   color: var(--text-3);
@@ -886,12 +895,13 @@ input[type='time']::-webkit-calendar-picker-indicator {
   white-space: nowrap;
   font-size: 32px;
   font-weight: var(--fw-700);
-  line-height: 1.15;
+  line-height: 40px;
   letter-spacing: -0.026em;
 }
 .view-sub {
   margin: 4px 0 0;
   font-size: var(--fs-callout);
+  line-height: 20px;
   color: var(--text-2);
   font-variant-numeric: tabular-nums;
 }

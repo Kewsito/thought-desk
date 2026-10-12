@@ -106,6 +106,7 @@
   }
   .title {
     font-size: var(--fs-callout);
+    line-height: 20px;
     font-weight: var(--fw-500);
     color: var(--text);
     white-space: nowrap;
@@ -127,6 +128,7 @@
     gap: 12px;
     min-width: 0;
     font-size: var(--fs-footnote);
+    line-height: 16px;
     color: var(--text-3);
     white-space: nowrap;
     overflow: hidden;
