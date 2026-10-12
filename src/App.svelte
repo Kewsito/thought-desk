@@ -1,5 +1,6 @@
 <script lang="ts">
   import { getCurrentWindow } from '@tauri-apps/api/window';
+  import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
   import { onMount } from 'svelte';
   import { api } from './lib/api';
   import { prefs } from './lib/prefs.svelte';
@@ -17,12 +18,23 @@
   import ConfirmDialog from './lib/components/ConfirmDialog.svelte';
   import Toasts from './lib/components/Toasts.svelte';
   import Icon from './lib/components/Icon.svelte';
+  import Tooltip from './lib/components/Tooltip.svelte';
 
   const win = getCurrentWindow();
+  const webviewWin = getCurrentWebviewWindow();
 
   let page = $state<Page | null>(null);
   let words = $state(0);
   let scroller = $state<HTMLDivElement>();
+  let scrolled = $state(false);
+
+  // Match the native window (border, shadow, resize backdrop) to the theme so
+  // nothing flashes white while resizing in dark mode.
+  $effect(() => {
+    const dark = prefs.resolvedTheme === 'dark';
+    void win.setTheme(dark ? 'dark' : 'light').catch(() => {});
+    void webviewWin.setBackgroundColor(dark ? [0, 0, 0, 255] : [255, 255, 255, 255]).catch(() => {});
+  });
 
   // Load the full page (with content) whenever the selection changes.
   $effect(() => {
@@ -40,6 +52,7 @@
         if (cancelled) return;
         page = full;
         if (scroller) scroller.scrollTop = 0;
+        scrolled = false;
       } catch (e) {
         if (!cancelled) ui.error(e);
       }
@@ -145,23 +158,23 @@
     <Sidebar />
   {/if}
   <main class="main">
-    <TitleBar {words} />
-    <div class="scroller" bind:this={scroller}>
+    <TitleBar {words} {scrolled} />
+    <div class="scroller" bind:this={scroller} onscroll={() => (scrolled = (scroller?.scrollTop ?? 0) > 2)}>
       {#if page && store.currentId === page.id}
         {#key page.id}
           <PageView {page} onstats={(w) => (words = w)} />
         {/key}
       {:else if store.loaded && !store.currentId}
         <div class="empty">
-          <svg width="56" height="56" viewBox="0 0 1024 1024" aria-hidden="true">
-            <rect x="64" y="64" width="896" height="896" rx="208" fill="var(--text)" />
+          <svg class="empty-logo" width="48" height="48" viewBox="0 0 1024 1024" aria-hidden="true">
+            <rect x="64" y="64" width="896" height="896" rx="230" fill="var(--text)" />
             <circle cx="512" cy="430" r="150" fill="var(--bg)" />
             <rect x="262" y="660" width="500" height="68" rx="34" fill="var(--bg)" />
           </svg>
           <h2>A clear desk</h2>
           <p>Create a page to start writing. Everything stays on this computer.</p>
           <button class="btn primary" onclick={() => void store.create(null)}>
-            <Icon name="plus" size={15} /> New page
+            <Icon name="plus" size={15} stroke={2.2} /> New page
           </button>
         </div>
       {/if}
@@ -180,6 +193,7 @@
 {/if}
 {#if ui.confirmState}<ConfirmDialog dialog={ui.confirmState} />{/if}
 <Toasts />
+<Tooltip />
 
 <style>
   .app {
@@ -206,18 +220,24 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 10px;
-    padding-bottom: 10vh;
+    padding: 0 32px 12vh;
     text-align: center;
   }
+  .empty-logo {
+    margin-bottom: 20px;
+  }
   .empty h2 {
-    margin: 12px 0 0;
+    margin: 0 0 6px;
     font-size: 20px;
-    font-weight: 650;
+    font-weight: var(--fw-650);
+    letter-spacing: -0.018em;
   }
   .empty p {
-    margin: 0 0 10px;
+    margin: 0 0 22px;
+    max-width: 300px;
+    font-size: var(--fs-callout);
+    line-height: 1.5;
     color: var(--text-2);
-    font-size: 14px;
+    text-wrap: balance;
   }
 </style>

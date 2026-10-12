@@ -5,8 +5,9 @@
   import { store } from '../store.svelte';
   import { ui } from '../ui.svelte';
 
-  const MIN = 200;
-  const MAX = 440;
+  const MIN = 208;
+  const MAX = 420;
+  const DEFAULT = 252;
 
   let resizing = $state(false);
   let rootDrop = $state(false);
@@ -51,6 +52,7 @@
   }
 
   const themeIcon = $derived(prefs.theme === 'system' ? 'monitor' : prefs.theme === 'dark' ? 'moon' : 'sun');
+  const themeLabel = $derived(prefs.theme === 'system' ? 'System' : prefs.theme === 'dark' ? 'Dark' : 'Light');
   function cycleTheme() {
     prefs.theme = prefs.theme === 'system' ? 'light' : prefs.theme === 'light' ? 'dark' : 'system';
   }
@@ -59,36 +61,40 @@
 <aside class="sidebar" class:resizing style:width="{prefs.sidebarWidth}px">
   <div class="head" data-tauri-drag-region>
     <div class="brand" data-tauri-drag-region>
-      <svg class="logo" width="20" height="20" viewBox="0 0 1024 1024" aria-hidden="true">
-        <rect x="64" y="64" width="896" height="896" rx="208" fill="var(--text)" />
-        <circle cx="512" cy="430" r="150" fill="var(--bg)" />
-        <rect x="262" y="660" width="500" height="68" rx="34" fill="var(--bg)" />
+      <svg class="logo" width="18" height="18" viewBox="0 0 1024 1024" aria-hidden="true">
+        <rect x="64" y="64" width="896" height="896" rx="230" fill="var(--text)" />
+        <circle cx="512" cy="430" r="150" fill="var(--bg-sidebar)" />
+        <rect x="262" y="660" width="500" height="68" rx="34" fill="var(--bg-sidebar)" />
       </svg>
       <span data-tauri-drag-region>Thought Desk</span>
     </div>
-    <button class="icon-btn" onclick={() => (prefs.sidebarOpen = false)} title="Hide sidebar (Ctrl+\)">
-      <Icon name="chevrons-left" />
-    </button>
+    <div class="head-actions">
+      <button class="icon-btn collapse" onclick={() => (prefs.sidebarOpen = false)} data-tip="Hide sidebar" data-tip-key="Ctrl+\">
+        <Icon name="sidebar-left" />
+      </button>
+      <button class="icon-btn" onclick={() => void store.create(null)} data-tip="New page" data-tip-key="Ctrl+N">
+        <Icon name="compose" />
+      </button>
+    </div>
   </div>
 
-  <nav class="quick">
-    <button class="nav" onclick={() => (ui.searchOpen = true)}>
-      <Icon name="search" /> <span>Search</span> <kbd>Ctrl K</kbd>
-    </button>
-    <button class="nav" onclick={() => void store.create(null)}>
-      <Icon name="page-plus" /> <span>New page</span> <kbd>Ctrl N</kbd>
-    </button>
-  </nav>
+  <button class="search" onclick={() => (ui.searchOpen = true)}>
+    <span class="lead search-icon"><Icon name="search" size={15} stroke={2} /></span>
+    <span>Search</span>
+    <kbd>Ctrl K</kbd>
+  </button>
 
   <div class="scroll">
     {#if store.favorites.length}
       <section>
-        <button class="section-title" onclick={() => toggleSection('favorites')}>
-          <span>Favorites</span>
-          <span class="caret" class:closed={prefs.sections.favorites}><Icon name="chevron-down" size={12} stroke={2} /></span>
-        </button>
+        <div class="section-head">
+          <button class="section-title" onclick={() => toggleSection('favorites')} aria-expanded={!prefs.sections.favorites}>
+            Favorites
+            <span class="caret" class:closed={prefs.sections.favorites}><Icon name="chevron-down" size={11} stroke={2.4} /></span>
+          </button>
+        </div>
         {#if !prefs.sections.favorites}
-          <div role="tree">
+          <div role="tree" aria-label="Favorites">
             {#each store.favorites as p (p.id)}
               <TreeItem page={p} favorite />
             {/each}
@@ -98,22 +104,23 @@
     {/if}
 
     <section>
-      <div class="section-row">
-        <button class="section-title" onclick={() => toggleSection('pages')}>
-          <span>Pages</span>
-          <span class="caret" class:closed={prefs.sections.pages}><Icon name="chevron-down" size={12} stroke={2} /></span>
+      <div class="section-head">
+        <button class="section-title" onclick={() => toggleSection('pages')} aria-expanded={!prefs.sections.pages}>
+          Pages
+          <span class="caret" class:closed={prefs.sections.pages}><Icon name="chevron-down" size={11} stroke={2.4} /></span>
         </button>
-        <button class="section-add" onclick={() => void store.create(null)} title="New page"><Icon name="plus" size={14} /></button>
+        <button class="section-add" onclick={() => void store.create(null)} data-tip="New page"><Icon name="plus" size={14} stroke={2} /></button>
       </div>
       {#if !prefs.sections.pages}
-        <div role="tree">
+        <div role="tree" aria-label="Pages">
           {#each store.roots as p (p.id)}
             <TreeItem page={p} />
           {/each}
         </div>
         {#if store.loaded && store.roots.length === 0}
-          <button class="empty" onclick={() => void store.create(null)}>
-            <Icon name="plus" size={14} /> Add your first page
+          <button class="row-btn muted" onclick={() => void store.create(null)}>
+            <span class="lead"><Icon name="plus" /></span>
+            <span class="label">Add a page</span>
           </button>
         {/if}
         <div
@@ -129,15 +136,17 @@
   </div>
 
   <div class="foot">
-    <button class="nav" onclick={() => (ui.trashOpen = true)}>
-      <Icon name="trash" /> <span>Trash</span>
+    <button class="row-btn" onclick={() => (ui.trashOpen = true)}>
+      <span class="lead"><Icon name="trash" /></span>
+      <span class="label">Trash</span>
       {#if store.trash.length}<span class="count">{store.trash.length}</span>{/if}
     </button>
     <div class="foot-row">
-      <button class="nav" onclick={() => (ui.settingsOpen = true)}>
-        <Icon name="settings" /> <span>Settings</span>
+      <button class="row-btn" onclick={() => (ui.settingsOpen = true)}>
+        <span class="lead"><Icon name="settings" /></span>
+        <span class="label">Settings</span>
       </button>
-      <button class="icon-btn" onclick={cycleTheme} title="Theme: {prefs.theme} (Ctrl+Shift+L)">
+      <button class="icon-btn" onclick={cycleTheme} data-tip="Appearance: {themeLabel}" data-tip-key="Ctrl+Shift+L">
         <Icon name={themeIcon} />
       </button>
     </div>
@@ -148,8 +157,8 @@
     role="separator"
     aria-orientation="vertical"
     onpointerdown={startResize}
-    ondblclick={() => (prefs.sidebarWidth = 260)}
-    title="Drag to resize · double-click to reset"
+    ondblclick={() => (prefs.sidebarWidth = DEFAULT)}
+   
   ></div>
 </aside>
 
@@ -161,29 +170,31 @@
     flex-direction: column;
     height: 100%;
     background: var(--bg-sidebar);
-    border-right: 1px solid var(--border);
+    box-shadow: inset -1px 0 0 var(--separator);
     user-select: none;
   }
   .sidebar.resizing {
     cursor: col-resize;
   }
+
+  /* Header: aligned to the title bar's height. */
   .head {
     height: var(--titlebar-h);
     flex: none;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 8px 0 14px;
+    padding: 0 10px 0 19px;
   }
   .brand {
     display: flex;
     align-items: center;
     gap: 9px;
-    font-weight: 600;
-    font-size: 14px;
-    letter-spacing: -0.01em;
-    color: var(--text);
     min-width: 0;
+    font-size: var(--fs-body-ui);
+    font-weight: var(--fw-650);
+    letter-spacing: -0.012em;
+    color: var(--text);
   }
   .brand span {
     white-space: nowrap;
@@ -193,157 +204,221 @@
   .logo {
     flex: none;
   }
-  .head .icon-btn {
-    opacity: 0;
-    transition: opacity 120ms;
+  .head-actions {
+    display: flex;
+    gap: 2px;
   }
-  .sidebar:hover .head .icon-btn {
+  .collapse {
+    opacity: 0;
+    transition:
+      opacity var(--dur) var(--ease),
+      background-color var(--dur-fast) var(--ease),
+      color var(--dur-fast) var(--ease);
+  }
+  .sidebar:hover .collapse,
+  .collapse:focus-visible {
     opacity: 1;
   }
-  .quick {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-    padding: 2px 0 8px;
-  }
-  .nav {
+
+  /* Search field */
+  .search {
+    flex: none;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     height: 30px;
-    margin: 0 6px;
-    padding: 0 10px;
-    border-radius: 6px;
-    color: var(--text-2);
-    font-size: 14px;
+    margin: 2px 10px 12px;
+    padding: 0 6px 0 8px;
+    border-radius: var(--r-sm);
+    background: var(--fill);
+    color: var(--text-3);
+    font-size: var(--fs-body-ui);
     text-align: left;
-    flex: 1;
-    min-width: 0;
+    transition: background-color var(--dur-fast) var(--ease);
   }
-  .nav:hover {
-    background: var(--hover);
-    color: var(--text);
+  .search:hover {
+    background: var(--fill-2);
   }
-  .nav span {
+  .search > span:not(.lead) {
     flex: 1;
   }
-  .nav kbd {
-    opacity: 0;
-    transition: opacity 120ms;
-  }
-  .nav:hover kbd {
-    opacity: 1;
-  }
-  .count {
-    flex: none !important;
-    font-size: 11.5px;
+  .search .search-icon {
     color: var(--text-3);
   }
+  .search kbd {
+    background: var(--bg-elevated);
+    box-shadow:
+      0 0 0 0.5px var(--hairline),
+      0 0.5px 1px rgba(0, 0, 0, 0.06);
+  }
+
   .scroll {
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
     padding-bottom: 8px;
   }
-  section {
-    margin-bottom: 10px;
+  section + section {
+    margin-top: 14px;
   }
-  .section-row {
+
+  /* Section headers */
+  .section-head {
     display: flex;
     align-items: center;
-    padding-right: 10px;
+    height: 26px;
+    padding: 0 12px 0 12px;
   }
   .section-title {
     display: flex;
     align-items: center;
     gap: 4px;
-    height: 26px;
-    margin: 0 6px;
-    padding: 0 10px;
-    border-radius: 5px;
-    font-size: 12px;
-    font-weight: 600;
+    height: 22px;
+    padding: 0 8px;
+    border-radius: var(--r-xs);
+    font-size: var(--fs-caption);
+    font-weight: var(--fw-600);
+    letter-spacing: 0.01em;
     color: var(--text-3);
-    flex: 1;
-    text-align: left;
+    transition: color var(--dur-fast) var(--ease);
   }
   .section-title:hover {
     color: var(--text-2);
   }
   .caret {
-    display: inline-grid;
+    display: grid;
     opacity: 0;
-    transition: transform 120ms;
+    transition:
+      opacity var(--dur-fast) var(--ease),
+      transform var(--dur) var(--ease-out);
   }
-  .section-title:hover .caret {
+  .section-head:hover .caret,
+  .caret.closed {
     opacity: 1;
   }
   .caret.closed {
     transform: rotate(-90deg);
-    opacity: 1;
   }
   .section-add {
+    margin-left: auto;
     display: grid;
     place-items: center;
     width: 22px;
     height: 22px;
-    border-radius: 4px;
+    border-radius: var(--r-xs);
     color: var(--text-3);
     opacity: 0;
+    transition:
+      opacity var(--dur-fast) var(--ease),
+      background-color var(--dur-fast) var(--ease),
+      color var(--dur-fast) var(--ease);
   }
-  .section-row:hover .section-add {
+  .section-head:hover .section-add {
     opacity: 1;
   }
   .section-add:hover {
-    background: var(--hover);
+    background: var(--fill-2);
     color: var(--text);
   }
-  .empty {
+
+  /* Footer rows share the tree rows' metrics. */
+  .row-btn {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin: 4px 6px;
-    padding: 6px 10px;
-    border-radius: 6px;
-    color: var(--text-3);
-    font-size: 13.5px;
+    flex: 1;
+    min-width: 0;
+    height: 30px;
+    margin: 0 10px;
+    padding: 0 8px;
+    border-radius: var(--r-sm);
+    font-size: var(--fs-body-ui);
+    color: var(--text-sidebar);
+    text-align: left;
+    transition: background-color var(--dur-fast) var(--ease);
   }
-  .empty:hover {
-    background: var(--hover);
-    color: var(--text);
+  .row-btn:hover {
+    background: var(--fill);
+  }
+  .row-btn:active {
+    background: var(--fill-2);
+  }
+  .row-btn.muted {
+    color: var(--text-3);
+  }
+  .lead {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    display: grid;
+    place-items: center;
+    color: var(--text-2);
+  }
+  .label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .count {
+    font-size: var(--fs-footnote);
+    color: var(--text-3);
+    font-variant-numeric: tabular-nums;
   }
   .root-drop {
-    height: 32px;
-    margin: 0 6px;
-    border-radius: 6px;
+    height: 24px;
+    margin: 0 10px;
+    border-radius: var(--r-sm);
   }
   .root-drop.over {
     box-shadow: inset 0 2px 0 var(--text);
   }
+
   .foot {
     flex: none;
-    padding: 6px 0 8px;
-    border-top: 1px solid var(--border);
     display: flex;
     flex-direction: column;
     gap: 1px;
+    padding: 8px 0 10px;
+    box-shadow: inset 0 1px 0 var(--separator);
   }
   .foot-row {
     display: flex;
     align-items: center;
-    padding-right: 8px;
   }
+  .foot-row .row-btn {
+    margin-right: 2px;
+  }
+  .foot-row .icon-btn {
+    margin-right: 10px;
+    color: var(--text-3);
+  }
+
+  /* Resize grip: invisible until hovered, then a 2px rule. */
   .resizer {
     position: absolute;
     top: 0;
-    right: -3px;
-    width: 6px;
+    right: -4px;
+    width: 8px;
     height: 100%;
     cursor: col-resize;
     z-index: 5;
   }
-  .resizer:hover,
-  .resizing .resizer {
-    background: linear-gradient(to right, transparent 2px, var(--border-strong) 2px, var(--border-strong) 4px, transparent 4px);
+  .resizer::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 3px;
+    width: 2px;
+    background: var(--separator-strong);
+    opacity: 0;
+    transition: opacity var(--dur) var(--ease);
+  }
+  .resizer:hover::after,
+  .resizing .resizer::after {
+    opacity: 1;
+    transition-delay: 80ms;
   }
 </style>

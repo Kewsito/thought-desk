@@ -28,14 +28,14 @@ export function pageMenuItems(id: string, opts: { words?: number; sidebar?: bool
   if (!page) return [];
   const items: MenuItem[] = [
     {
-      label: page.favorite ? 'Remove from favorites' : 'Add to favorites',
+      label: page.favorite ? 'Remove from Favorites' : 'Add to Favorites',
       icon: 'star',
       action: () => store.toggleFavorite(id),
     },
   ];
   if (opts.sidebar) {
     items.push(
-      { label: 'Add sub-page', icon: 'page-plus', action: () => void store.create(id) },
+      { label: 'Add Subpage', icon: 'page-plus', action: () => void store.create(id) },
       {
         label: 'Rename',
         icon: 'pencil',
@@ -49,7 +49,7 @@ export function pageMenuItems(id: string, opts: { words?: number; sidebar?: bool
   items.push({ label: 'Duplicate', icon: 'copy', action: () => void store.duplicate(id) });
   if (!opts.sidebar) {
     items.push({
-      label: 'Full width',
+      label: 'Full Width',
       icon: 'width',
       checked: page.fullWidth,
       action: () => store.update(id, { fullWidth: !page.fullWidth }, { immediate: true }),
@@ -84,7 +84,7 @@ export function pageMenuItems(id: string, opts: { words?: number; sidebar?: bool
       },
     },
     { separator: true },
-    { label: 'Move to trash', icon: 'trash', danger: true, action: () => void store.trashPage(id) },
+    { label: 'Move to Trash', icon: 'trash', danger: true, action: () => void store.trashPage(id) },
   );
   if (opts.words !== undefined) {
     items.push({ separator: true }, { header: `${opts.words.toLocaleString()} words · created ${new Date(page.createdAt).toLocaleDateString()}` });

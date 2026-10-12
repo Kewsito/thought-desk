@@ -8,7 +8,7 @@ import type { PageMeta } from './lib/types';
 
 type Row = PageMeta & { content: string; text: string };
 
-const KEY = 'thoughtdesk.devmock';
+const KEY = 'thoughtdesk.devmock.v2';
 const load = (): Row[] => {
   try {
     return JSON.parse(localStorage.getItem(KEY) ?? '') as Row[];
@@ -77,6 +77,35 @@ if (rows.length === 0) {
   rows.push(projects);
   const child = make(projects.id, 'Roadmap', '🧭');
   rows.push(child);
+  const notes = make(projects.id, 'Meeting notes');
+  notes.position = 1;
+  rows.push(notes);
+  // Every block type on one page, for design review.
+  const showcase = make(
+    null,
+    'Design review',
+    '🎨',
+    `<p>Thought Desk is a <strong>quiet place</strong> to write. Text can be <em>italic</em>, <u>underlined</u>, <s>struck</s>, <code>inline code</code>, <mark>highlighted</mark> or a <a href="https://example.com">link</a>. Long paragraphs should wrap with a comfortable measure and an even rhythm from line to line, without orphans.</p>
+<h1>Heading one</h1>
+<p>Body text directly after a heading.</p>
+<h2>Heading two</h2>
+<ul><li><p>Bulleted item</p><ul><li><p>Nested item</p><ul><li><p>Third level</p></li></ul></li></ul></li><li><p>Another item</p></li></ul>
+<ol><li><p>First step</p></li><li><p>Second step</p></li><li><p>Third step</p></li></ol>
+<h3>Heading three</h3>
+<ul data-type="taskList"><li data-type="taskItem" data-checked="true"><p>A finished task</p></li><li data-type="taskItem" data-checked="false"><p>Something still to do</p></li></ul>
+<blockquote><p>Simplicity is the ultimate sophistication.</p></blockquote>
+<div data-callout="" data-icon="💡"><p>Callouts hold any blocks and draw the eye to what matters.</p></div>
+<details open=""><summary>A toggle that is open</summary><div data-type="detailsContent"><p>Hidden content, revealed.</p></div></details>
+<pre><code>fn main() {
+    println!("Hello, Thought Desk");
+}</code></pre>
+<hr>
+<table><tbody><tr><th><p>Name</p></th><th><p>Status</p></th><th><p>Due</p></th></tr><tr><td><p>Launch</p></td><td><p>In progress</p></td><td><p>Oct 20</p></td></tr><tr><td><p>Docs</p></td><td><p>Done</p></td><td><p>Oct 12</p></td></tr></tbody></table>
+<p></p>`,
+  );
+  showcase.position = 2;
+  showcase.favorite = Date.now();
+  rows.push(showcase);
   persist();
 }
 

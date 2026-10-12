@@ -12,9 +12,9 @@ export const KINDS: { kind: BlockKind; label: string; icon: string }[] = [
   { kind: 'h1', label: 'Heading 1', icon: 'h1' },
   { kind: 'h2', label: 'Heading 2', icon: 'h2' },
   { kind: 'h3', label: 'Heading 3', icon: 'h3' },
-  { kind: 'bulletList', label: 'Bulleted list', icon: 'list' },
-  { kind: 'orderedList', label: 'Numbered list', icon: 'list-ordered' },
-  { kind: 'taskList', label: 'To-do list', icon: 'todo' },
+  { kind: 'bulletList', label: 'Bulleted List', icon: 'list' },
+  { kind: 'orderedList', label: 'Numbered List', icon: 'list-ordered' },
+  { kind: 'taskList', label: 'To-do List', icon: 'todo' },
   { kind: 'blockquote', label: 'Quote', icon: 'quote' },
   { kind: 'codeBlock', label: 'Code', icon: 'code' },
   { kind: 'callout', label: 'Callout', icon: 'callout' },
@@ -121,7 +121,7 @@ export function blockMenuItems(editor: Editor, target: BlockTarget): MenuItem[] 
       },
     },
     {
-      label: 'Move up',
+      label: 'Move Up',
       icon: 'arrow-up',
       disabled: index === 0,
       action: () => {
@@ -132,7 +132,7 @@ export function blockMenuItems(editor: Editor, target: BlockTarget): MenuItem[] 
       },
     },
     {
-      label: 'Move down',
+      label: 'Move Down',
       icon: 'arrow-down',
       disabled: index >= parent.childCount - 1,
       action: () => {

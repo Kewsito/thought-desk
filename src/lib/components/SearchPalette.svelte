@@ -93,68 +93,71 @@
   }
 </script>
 
-<Modal onclose={close} width={620} label="Search">
+<Modal onclose={close} width={640} top="16vh" label="Search" glass>
   <div class="search">
-    <Icon name="search" size={18} />
+    <Icon name="search" size={20} stroke={2} />
     <input
       bind:this={input}
       bind:value={query}
       oninput={onInput}
       onkeydown={onKey}
-      placeholder="Search pages…"
+      placeholder="Search pages"
       spellcheck="false"
       autocomplete="off"
     />
-    <kbd>Esc</kbd>
   </div>
-  <div class="results" bind:this={list}>
-    {#if !query.trim() && hits.length}
-      <div class="group">Recent</div>
-    {/if}
-    {#each hits as hit, i (hit.id)}
-      {@const path = pathOf(hit.id)}
-      <button
-        class="hit"
-        class:selected={i === selected}
-        data-index={i}
-        onmousemove={() => (selected = i)}
-        onclick={() => choose(i)}
-      >
-        <span class="hit-icon">{#if hit.icon}{hit.icon}{:else}<Icon name="page" size={17} />{/if}</span>
-        <span class="hit-main">
-          <span class="hit-title">
-            {hit.title || 'Untitled'}
-            {#if path}<span class="hit-path">— {path}</span>{/if}
-          </span>
-          {#if hit.snippet}
-            <span class="hit-snippet">
-              {#each parts(hit.snippet) as p}{#if p.hit}<mark>{p.text}</mark>{:else}{p.text}{/if}{/each}
+  {#if hits.length || showCreate || query.trim()}
+    <div class="results" bind:this={list}>
+      {#if !query.trim() && hits.length}
+        <div class="group">Recently edited</div>
+      {/if}
+      {#each hits as hit, i (hit.id)}
+        {@const path = pathOf(hit.id)}
+        <button
+          class="hit"
+          class:selected={i === selected}
+          data-index={i}
+          onmousemove={() => (selected = i)}
+          onclick={() => choose(i)}
+        >
+          <span class="hit-icon">{#if hit.icon}<span class="emoji">{hit.icon}</span>{:else}<Icon name="page" size={18} />{/if}</span>
+          <span class="hit-main">
+            <span class="hit-line">
+              <span class="hit-title">{hit.title || 'Untitled'}</span>
+              {#if path}<span class="hit-path">{path}</span>{/if}
             </span>
-          {/if}
-        </span>
-        <span class="hit-time">{relativeTime(hit.updatedAt)}</span>
-      </button>
-    {/each}
-    {#if showCreate}
-      <button
-        class="hit create"
-        class:selected={selected === hits.length}
-        data-index={hits.length}
-        onmousemove={() => (selected = hits.length)}
-        onclick={() => choose(hits.length)}
-      >
-        <span class="hit-icon"><Icon name="page-plus" size={17} /></span>
-        <span class="hit-main"><span class="hit-title">New page “{query.trim()}”</span></span>
-      </button>
-    {/if}
-    {#if query.trim() && hits.length === 0}
-      <div class="none">No pages match “{query.trim()}”</div>
-    {/if}
-  </div>
-  <div class="foot">
-    <span><kbd>↑</kbd><kbd>↓</kbd> to navigate</span>
-    <span><kbd>Enter</kbd> to open</span>
-  </div>
+            {#if hit.snippet}
+              <span class="hit-snippet">
+                {#each parts(hit.snippet) as p}{#if p.hit}<mark>{p.text}</mark>{:else}{p.text}{/if}{/each}
+              </span>
+            {/if}
+          </span>
+          <span class="hit-time">{relativeTime(hit.updatedAt)}</span>
+        </button>
+      {/each}
+      {#if showCreate}
+        <button
+          class="hit create"
+          class:selected={selected === hits.length}
+          data-index={hits.length}
+          onmousemove={() => (selected = hits.length)}
+          onclick={() => choose(hits.length)}
+        >
+          <span class="hit-icon"><Icon name="page-plus" size={18} /></span>
+          <span class="hit-main"><span class="hit-line"><span class="hit-title">Create “{query.trim()}”</span></span></span>
+          <span class="hit-time">New page</span>
+        </button>
+      {/if}
+      {#if query.trim() && hits.length === 0}
+        <div class="none">No pages match “{query.trim()}”</div>
+      {/if}
+    </div>
+    <div class="foot">
+      <span class="hint"><kbd>↑</kbd><kbd>↓</kbd> Navigate</span>
+      <span class="hint"><kbd>Enter</kbd> Open</span>
+      <span class="hint"><kbd>Esc</kbd> Close</span>
+    </div>
+  {/if}
 </Modal>
 
 <style>
@@ -162,19 +165,21 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 0 16px;
-    height: 54px;
-    border-bottom: 1px solid var(--border);
-    color: var(--text-3);
+    height: 58px;
+    padding: 0 20px;
     flex: none;
+    color: var(--text-3);
   }
   input {
     flex: 1;
+    min-width: 0;
+    height: 100%;
     border: none;
     background: transparent;
-    font-size: 16px;
+    font-size: 19px;
+    font-weight: 400;
+    letter-spacing: -0.014em;
     color: var(--text);
-    height: 100%;
   }
   input::placeholder {
     color: var(--text-3);
@@ -182,12 +187,13 @@
   .results {
     overflow-y: auto;
     padding: 6px;
-    min-height: 60px;
+    box-shadow: inset 0 1px 0 var(--hairline);
   }
   .group {
-    padding: 6px 10px 4px;
-    font-size: 11.5px;
-    font-weight: 600;
+    padding: 8px 12px 6px;
+    font-size: var(--fs-caption);
+    font-weight: var(--fw-600);
+    letter-spacing: 0.01em;
     color: var(--text-3);
   }
   .hit {
@@ -195,20 +201,25 @@
     align-items: center;
     gap: 12px;
     width: 100%;
-    padding: 8px 10px;
-    border-radius: 7px;
+    min-height: 48px;
+    padding: 7px 14px 7px 10px;
+    border-radius: var(--r-md);
     text-align: left;
   }
   .hit.selected {
-    background: var(--hover);
+    background: var(--fill-2);
   }
   .hit-icon {
     flex: none;
-    width: 22px;
+    width: 30px;
+    height: 30px;
     display: grid;
     place-items: center;
-    font-size: 17px;
     color: var(--text-2);
+  }
+  .emoji {
+    font-size: 19px;
+    line-height: 1;
   }
   .hit-main {
     flex: 1;
@@ -217,53 +228,71 @@
     flex-direction: column;
     gap: 2px;
   }
+  .hit-line {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+  }
   .hit-title {
-    font-size: 14px;
-    font-weight: 500;
+    flex: none;
+    max-width: 70%;
+    font-size: var(--fs-callout);
+    font-weight: var(--fw-550);
     color: var(--text);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
   .hit-path {
-    font-weight: 400;
+    min-width: 0;
+    font-size: var(--fs-footnote);
     color: var(--text-3);
-    margin-left: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .hit-snippet {
-    font-size: 12.5px;
+    font-size: var(--fs-ui);
     color: var(--text-2);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
   mark {
-    background: var(--mark);
+    background: none;
     color: var(--text);
-    border-radius: 2px;
-    font-weight: 600;
+    font-weight: var(--fw-650);
   }
   .hit-time {
     flex: none;
-    font-size: 12px;
+    font-size: var(--fs-footnote);
     color: var(--text-3);
+    font-variant-numeric: tabular-nums;
   }
   .none {
-    padding: 22px;
+    padding: 28px 16px 30px;
     text-align: center;
     color: var(--text-3);
-    font-size: 13.5px;
+    font-size: var(--fs-body-ui);
   }
   .foot {
     flex: none;
     display: flex;
-    gap: 16px;
-    padding: 8px 16px;
-    border-top: 1px solid var(--border);
-    font-size: 12px;
+    gap: 18px;
+    height: 38px;
+    align-items: center;
+    padding: 0 18px;
+    box-shadow: inset 0 1px 0 var(--hairline);
+    font-size: var(--fs-footnote);
     color: var(--text-3);
   }
-  .foot kbd {
-    margin-right: 3px;
+  .hint {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .hint kbd + kbd {
+    margin-left: -3px;
   }
 </style>

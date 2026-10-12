@@ -11,7 +11,7 @@ const clear = (editor: Editor, range: Range) => editor.chain().focus().deleteRan
 export const SLASH_ITEMS: MenuEntry[] = [
   {
     id: 'text',
-    group: 'Basic blocks',
+    group: 'Basic Blocks',
     title: 'Text',
     description: 'Plain paragraph',
     icon: 'text',
@@ -20,7 +20,7 @@ export const SLASH_ITEMS: MenuEntry[] = [
   },
   {
     id: 'h1',
-    group: 'Basic blocks',
+    group: 'Basic Blocks',
     title: 'Heading 1',
     description: 'Big section heading',
     label: 'H1',
@@ -30,7 +30,7 @@ export const SLASH_ITEMS: MenuEntry[] = [
   },
   {
     id: 'h2',
-    group: 'Basic blocks',
+    group: 'Basic Blocks',
     title: 'Heading 2',
     description: 'Medium section heading',
     label: 'H2',
@@ -40,7 +40,7 @@ export const SLASH_ITEMS: MenuEntry[] = [
   },
   {
     id: 'h3',
-    group: 'Basic blocks',
+    group: 'Basic Blocks',
     title: 'Heading 3',
     description: 'Small section heading',
     label: 'H3',
@@ -50,8 +50,8 @@ export const SLASH_ITEMS: MenuEntry[] = [
   },
   {
     id: 'todo',
-    group: 'Basic blocks',
-    title: 'To-do list',
+    group: 'Basic Blocks',
+    title: 'To-do List',
     description: 'Track tasks with checkboxes',
     icon: 'todo',
     hint: '[]',
@@ -60,8 +60,8 @@ export const SLASH_ITEMS: MenuEntry[] = [
   },
   {
     id: 'bullet',
-    group: 'Basic blocks',
-    title: 'Bulleted list',
+    group: 'Basic Blocks',
+    title: 'Bulleted List',
     description: 'A simple bulleted list',
     icon: 'list',
     hint: '-',
@@ -70,8 +70,8 @@ export const SLASH_ITEMS: MenuEntry[] = [
   },
   {
     id: 'numbered',
-    group: 'Basic blocks',
-    title: 'Numbered list',
+    group: 'Basic Blocks',
+    title: 'Numbered List',
     description: 'A list with numbering',
     icon: 'list-ordered',
     hint: '1.',
@@ -80,7 +80,7 @@ export const SLASH_ITEMS: MenuEntry[] = [
   },
   {
     id: 'toggle',
-    group: 'Basic blocks',
+    group: 'Basic Blocks',
     title: 'Toggle',
     description: 'Hide content inside a toggle',
     icon: 'toggle',
@@ -90,7 +90,7 @@ export const SLASH_ITEMS: MenuEntry[] = [
   },
   {
     id: 'quote',
-    group: 'Basic blocks',
+    group: 'Basic Blocks',
     title: 'Quote',
     description: 'Capture a quotation',
     icon: 'quote',
@@ -100,7 +100,7 @@ export const SLASH_ITEMS: MenuEntry[] = [
   },
   {
     id: 'callout',
-    group: 'Basic blocks',
+    group: 'Basic Blocks',
     title: 'Callout',
     description: 'Make a note stand out',
     icon: 'callout',
@@ -109,7 +109,7 @@ export const SLASH_ITEMS: MenuEntry[] = [
   },
   {
     id: 'divider',
-    group: 'Basic blocks',
+    group: 'Basic Blocks',
     title: 'Divider',
     description: 'Separate sections',
     icon: 'divider',
@@ -119,7 +119,7 @@ export const SLASH_ITEMS: MenuEntry[] = [
   },
   {
     id: 'code',
-    group: 'Basic blocks',
+    group: 'Basic Blocks',
     title: 'Code',
     description: 'A block of code',
     icon: 'code',
@@ -129,7 +129,7 @@ export const SLASH_ITEMS: MenuEntry[] = [
   },
   {
     id: 'table',
-    group: 'Basic blocks',
+    group: 'Basic Blocks',
     title: 'Table',
     description: 'Rows and columns',
     icon: 'table',
@@ -169,7 +169,7 @@ export const SLASH_ITEMS: MenuEntry[] = [
   {
     id: 'link',
     group: 'Pages',
-    title: 'Link to page',
+    title: 'Link to Page',
     description: 'Mention another page',
     icon: 'at',
     hint: '@',
@@ -179,7 +179,7 @@ export const SLASH_ITEMS: MenuEntry[] = [
   {
     id: 'date',
     group: 'Inline',
-    title: 'Today’s date',
+    title: 'Today’s Date',
     description: new Date().toLocaleDateString(undefined, { dateStyle: 'long' }),
     icon: 'calendar',
     keywords: 'today now time day',

@@ -61,18 +61,20 @@ class UI {
   }
 
   openMenu(state: MenuState) {
+    // Let a menu that's being replaced clean up (e.g. un-highlight its row).
+    this.menu?.onClose?.();
     this.menu = state;
   }
 
   openMenuAt(anchor: Element, items: MenuItem[], opts: { alignRight?: boolean; onClose?: () => void } = {}) {
     const r = anchor.getBoundingClientRect();
-    this.menu = {
+    this.openMenu({
       x: opts.alignRight ? r.right : r.left,
-      y: r.bottom + 4,
+      y: r.bottom + 6,
       items,
       alignRight: opts.alignRight,
       onClose: opts.onClose,
-    };
+    });
   }
 
   closeMenu() {

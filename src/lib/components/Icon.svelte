@@ -69,11 +69,16 @@
     check: '<path d="M20 6 9 17l-5-5"/>',
     keyboard:
       '<rect width="20" height="16" x="2" y="4" rx="2"/><path d="M6 8h.01"/><path d="M10 8h.01"/><path d="M14 8h.01"/><path d="M18 8h.01"/><path d="M8 12h.01"/><path d="M12 12h.01"/><path d="M16 12h.01"/><path d="M7 16h10"/>',
+    compose:
+      '<path d="M12 4H6.5A2.5 2.5 0 0 0 4 6.5v11A2.5 2.5 0 0 0 6.5 20h11a2.5 2.5 0 0 0 2.5-2.5V12"/><path d="M18.4 3.6a1.95 1.95 0 0 1 2.76 2.76l-7.9 7.9a2 2 0 0 1-.86.5l-2.55.74a.5.5 0 0 1-.62-.62l.74-2.55a2 2 0 0 1 .5-.86z"/>',
+    'sidebar-left': '<rect width="18" height="16" x="3" y="4" rx="3"/><path d="M9.5 4v16"/>',
+    info: '<circle cx="12" cy="12" r="9"/><path d="M12 16v-4.5"/><path d="M12 8h.01"/>',
   };
 </script>
 
 <script lang="ts">
-  let { name, size = 16, stroke = 1.75, filled = false }: { name: string; size?: number; stroke?: number; filled?: boolean } = $props();
+  // 1.8 units on the 24px grid ≈ 1.2px at 16px: SF Symbols "regular" weight.
+  let { name, size = 16, stroke = 1.8, filled = false }: { name: string; size?: number; stroke?: number; filled?: boolean } = $props();
 </script>
 
 <svg

@@ -8,7 +8,7 @@
   import { relativeTime } from '../time';
   import { pageMenuItems } from '../page-actions';
 
-  let { words = 0 }: { words?: number } = $props();
+  let { words = 0, scrolled = false }: { words?: number; scrolled?: boolean } = $props();
 
   let now = $state(Date.now());
   onMount(() => {
@@ -20,62 +20,74 @@
   const crumbs = $derived.by(() => {
     if (!page) return [];
     const all = [...store.ancestors(page.id), page];
-    // Collapse long paths to first … last two.
+    // Long paths collapse to: first › … › parent › page.
     if (all.length > 4) return [all[0], null, ...all.slice(-2)];
     return all;
   });
 
+  // A page nobody has typed in yet reads "Created", not "Edited".
+  const status = $derived.by(() => {
+    if (!page) return '';
+    const untouched = page.updatedAt - page.createdAt < 1500;
+    return untouched ? `Created ${relativeTime(page.createdAt, now)}` : `Edited ${relativeTime(page.updatedAt, now)}`;
+  });
+
+  let moreOpen = $state(false);
   function openMore(e: MouseEvent) {
     if (!page) return;
-    ui.openMenuAt(e.currentTarget as Element, pageMenuItems(page.id, { words }), { alignRight: true });
+    moreOpen = true;
+    ui.openMenuAt(e.currentTarget as Element, pageMenuItems(page.id, { words }), {
+      alignRight: true,
+      onClose: () => (moreOpen = false),
+    });
   }
 </script>
 
-<header class="titlebar" data-tauri-drag-region>
-  <div class="left">
+<header class="titlebar" class:scrolled data-tauri-drag-region>
+  <div class="nav">
     {#if !prefs.sidebarOpen}
-      <button class="icon-btn" onclick={() => (prefs.sidebarOpen = true)} title="Show sidebar (Ctrl+\)">
-        <Icon name="sidebar" />
+      <button class="icon-btn" onclick={() => (prefs.sidebarOpen = true)} data-tip="Show sidebar" data-tip-key="Ctrl+\">
+        <Icon name="sidebar-left" />
       </button>
     {/if}
-    <button class="icon-btn" disabled={!store.canGoBack} onclick={() => store.back()} title="Back (Alt+←)">
+    <button class="icon-btn" disabled={!store.canGoBack} onclick={() => store.back()} data-tip="Back" data-tip-key="Alt+←">
       <Icon name="arrow-left" />
     </button>
-    <button class="icon-btn" disabled={!store.canGoForward} onclick={() => store.forward()} title="Forward (Alt+→)">
+    <button class="icon-btn" disabled={!store.canGoForward} onclick={() => store.forward()} data-tip="Forward" data-tip-key="Alt+→">
       <Icon name="arrow-right" />
     </button>
-
-    <nav class="crumbs" data-tauri-drag-region>
-      {#each crumbs as c, i (c?.id ?? `gap-${i}`)}
-        {#if i > 0}<span class="slash" data-tauri-drag-region>/</span>{/if}
-        {#if c === null}
-          <span class="gap" data-tauri-drag-region>…</span>
-        {:else}
-          <button class="crumb" class:last={i === crumbs.length - 1} onclick={() => store.open(c.id)}>
-            {#if c.icon}<span class="emoji">{c.icon}</span>{/if}
-            <span class="crumb-title">{c.title || 'Untitled'}</span>
-          </button>
-        {/if}
-      {/each}
-    </nav>
   </div>
+
+  <nav class="crumbs" data-tauri-drag-region aria-label="Breadcrumb">
+    {#each crumbs as c, i (c?.id ?? `gap-${i}`)}
+      {#if i > 0}<span class="sep" data-tauri-drag-region><Icon name="chevron-right" size={12} stroke={2} /></span>{/if}
+      {#if c === null}
+        <span class="gap" data-tauri-drag-region>…</span>
+      {:else}
+        <button class="crumb" class:current={i === crumbs.length - 1} onclick={() => store.open(c.id)}>
+          {#if c.icon}<span class="emoji">{c.icon}</span>{/if}
+          <span class="crumb-title">{c.title || 'Untitled'}</span>
+        </button>
+      {/if}
+    {/each}
+  </nav>
 
   <div class="spacer" data-tauri-drag-region></div>
 
   {#if page}
-    <div class="right">
+    <div class="actions">
       <span class="status" data-tauri-drag-region>
-        {store.saving ? 'Saving…' : `Edited ${relativeTime(page.updatedAt, now)}`}
+        {store.saving ? 'Saving…' : status}
       </span>
       <button
         class="icon-btn"
-        class:fav={!!page.favorite}
+        class:on={!!page.favorite}
         onclick={() => store.toggleFavorite(page.id)}
-        title={page.favorite ? 'Remove from favorites' : 'Add to favorites'}
+        data-tip={page.favorite ? 'Remove from Favorites' : 'Add to Favorites'}
       >
-        <Icon name="star" filled={!!page.favorite} />
+        <Icon name="star" size={15} stroke={page.favorite ? 1.6 : 1.9} filled={!!page.favorite} />
       </button>
-      <button class="icon-btn" onclick={openMore} title="More actions">
+      <button class="icon-btn" class:open={moreOpen} onclick={openMore} data-tip="More">
         <Icon name="more" />
       </button>
     </div>
@@ -86,52 +98,68 @@
 
 <style>
   .titlebar {
+    position: relative;
     height: var(--titlebar-h);
     display: flex;
     align-items: center;
     flex: none;
     user-select: none;
     background: var(--bg);
+    z-index: 2;
   }
-  .left,
-  .right {
+  /* A hairline appears once content scrolls underneath, like a macOS toolbar. */
+  .titlebar::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 1px;
+    background: var(--separator);
+    opacity: 0;
+    transition: opacity var(--dur) var(--ease);
+    pointer-events: none;
+  }
+  .titlebar.scrolled::after {
+    opacity: 1;
+  }
+  .nav {
     display: flex;
     align-items: center;
     gap: 2px;
-    padding: 0 8px;
-    min-width: 0;
-  }
-  .left {
-    flex: 0 1 auto;
-  }
-  .spacer {
-    flex: 1;
-    align-self: stretch;
+    padding: 0 6px 0 10px;
+    flex: none;
   }
   .crumbs {
     display: flex;
     align-items: center;
     min-width: 0;
-    margin-left: 6px;
+    flex: 0 1 auto;
+    gap: 1px;
     overflow: hidden;
   }
   .crumb {
     display: inline-flex;
     align-items: center;
     gap: 6px;
+    height: 28px;
     max-width: 220px;
-    padding: 3px 6px;
-    border-radius: 5px;
-    font-size: 13.5px;
-    color: var(--text-2);
     min-width: 0;
+    padding: 0 8px;
+    border-radius: var(--r-sm);
+    font-size: var(--fs-body-ui);
+    color: var(--text-2);
+    transition:
+      background-color var(--dur-fast) var(--ease),
+      color var(--dur-fast) var(--ease);
   }
   .crumb:hover {
-    background: var(--hover);
+    background: var(--fill);
     color: var(--text);
   }
-  .crumb.last {
+  .crumb.current {
     color: var(--text);
+    font-weight: var(--fw-550);
   }
   .crumb-title {
     overflow: hidden;
@@ -140,29 +168,50 @@
   }
   .emoji {
     font-size: 14px;
+    line-height: 1;
   }
-  .slash,
+  .sep {
+    color: var(--text-4);
+    display: grid;
+    place-items: center;
+    width: 12px;
+  }
   .gap {
     color: var(--text-3);
-    font-size: 13px;
-    padding: 0 1px;
+    padding: 0 4px;
+  }
+  .spacer {
+    flex: 1;
+    align-self: stretch;
+  }
+  .actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding-right: 8px;
   }
   .status {
-    font-size: 12.5px;
+    margin-right: 8px;
+    font-size: var(--fs-footnote);
     color: var(--text-3);
-    margin-right: 6px;
     white-space: nowrap;
+    font-variant-numeric: tabular-nums;
   }
-  .fav {
+  .icon-btn.on {
+    color: var(--text);
+  }
+  .icon-btn.open {
+    background: var(--fill-2);
     color: var(--text);
   }
   .divider {
+    flex: none;
     width: 1px;
     height: 16px;
-    background: var(--border);
-    margin: 0 4px 0 2px;
+    background: var(--separator-strong);
+    margin: 0 4px 0 0;
   }
-  @media (max-width: 860px) {
+  @media (max-width: 880px) {
     .status {
       display: none;
     }

@@ -1,22 +1,23 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
+  import { fadeOut, pop } from '../motion';
   import { ui } from '../ui.svelte';
 </script>
 
 <div class="toasts" aria-live="polite">
   {#each ui.toasts as t (t.id)}
-    <div class="toast">
+    <div class="toast round" in:pop|global={{ y: 10, scale: 0.94, duration: 320 }} out:fadeOut|global={{ duration: 160 }}>
       <span class="msg">{t.message}</span>
       {#if t.action}
         <button
-          class="act"
+          class="act round"
           onclick={() => {
             t.action?.();
             ui.dismissToast(t.id);
           }}>{t.actionLabel}</button
         >
       {/if}
-      <button class="x" onclick={() => ui.dismissToast(t.id)} aria-label="Dismiss"><Icon name="x" size={14} /></button>
+      <button class="x round" onclick={() => ui.dismissToast(t.id)} aria-label="Dismiss"><Icon name="x" size={13} stroke={2.2} /></button>
     </div>
   {/each}
 </div>
@@ -24,7 +25,7 @@
 <style>
   .toasts {
     position: fixed;
-    bottom: 18px;
+    bottom: 24px;
     left: 50%;
     transform: translateX(-50%);
     z-index: 110;
@@ -34,50 +35,55 @@
     gap: 8px;
     pointer-events: none;
   }
+  /* An inverted HUD pill: dark on light, light on dark. */
   .toast {
     pointer-events: auto;
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 4px;
+    height: 40px;
     max-width: min(560px, calc(100vw - 32px));
-    padding: 8px 8px 8px 14px;
-    border-radius: 8px;
-    background: var(--text);
-    color: var(--bg);
-    font-size: 13.5px;
-    box-shadow: var(--shadow);
-    animation: up 160ms cubic-bezier(0.2, 0.9, 0.3, 1);
-  }
-  @keyframes up {
-    from {
-      opacity: 0;
-      transform: translateY(8px);
-    }
+    padding: 0 6px 0 18px;
+    border-radius: 20px;
+    background: color-mix(in srgb, var(--accent) 92%, transparent);
+    -webkit-backdrop-filter: blur(20px) saturate(0.2);
+    backdrop-filter: blur(20px) saturate(0.2);
+    color: var(--on-accent);
+    font-size: var(--fs-body-ui);
+    font-weight: var(--fw-500);
+    box-shadow: 0 10px 30px -8px rgba(0, 0, 0, 0.35), 0 2px 6px rgba(0, 0, 0, 0.12);
   }
   .msg {
+    margin-right: 6px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
   .act {
-    font-weight: 600;
-    padding: 3px 8px;
-    border-radius: 5px;
-    color: var(--bg);
-    text-decoration: underline;
-    text-underline-offset: 3px;
+    height: 28px;
+    padding: 0 12px;
+    border-radius: 14px;
+    font-weight: var(--fw-650);
+    color: var(--on-accent);
+    background: color-mix(in srgb, var(--on-accent) 14%, transparent);
+    transition: background-color var(--dur-fast) var(--ease);
   }
-  .act:hover,
-  .x:hover {
-    background: color-mix(in srgb, var(--bg) 16%, transparent);
+  .act:hover {
+    background: color-mix(in srgb, var(--on-accent) 22%, transparent);
   }
   .x {
     display: grid;
     place-items: center;
-    width: 24px;
-    height: 24px;
-    border-radius: 5px;
-    color: var(--bg);
-    opacity: 0.7;
+    width: 28px;
+    height: 28px;
+    border-radius: 14px;
+    color: color-mix(in srgb, var(--on-accent) 60%, transparent);
+    transition:
+      background-color var(--dur-fast) var(--ease),
+      color var(--dur-fast) var(--ease);
+  }
+  .x:hover {
+    background: color-mix(in srgb, var(--on-accent) 14%, transparent);
+    color: var(--on-accent);
   }
 </style>

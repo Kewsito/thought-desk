@@ -135,7 +135,7 @@ export function buildExtensions(handle: BlockHandleOptions): AnyExtension[] {
         const parent = editor.state.doc.resolve(pos).parent;
         if (['listItem', 'taskItem'].includes(parent.type.name)) return 'List';
         if (parent.type.name === 'tableCell' || parent.type.name === 'tableHeader') return '';
-        return "Write, or press '/' for commands…";
+        return 'Write something, or type / for commands';
       },
     }),
     Callout,

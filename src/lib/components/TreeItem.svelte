@@ -27,12 +27,16 @@
     else prefs.expanded[page.id] = true;
   }
 
+  // The row stays highlighted while its menu is open.
+  let menuOpen = $state(false);
   function menu(e: MouseEvent, anchor?: Element) {
     e.preventDefault();
     e.stopPropagation();
     const items = pageMenuItems(page.id, { sidebar: true });
-    if (anchor) ui.openMenuAt(anchor, items);
-    else ui.openMenu({ x: e.clientX, y: e.clientY, items });
+    const onClose = () => (menuOpen = false);
+    menuOpen = true;
+    if (anchor) ui.openMenuAt(anchor, items, { onClose });
+    else ui.openMenu({ x: e.clientX, y: e.clientY, items, onClose });
   }
 
   // ------------------------------------------------------------ drag & drop
@@ -92,11 +96,12 @@
 <div
   class="row"
   class:active
+  class:menu-open={menuOpen}
   class:dragging={drag.id === page.id}
   class:drop-before={zone === 'before'}
   class:drop-after={zone === 'after'}
   class:drop-inside={zone === 'inside'}
-  style:padding-left="{8 + depth * 14}px"
+  style:padding-left="{8 + depth * 16}px"
   role="treeitem"
   aria-selected={active}
   aria-expanded={kids.length ? expanded : undefined}
@@ -112,18 +117,18 @@
   ondrop={onDrop}
 >
   <span class="lead">
+    <span class="glyph" class:has-kids={kids.length > 0}>
+      {#if page.icon}<span class="emoji">{page.icon}</span>{:else}<Icon name="page" />{/if}
+    </span>
     {#if kids.length}
       <button class="chev" class:open={expanded} onclick={toggle} tabindex="-1" aria-label={expanded ? 'Collapse' : 'Expand'}>
-        <Icon name="chevron-right" size={14} stroke={2} />
+        <Icon name="chevron-right" size={13} stroke={2.2} />
       </button>
     {/if}
-    <span class="glyph" class:has-kids={kids.length > 0}>
-      {#if page.icon}<span class="emoji">{page.icon}</span>{:else}<Icon name="page" size={16} />{/if}
-    </span>
   </span>
   <span class="title">{page.title || 'Untitled'}</span>
   <span class="actions">
-    <button class="act" tabindex="-1" onclick={(e) => menu(e, e.currentTarget as Element)} title="More"><Icon name="more" size={15} /></button>
+    <button class="act" tabindex="-1" onclick={(e) => menu(e, e.currentTarget as Element)} data-tip="More"><Icon name="more" size={15} /></button>
     {#if !favorite}
       <button
         class="act"
@@ -132,7 +137,7 @@
           e.stopPropagation();
           void store.create(page.id);
         }}
-        title="Add a page inside"><Icon name="plus" size={15} /></button
+        data-tip="Add a page inside"><Icon name="plus" size={15} stroke={2} /></button
       >
     {/if}
   </span>
@@ -149,32 +154,33 @@
     position: relative;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     height: 30px;
+    margin: 0 10px;
     padding-right: 4px;
-    margin: 0 6px;
-    border-radius: 6px;
-    color: var(--text-2);
-    cursor: pointer;
-    font-size: 14px;
+    border-radius: var(--r-sm);
+    color: var(--text-sidebar);
+    font-size: var(--fs-body-ui);
     outline: none;
+    transition: background-color var(--dur-fast) var(--ease);
   }
-  .row:hover {
-    background: var(--hover);
+  .row:hover,
+  .row.menu-open {
+    background: var(--fill);
   }
   .row:focus-visible {
-    box-shadow: inset 0 0 0 1.5px var(--text-3);
+    box-shadow: inset 0 0 0 1.5px var(--focus);
   }
   .row.active {
-    background: var(--active);
+    background: var(--fill-2);
     color: var(--text);
-    font-weight: 500;
+    font-weight: var(--fw-550);
   }
   .row.dragging {
     opacity: 0.4;
   }
   .row.drop-inside {
-    background: var(--active);
+    background: var(--fill-2);
     box-shadow: inset 0 0 0 1.5px var(--text);
   }
   .row.drop-before::before,
@@ -182,7 +188,7 @@
     content: '';
     position: absolute;
     left: 8px;
-    right: 4px;
+    right: 8px;
     height: 2px;
     border-radius: 2px;
     background: var(--text);
@@ -194,19 +200,24 @@
   .row.drop-after::after {
     bottom: -1px;
   }
+
+  /* Icon slot; on rows with children the chevron takes its place on hover. */
   .lead {
     position: relative;
     flex: none;
-    width: 22px;
-    height: 22px;
-    display: grid;
-    place-items: center;
+    width: 20px;
+    height: 20px;
   }
   .glyph {
+    position: absolute;
+    inset: 0;
     display: grid;
     place-items: center;
-    width: 22px;
-    height: 22px;
+    color: var(--text-3);
+    transition: opacity var(--dur-fast) var(--ease);
+  }
+  .active .glyph {
+    color: var(--text-2);
   }
   .emoji {
     font-size: 15px;
@@ -215,23 +226,31 @@
   .chev {
     position: absolute;
     inset: 0;
-    display: none;
+    display: grid;
     place-items: center;
-    border-radius: 4px;
+    border-radius: var(--r-xs);
     color: var(--text-2);
+    opacity: 0;
+    transition:
+      opacity var(--dur-fast) var(--ease),
+      background-color var(--dur-fast) var(--ease);
   }
-  .chev:hover {
-    background: var(--active);
+  .chev :global(svg) {
+    transition: transform var(--dur) var(--ease-out);
   }
   .chev.open :global(svg) {
     transform: rotate(90deg);
   }
+  .chev:hover {
+    background: var(--fill-2);
+  }
   .row:hover .chev {
-    display: grid;
+    opacity: 1;
   }
   .row:hover .glyph.has-kids {
-    visibility: hidden;
+    opacity: 0;
   }
+
   .title {
     flex: 1;
     min-width: 0;
@@ -239,23 +258,30 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+
   .actions {
-    display: none;
-    gap: 1px;
-  }
-  .row:hover .actions {
     display: flex;
+    gap: 1px;
+    opacity: 0;
+    transition: opacity var(--dur-fast) var(--ease);
+  }
+  .row:hover .actions,
+  .row.menu-open .actions {
+    opacity: 1;
   }
   .act {
     display: grid;
     place-items: center;
     width: 22px;
     height: 22px;
-    border-radius: 4px;
-    color: var(--text-2);
+    border-radius: var(--r-xs);
+    color: var(--text-3);
+    transition:
+      background-color var(--dur-fast) var(--ease),
+      color var(--dur-fast) var(--ease);
   }
   .act:hover {
-    background: var(--active);
+    background: var(--fill-2);
     color: var(--text);
   }
 </style>

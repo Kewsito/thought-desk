@@ -119,18 +119,18 @@
 <div class="bubble popover" bind:this={el} style="visibility: hidden">
   {#if mode === 'format'}
     <button class="kind" onmousedown={keep} onclick={openTurnInto}>
-      {active.kind}
-      <Icon name="chevron-down" size={12} />
+      <span>{active.kind}</span>
+      <Icon name="chevron-down" size={12} stroke={2.2} />
     </button>
     <span class="sep"></span>
-    <button class:on={active.bold} onmousedown={keep} onclick={() => editor.chain().focus().toggleBold().run()} title="Bold (Ctrl+B)"><Icon name="bold" size={15} stroke={2.2} /></button>
-    <button class:on={active.italic} onmousedown={keep} onclick={() => editor.chain().focus().toggleItalic().run()} title="Italic (Ctrl+I)"><Icon name="italic" size={15} stroke={2} /></button>
-    <button class:on={active.underline} onmousedown={keep} onclick={() => editor.chain().focus().toggleUnderline().run()} title="Underline (Ctrl+U)"><Icon name="underline" size={15} stroke={2} /></button>
-    <button class:on={active.strike} onmousedown={keep} onclick={() => editor.chain().focus().toggleStrike().run()} title="Strikethrough (Ctrl+Shift+S)"><Icon name="strike" size={15} stroke={2} /></button>
-    <button class:on={active.code} onmousedown={keep} onclick={() => editor.chain().focus().toggleCode().run()} title="Inline code (Ctrl+E)"><Icon name="code" size={15} stroke={2} /></button>
-    <button class:on={active.highlight} onmousedown={keep} onclick={() => editor.chain().focus().toggleHighlight().run()} title="Highlight (Ctrl+Shift+H)"><Icon name="highlight" size={15} stroke={2} /></button>
+    <button class="fmt" class:on={active.bold} onmousedown={keep} onclick={() => editor.chain().focus().toggleBold().run()} data-tip="Bold" data-tip-key="Ctrl+B"><Icon name="bold" stroke={2.3} /></button>
+    <button class="fmt" class:on={active.italic} onmousedown={keep} onclick={() => editor.chain().focus().toggleItalic().run()} data-tip="Italic" data-tip-key="Ctrl+I"><Icon name="italic" stroke={2.1} /></button>
+    <button class="fmt" class:on={active.underline} onmousedown={keep} onclick={() => editor.chain().focus().toggleUnderline().run()} data-tip="Underline" data-tip-key="Ctrl+U"><Icon name="underline" stroke={2.1} /></button>
+    <button class="fmt" class:on={active.strike} onmousedown={keep} onclick={() => editor.chain().focus().toggleStrike().run()} data-tip="Strikethrough" data-tip-key="Ctrl+Shift+S"><Icon name="strike" stroke={2.1} /></button>
+    <button class="fmt" class:on={active.code} onmousedown={keep} onclick={() => editor.chain().focus().toggleCode().run()} data-tip="Inline code" data-tip-key="Ctrl+E"><Icon name="code" stroke={2.1} /></button>
+    <button class="fmt" class:on={active.highlight} onmousedown={keep} onclick={() => editor.chain().focus().toggleHighlight().run()} data-tip="Highlight" data-tip-key="Ctrl+Shift+H"><Icon name="highlight" stroke={2} /></button>
     <span class="sep"></span>
-    <button class:on={active.link} onmousedown={keep} onclick={startLink} title="Link (Ctrl+K)"><Icon name="link" size={15} stroke={2} /> <span class="txt">Link</span></button>
+    <button class="fmt link" class:on={active.link} onmousedown={keep} onclick={startLink} data-tip="Link" data-tip-key="Ctrl+K"><Icon name="link" stroke={2} /><span>Link</span></button>
   {:else}
     <form
       class="link-form"
@@ -139,10 +139,11 @@
         applyLink();
       }}
     >
+      <span class="link-icon"><Icon name="link" size={15} stroke={2} /></span>
       <input
         bind:this={linkInput}
         bind:value={href}
-        placeholder="Paste or type a link…"
+        placeholder="Paste or type a link"
         spellcheck="false"
         onkeydown={(e) => {
           if (e.key === 'Escape') {
@@ -153,10 +154,10 @@
         }}
       />
       {#if active.link}
-        <button type="button" onmousedown={keep} onclick={() => href && openUrl(href).catch(ui.error)} title="Open link"><Icon name="arrow-right" size={15} /></button>
-        <button type="button" onmousedown={keep} onclick={removeLink} title="Remove link"><Icon name="unlink" size={15} /></button>
+        <button type="button" class="fmt" onmousedown={keep} onclick={() => href && openUrl(href).catch(ui.error)} data-tip="Open in browser"><Icon name="arrow-right" /></button>
+        <button type="button" class="fmt" onmousedown={keep} onclick={removeLink} data-tip="Remove link"><Icon name="unlink" /></button>
       {/if}
-      <button type="submit" class="apply" title="Apply"><Icon name="enter" size={15} /></button>
+      <button type="submit" class="fmt apply" data-tip="Apply" data-tip-key="Enter"><Icon name="enter" /></button>
     </form>
   {/if}
 </div>
@@ -170,51 +171,84 @@
     display: flex;
     align-items: center;
     gap: 1px;
-    padding: 3px;
+    height: 40px;
+    padding: 0 4px;
     white-space: nowrap;
+    border-radius: var(--r-md);
+  }
+  /* Keyframes rather than transitions: the plugin sets opacity inline and
+     re-inserts the element each time it shows, which restarts this. */
+  .bubble {
+    animation: bubble-in var(--dur) var(--ease-out);
+  }
+  @keyframes bubble-in {
+    from {
+      opacity: 0;
+      scale: 0.97;
+    }
   }
   button {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    height: 28px;
-    min-width: 28px;
     justify-content: center;
-    padding: 0 6px;
-    border-radius: 5px;
-    color: var(--text);
+    gap: 5px;
+    height: 30px;
+    border-radius: var(--r-sm);
+    color: var(--text-2);
+    transition:
+      background-color var(--dur-fast) var(--ease),
+      color var(--dur-fast) var(--ease);
   }
   button:hover {
-    background: var(--hover);
+    background: var(--fill);
+    color: var(--text);
   }
-  button.on {
-    background: var(--text);
-    color: var(--bg);
+  .fmt {
+    min-width: 30px;
+    padding: 0 7px;
+  }
+  .fmt.on {
+    background: var(--fill-2);
+    color: var(--text);
   }
   .kind {
-    font-size: 13px;
-    padding: 0 8px;
+    padding: 0 8px 0 10px;
+    gap: 4px;
+    font-size: var(--fs-ui);
+    font-weight: var(--fw-550);
+    color: var(--text);
   }
-  .txt {
-    font-size: 13px;
+  .kind :global(svg) {
+    color: var(--text-3);
+  }
+  .link span {
+    font-size: var(--fs-ui);
+    font-weight: var(--fw-550);
   }
   .sep {
+    flex: none;
     width: 1px;
     height: 18px;
-    background: var(--border);
-    margin: 0 3px;
+    margin: 0 4px;
+    background: var(--hairline);
   }
   .link-form {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: 1px;
+  }
+  .link-icon {
+    display: grid;
+    place-items: center;
+    width: 26px;
+    color: var(--text-3);
   }
   .link-form input {
-    width: 260px;
-    height: 28px;
-    padding: 0 8px;
+    width: 248px;
+    height: 30px;
+    padding: 0 6px 0 2px;
     border: none;
     background: transparent;
-    font-size: 13px;
+    font-size: var(--fs-body-ui);
   }
 </style>

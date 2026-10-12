@@ -67,17 +67,17 @@
 </script>
 
 <article class="page" class:full={meta?.fullWidth}>
-  <div class="head">
+  <div class="head" class:has-icon={!!meta?.icon}>
     {#if meta?.icon}
-      <button class="page-icon" onclick={pickIcon} title="Change icon">{meta.icon}</button>
-    {/if}
-    <div class="head-tools">
-      {#if !meta?.icon}
+      <button class="page-icon" onclick={pickIcon} data-tip="Change icon">{meta.icon}</button>
+    {:else}
+      <div class="head-tools">
         <button class="tool" onclick={() => store.update(page.id, { icon: randomEmoji() }, { immediate: true })}>
-          <Icon name="smile" size={15} /> Add icon
+          <Icon name="smile" size={15} />
+          Add icon
         </button>
-      {/if}
-    </div>
+      </div>
+    {/if}
     <!-- svelte-ignore a11y_missing_content (filled imperatively to keep the caret stable) -->
     <h1
       class="title"
@@ -98,7 +98,6 @@
 
 <style>
   .page {
-    --page-width: 720px;
     width: 100%;
     max-width: calc(var(--page-width) + 2 * var(--page-pad));
     margin: 0 auto;
@@ -108,61 +107,92 @@
     max-width: none;
   }
   .head {
-    padding-top: 64px;
     position: relative;
+    padding-top: 88px;
+  }
+  .head.has-icon {
+    padding-top: 56px;
   }
   .page-icon {
-    display: block;
-    font-size: 64px;
-    line-height: 1.1;
-    padding: 4px;
-    margin: 0 0 4px -6px;
-    border-radius: 8px;
+    display: grid;
+    place-items: center;
+    width: 80px;
+    height: 80px;
+    margin: 0 0 14px -8px;
+    font-size: 60px;
+    line-height: 1;
+    border-radius: var(--r-lg);
+    transition:
+      background-color var(--dur-fast) var(--ease),
+      transform var(--dur) var(--ease-out);
   }
   .page-icon:hover {
-    background: var(--hover);
+    background: var(--fill);
   }
+  .page-icon:active {
+    transform: scale(0.96);
+  }
+  /* "Add icon" floats in the space above the title, so it never shifts it. */
   .head-tools {
+    position: absolute;
+    top: 46px;
+    left: -10px;
     display: flex;
-    gap: 4px;
-    height: 30px;
-    margin-left: -8px;
+    gap: 2px;
     opacity: 0;
-    transition: opacity 120ms;
+    transition: opacity var(--dur) var(--ease);
   }
-  .head:hover .head-tools {
+  .head:hover .head-tools,
+  .head-tools:focus-within {
     opacity: 1;
   }
   .tool {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 4px 8px;
-    border-radius: 6px;
-    font-size: 13.5px;
+    height: 28px;
+    padding: 0 10px 0 8px;
+    border-radius: var(--r-sm);
+    font-size: var(--fs-ui);
+    font-weight: var(--fw-500);
     color: var(--text-3);
+    transition:
+      background-color var(--dur-fast) var(--ease),
+      color var(--dur-fast) var(--ease);
   }
   .tool:hover {
-    background: var(--hover);
+    background: var(--fill);
     color: var(--text-2);
   }
   .title {
-    margin: 4px 0 12px;
-    font-size: 2.5em;
-    font-weight: 700;
-    line-height: 1.2;
-    letter-spacing: -0.02em;
-    outline: none;
-    word-break: break-word;
+    margin: 0 0 10px;
+    font-family: var(--font-page);
+    font-size: 40px;
+    font-weight: var(--fw-700);
+    line-height: 1.15;
+    letter-spacing: -0.03em;
     color: var(--text);
+    overflow-wrap: break-word;
+    text-wrap: balance;
+    outline: none;
     cursor: text;
+  }
+  :global(:root[data-font="serif"]) .title {
+    letter-spacing: -0.015em;
+  }
+  :global(:root[data-font="mono"]) .title {
+    font-size: 34px;
+    letter-spacing: -0.02em;
+  }
+  :global(:root.small-text) .title {
+    font-size: 34px;
   }
   .title:empty::before {
     content: attr(data-placeholder);
     color: var(--text-4);
   }
   .tail {
-    min-height: 30vh;
+    min-height: 35vh;
     cursor: text;
   }
 </style>

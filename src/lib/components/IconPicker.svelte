@@ -2,6 +2,8 @@
   import { onMount, tick } from 'svelte';
   import { ALL_EMOJI, EMOJI_GROUPS, randomEmoji } from '../emoji';
   import { ui, type IconPickerState } from '../ui.svelte';
+  import Icon from './Icon.svelte';
+  import { fadeOut, pop } from '../motion';
 
   let { picker }: { picker: IconPickerState } = $props();
 
@@ -54,21 +56,24 @@
   }
 </script>
 
-<div class="picker popover" bind:this={el} style:left="{pos.left}px" style:top="{pos.top}px">
+<div class="picker popover" bind:this={el} style:left="{pos.left}px" style:top="{pos.top}px" in:pop|global out:fadeOut|global>
   <div class="bar">
-    <input
-      bind:this={input}
-      bind:value={query}
-      placeholder="Filter…"
-      spellcheck="false"
-      onkeydown={(e) => {
-        if (e.key === 'Enter' && results?.length) pick(results[0].emoji);
-      }}
-    />
-    <button class="btn" onclick={() => pick(randomEmoji())}>Random</button>
+    <label class="field">
+      <Icon name="search" size={14} stroke={2} />
+      <input
+        bind:this={input}
+        bind:value={query}
+        placeholder="Search emoji"
+        spellcheck="false"
+        onkeydown={(e) => {
+          if (e.key === 'Enter' && results?.length) pick(results[0].emoji);
+        }}
+      />
+    </label>
+    <button class="text-btn" onclick={() => pick(randomEmoji())}>Random</button>
     {#if picker.onRemove}
       <button
-        class="btn"
+        class="text-btn"
         onclick={() => {
           picker.onRemove?.();
           close();
@@ -80,7 +85,7 @@
     {#if results}
       <div class="grid">
         {#each results as e (e.emoji)}
-          <button class="em" title={e.keywords} onclick={() => pick(e.emoji)}>{e.emoji}</button>
+          <button class="em" onclick={() => pick(e.emoji)}>{e.emoji}</button>
         {:else}
           <p class="none">No emoji found</p>
         {/each}
@@ -90,7 +95,7 @@
         <div class="group">{g.name}</div>
         <div class="grid">
           {#each g.items as e (e.emoji)}
-            <button class="em" title={e.keywords} onclick={() => pick(e.emoji)}>{e.emoji}</button>
+            <button class="em" onclick={() => pick(e.emoji)}>{e.emoji}</button>
           {/each}
         </div>
       {/each}
@@ -102,56 +107,90 @@
   .picker {
     position: fixed;
     z-index: 95;
-    width: 352px;
+    width: 348px;
     display: flex;
     flex-direction: column;
     max-height: 380px;
+    transform-origin: top left;
   }
   .bar {
     display: flex;
-    gap: 6px;
-    padding: 8px;
-    border-bottom: 1px solid var(--border);
+    align-items: center;
+    gap: 4px;
+    padding: 10px 10px 8px;
   }
-  .bar input {
+  .field {
     flex: 1;
     min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 7px;
     height: 30px;
-    padding: 0 10px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: var(--bg);
-    font-size: 13px;
+    padding: 0 9px;
+    border-radius: var(--r-sm);
+    background: var(--fill-2);
+    color: var(--text-3);
+  }
+  .field input {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    background: transparent;
+    font-size: var(--fs-ui);
+  }
+  .text-btn {
+    height: 30px;
+    padding: 0 9px;
+    border-radius: var(--r-sm);
+    font-size: var(--fs-ui);
+    font-weight: var(--fw-500);
+    color: var(--text-2);
+    transition:
+      background-color var(--dur-fast) var(--ease),
+      color var(--dur-fast) var(--ease);
+  }
+  .text-btn:hover {
+    background: var(--fill);
+    color: var(--text);
   }
   .grid-wrap {
     overflow-y: auto;
-    padding: 4px 8px 10px;
+    padding: 0 8px 10px;
   }
   .group {
-    padding: 8px 2px 4px;
-    font-size: 11.5px;
-    font-weight: 600;
+    padding: 10px 4px 6px;
+    font-size: var(--fs-caption);
+    font-weight: var(--fw-600);
+    letter-spacing: 0.01em;
     color: var(--text-3);
   }
   .grid {
     display: grid;
-    grid-template-columns: repeat(10, 1fr);
-    gap: 1px;
+    grid-template-columns: repeat(9, 1fr);
+    gap: 2px;
   }
   .em {
     aspect-ratio: 1;
     display: grid;
     place-items: center;
-    font-size: 20px;
-    border-radius: 5px;
+    font-size: 21px;
+    line-height: 1;
+    border-radius: var(--r-sm);
+    transition:
+      background-color var(--dur-fast) var(--ease),
+      transform var(--dur-fast) var(--ease);
   }
   .em:hover {
-    background: var(--hover);
+    background: var(--fill-2);
+  }
+  .em:active {
+    transform: scale(0.9);
   }
   .none {
     grid-column: 1 / -1;
+    margin: 18px 0;
     text-align: center;
     color: var(--text-3);
-    font-size: 13px;
+    font-size: var(--fs-ui);
   }
 </style>

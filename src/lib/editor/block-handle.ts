@@ -47,14 +47,15 @@ class HandleView {
 
     const plus = document.createElement('button');
     plus.className = 'block-handle-btn';
-    plus.title = 'Click to add a block below';
+    plus.dataset.tip = 'Add a block below';
     plus.innerHTML = SVG_PLUS;
     plus.addEventListener('mousedown', (e) => e.preventDefault());
     plus.addEventListener('click', () => this.insertBelow());
 
     this.grip = document.createElement('button');
     this.grip.className = 'block-handle-btn grip';
-    this.grip.title = 'Drag to move\nClick to open menu';
+    this.grip.dataset.tip = 'Drag to move';
+    this.grip.dataset.tipKey = 'Click for options';
     this.grip.innerHTML = SVG_GRIP;
     this.grip.draggable = true;
     this.grip.addEventListener('mousedown', (e) => e.stopPropagation());
@@ -112,7 +113,9 @@ class HandleView {
     const lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.5 || 24;
     const padTop = parseFloat(style.paddingTop) || 0;
     const firstLine = t.node.isTextblock || lineEl !== t.dom ? Math.min(lineHeight, lineRect.height) : Math.min(24, rect.height);
-    const centerY = (lineEl !== t.dom || t.node.isTextblock ? lineRect.top + padTop : rect.top) + firstLine / 2;
+    // Aim at the optical centre of the first line (Inter sits ~0.094em low).
+    const optical = t.node.isTextblock || lineEl !== t.dom ? (parseFloat(style.fontSize) || 16) * 0.094 : 0;
+    const centerY = (lineEl !== t.dom || t.node.isTextblock ? lineRect.top + padTop : rect.top) + firstLine / 2 + optical;
 
     const top = centerY - hostRect.top - 12;
     const left = rect.left - hostRect.left - 48 - (ITEM_TYPES.has(t.node.type.name) ? 18 : 0);

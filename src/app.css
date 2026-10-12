@@ -1,56 +1,184 @@
-/* ------------------------------------------------------------------ tokens */
+/* =========================================================================
+   Thought Desk design system
+   One grayscale palette, a 4px spacing grid, continuous (squircle) corners,
+   Inter with optical sizing, frosted materials and spring motion.
+   ========================================================================= */
+
+/* ------------------------------------------------------------------ fonts */
+
+/* Inter 4 with the optical-size axis: text cut at small sizes, display cut
+   for large titles (the way SF Pro Text/Display split). Latin only. */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: block;
+  font-weight: 100 900;
+  src: url('../node_modules/@fontsource-variable/inter/files/inter-latin-opsz-normal.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: block;
+  font-weight: 100 900;
+  src: url('../node_modules/@fontsource-variable/inter/files/inter-latin-ext-opsz-normal.woff2') format('woff2-variations');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF,
+    U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: italic;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('../node_modules/@fontsource-variable/inter/files/inter-latin-opsz-italic.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: italic;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('../node_modules/@fontsource-variable/inter/files/inter-latin-ext-opsz-italic.woff2') format('woff2-variations');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF,
+    U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* ----------------------------------------------------------------- tokens */
 
 :root {
-  --titlebar-h: 44px;
-  --page-pad: clamp(40px, 8vw, 96px);
+  /* Layout */
+  --titlebar-h: 48px;
+  --page-width: 708px;
+  --page-pad: clamp(48px, 9vw, 112px);
 
-  --font-ui: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+  /* Type */
+  --font-ui: 'Inter', 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
   --font-sans: var(--font-ui);
-  --font-serif: Charter, 'Iowan Old Style', Georgia, Cambria, 'Times New Roman', serif;
-  --font-mono: 'Cascadia Code', 'Cascadia Mono', 'JetBrains Mono', Consolas, ui-monospace, monospace;
+  --font-serif: Charter, 'Iowan Old Style', 'Palatino Linotype', Georgia, Cambria, serif;
+  --font-mono: 'Cascadia Mono', 'SF Mono', ui-monospace, 'JetBrains Mono', Menlo, Consolas, monospace;
   --font-page: var(--font-sans);
 
+  --fs-caption: 11px;
+  --fs-footnote: 12px;
+  --fs-ui: 13px;
+  --fs-body-ui: 13.5px;
+  --fs-callout: 14px;
+
+  /* Weights. Light-on-dark text renders optically heavier, so dark mode
+     trims each step a little (Inter is variable, so any value works). */
+  --fw-500: 500;
+  --fw-550: 550;
+  --fw-600: 600;
+  --fw-650: 650;
+  --fw-700: 700;
+
+  /* Grayscale. Text follows Apple's label hierarchy. */
   --bg: #ffffff;
-  --bg-sidebar: #f8f8f8;
-  --bg-elev: #ffffff;
-  --text: #0a0a0a;
-  --text-2: #525252;
-  --text-3: #8f8f8f;
-  --text-4: #c4c4c4;
-  --border: #ebebeb;
-  --border-strong: #d6d6d6;
-  --hover: rgba(0, 0, 0, 0.045);
-  --active: rgba(0, 0, 0, 0.08);
-  --selection: rgba(0, 0, 0, 0.11);
-  --mark: rgba(0, 0, 0, 0.1);
-  --highlight: #e6e6e6;
-  --code-bg: #f5f5f5;
-  --callout-bg: #f5f5f5;
-  --scrim: rgba(0, 0, 0, 0.16);
-  --shadow: 0 0 0 1px rgba(0, 0, 0, 0.07), 0 10px 30px -6px rgba(0, 0, 0, 0.16), 0 2px 6px rgba(0, 0, 0, 0.05);
-  --check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-7'/%3E%3C/svg%3E");
+  --bg-sidebar: #f6f6f7;
+  --bg-elevated: #ffffff;
+  --bg-grouped: #f5f5f7;
+  --material: rgba(252, 252, 253, 0.8);
+  --material-strong: rgba(252, 252, 253, 0.9);
+
+  --text: #1d1d1f;
+  --text-2: #6e6e73;
+  --text-3: #a1a1a6;
+  --text-4: #c7c7cc;
+  --text-sidebar: #2c2c2e;
+
+  --separator: #e8e8ed;
+  --separator-strong: #d2d2d7;
+  --hairline: rgba(0, 0, 0, 0.08);
+
+  --fill: rgba(0, 0, 0, 0.04);
+  --fill-2: rgba(0, 0, 0, 0.065);
+  --fill-3: rgba(0, 0, 0, 0.1);
+
+  --accent: #1d1d1f;
+  --on-accent: #ffffff;
+
+  --selection: rgba(29, 29, 31, 0.13);
+  --mark: #ebebef;
+  --code-bg: #f5f5f7;
+  --callout-bg: #f5f5f7;
+  --scrim: rgba(0, 0, 0, 0.18);
+  --focus: rgba(29, 29, 31, 0.35);
+
+  --shadow-sm: 0 0.5px 1px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-pop: 0 0 0 0.5px rgba(0, 0, 0, 0.1), 0 10px 32px -8px rgba(0, 0, 0, 0.2), 0 3px 8px -2px rgba(0, 0, 0, 0.06);
+  --shadow-modal: 0 0 0 0.5px rgba(0, 0, 0, 0.08), 0 28px 70px -14px rgba(0, 0, 0, 0.28), 0 10px 24px -10px rgba(0, 0, 0, 0.12);
+
+  --check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.1' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 8.4l2.6 2.6L12 5.4'/%3E%3C/svg%3E");
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 3.5 10.5 8 6 12.5'/%3E%3C/svg%3E");
+
+  /* Shape. Continuous corners need slightly larger radii than circular ones. */
+  --r-xs: 5px;
+  --r-sm: 7px;
+  --r-md: 9px;
+  --r-lg: 13px;
+  --r-xl: 18px;
+  --corner: superellipse(1.6);
+
+  /* Motion */
+  --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --spring: linear(0, 0.0074, 0.0292, 0.0647 3.3%, 0.1726 5.7%, 0.4419 10.3%, 0.7032 15.2%, 0.8148, 0.9025 21.1%,
+      0.9648 24.8%, 0.9861, 1.0021 29.6%, 1.0127 32.8%, 1.0177 37%, 1.0162 41.6%, 1.0045 53.1%, 0.9987 64.3%,
+      0.9989 78.1%, 1);
+  --dur-fast: 120ms;
+  --dur: 180ms;
+  --dur-slow: 320ms;
+
+  color-scheme: light;
 }
 
 :root[data-theme='dark'] {
-  --bg: #0a0a0a;
-  --bg-sidebar: #0f0f0f;
-  --bg-elev: #151515;
-  --text: #f5f5f5;
-  --text-2: #a8a8a8;
-  --text-3: #737373;
-  --text-4: #474747;
-  --border: #1f1f1f;
-  --border-strong: #343434;
-  --hover: rgba(255, 255, 255, 0.055);
-  --active: rgba(255, 255, 255, 0.1);
-  --selection: rgba(255, 255, 255, 0.2);
-  --mark: rgba(255, 255, 255, 0.16);
-  --highlight: #333333;
-  --code-bg: #141414;
-  --callout-bg: #141414;
+  --fw-500: 470;
+  --fw-550: 520;
+  --fw-600: 570;
+  --fw-650: 615;
+  --fw-700: 670;
+
+  --bg: #000000;
+  --bg-sidebar: #0f0f10;
+  --bg-elevated: #1c1c1e;
+  --bg-grouped: #161618;
+  --material: rgba(30, 30, 32, 0.78);
+  --material-strong: rgba(30, 30, 32, 0.9);
+
+  --text: #f5f5f7;
+  --text-2: #a1a1a6;
+  --text-3: #6e6e73;
+  --text-4: #48484a;
+  --text-sidebar: #e5e5ea;
+
+  --separator: #1f1f22;
+  --separator-strong: #38383a;
+  --hairline: rgba(255, 255, 255, 0.1);
+
+  --fill: rgba(255, 255, 255, 0.06);
+  --fill-2: rgba(255, 255, 255, 0.1);
+  --fill-3: rgba(255, 255, 255, 0.15);
+
+  --accent: #f5f5f7;
+  --on-accent: #000000;
+
+  --selection: rgba(245, 245, 247, 0.22);
+  --mark: #2c2c2e;
+  --code-bg: #111113;
+  --callout-bg: #111113;
   --scrim: rgba(0, 0, 0, 0.55);
-  --shadow: 0 0 0 1px rgba(255, 255, 255, 0.09), 0 16px 40px -8px rgba(0, 0, 0, 0.7);
-  --check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-7'/%3E%3C/svg%3E");
+  --focus: rgba(245, 245, 247, 0.45);
+
+  --shadow-sm: 0 0.5px 1px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-pop: 0 0 0 0.5px rgba(255, 255, 255, 0.14), 0 12px 36px -6px rgba(0, 0, 0, 0.7), 0 4px 10px -2px rgba(0, 0, 0, 0.4);
+  --shadow-modal: 0 0 0 0.5px rgba(255, 255, 255, 0.12), 0 32px 80px -12px rgba(0, 0, 0, 0.8);
+
+  --check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='2.1' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 8.4l2.6 2.6L12 5.4'/%3E%3C/svg%3E");
+
+  color-scheme: dark;
 }
 
 :root[data-font='serif'] {
@@ -60,12 +188,27 @@
   --font-page: var(--font-mono);
 }
 
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur: 0ms;
+    --dur-slow: 0ms;
+  }
+}
+
 /* ------------------------------------------------------------------- base */
 
 *,
 *::before,
 *::after {
   box-sizing: border-box;
+  /* Continuous (squircle) corners everywhere, like Apple's; opt out with .round. */
+  corner-shape: var(--corner);
+}
+.round,
+.round::before,
+.round::after {
+  corner-shape: round;
 }
 
 html,
@@ -76,10 +219,12 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-ui);
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: var(--fs-body-ui);
+  line-height: 1.45;
+  font-optical-sizing: auto;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  -webkit-tap-highlight-color: transparent;
 }
 
 #app {
@@ -96,6 +241,7 @@ button {
   cursor: default;
   -webkit-user-select: none;
   user-select: none;
+  corner-shape: var(--corner);
 }
 
 input,
@@ -105,11 +251,15 @@ textarea {
   outline: none;
 }
 
-:focus-visible {
-  outline: 2px solid var(--text-3);
-  outline-offset: 1px;
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-3);
 }
-/* Text fields show the caret; a focus ring around them is just noise. */
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
 input:focus-visible,
 textarea:focus-visible,
 [contenteditable]:focus-visible {
@@ -120,32 +270,46 @@ textarea:focus-visible,
   background: var(--selection);
 }
 
-kbd {
-  display: inline-block;
-  padding: 1px 5px;
-  border: 1px solid var(--border-strong);
-  border-bottom-width: 2px;
-  border-radius: 4px;
-  font-family: var(--font-ui);
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--text-3);
-  background: var(--bg);
-  white-space: nowrap;
+img,
+svg {
+  display: block;
 }
 
+kbd {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--r-xs);
+  corner-shape: var(--corner);
+  background: var(--fill);
+  font-family: var(--font-ui);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-500);
+  letter-spacing: 0.01em;
+  line-height: 1;
+  color: var(--text-3);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Overlay-style scrollbars: a slim thumb that only shows while hovering. */
 ::-webkit-scrollbar {
-  width: 11px;
-  height: 11px;
+  width: 12px;
+  height: 12px;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--border-strong);
-  border: 3px solid transparent;
+  background-color: transparent;
+  border: 4px solid transparent;
   background-clip: content-box;
-  border-radius: 10px;
+  border-radius: 12px;
+  min-height: 40px;
+}
+:hover::-webkit-scrollbar-thumb {
+  background-color: var(--fill-3);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background-color: var(--text-3);
+  background-color: var(--text-4);
 }
 ::-webkit-scrollbar-track,
 ::-webkit-scrollbar-corner {
@@ -154,10 +318,15 @@ kbd {
 
 /* ----------------------------------------------------------------- shared */
 
+/* Frosted material for menus and popovers. */
 .popover {
-  background: var(--bg-elev);
-  border-radius: 10px;
-  box-shadow: var(--shadow);
+  background: var(--material);
+  /* Desaturate what shows through so the glass stays neutral gray. */
+  -webkit-backdrop-filter: blur(28px) saturate(0.2);
+  backdrop-filter: blur(28px) saturate(0.2);
+  border-radius: var(--r-lg);
+  corner-shape: var(--corner);
+  box-shadow: var(--shadow-pop);
 }
 
 .icon-btn {
@@ -166,18 +335,21 @@ kbd {
   place-items: center;
   width: 28px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   color: var(--text-2);
+  transition:
+    background-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
 }
 .icon-btn:hover:not(:disabled) {
-  background: var(--hover);
+  background: var(--fill);
   color: var(--text);
 }
 .icon-btn:active:not(:disabled) {
-  background: var(--active);
+  background: var(--fill-2);
 }
 .icon-btn:disabled {
-  opacity: 0.3;
+  color: var(--text-4);
 }
 
 .btn {
@@ -185,63 +357,71 @@ kbd {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: 32px;
+  height: 30px;
+  min-width: 76px;
   padding: 0 14px;
-  border: 1px solid var(--border-strong);
-  border-radius: 7px;
-  font-size: 13.5px;
-  font-weight: 500;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-body-ui);
+  font-weight: var(--fw-500);
   color: var(--text);
-  background: var(--bg);
+  background: var(--fill-2);
+  transition:
+    background-color var(--dur-fast) var(--ease),
+    opacity var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
 }
 .btn:hover {
-  background: var(--hover);
+  background: var(--fill-3);
+}
+.btn:active {
+  transform: scale(0.98);
 }
 .btn.primary {
-  background: var(--text);
-  border-color: var(--text);
-  color: var(--bg);
+  background: var(--accent);
+  color: var(--on-accent);
 }
 .btn.primary:hover {
-  opacity: 0.88;
-}
-.btn.danger:not(.primary) {
-  border-color: var(--text);
+  opacity: 0.86;
 }
 
-/* ------------------------------------------------------------------ editor */
+/* ================================================================== editor */
 
 .editor-host {
   position: relative;
-  /* Extra gutter on the left so the block handle stays inside the hover area. */
-  margin: 0 -40px 0 -84px;
-  padding: 0 40px 0 84px;
+  /* A wide gutter on the left so the block handle stays inside the hover area. */
+  margin: 0 -48px 0 -96px;
+  padding: 0 48px 0 96px;
 }
 
 .prose {
   font-family: var(--font-page);
   font-size: 16px;
-  line-height: 1.65;
+  line-height: 1.625;
+  letter-spacing: -0.006em;
   color: var(--text);
   caret-color: var(--text);
   outline: none;
   min-height: 2em;
-  word-break: break-word;
+  overflow-wrap: break-word;
+  text-wrap: pretty;
+  font-feature-settings: 'calt' 1, 'case' 0;
+}
+:root[data-font='serif'] .prose {
+  font-size: 17px;
+  letter-spacing: 0;
+}
+:root[data-font='mono'] .prose {
+  font-size: 14.5px;
+  letter-spacing: 0;
 }
 :root.small-text .prose {
   font-size: 14.5px;
 }
-:root.small-text .page .title {
-  font-size: 2.1em;
-}
 
-.page .title {
-  font-family: var(--font-page);
-}
-
+/* Vertical rhythm: every block gets the same 2px breathing room; headings
+   add space above so sections read as groups. */
 .prose > * {
-  margin-top: 2px;
-  margin-bottom: 2px;
+  margin: 0;
 }
 .prose p {
   margin: 0;
@@ -250,135 +430,208 @@ kbd {
 .prose h1,
 .prose h2,
 .prose h3 {
-  line-height: 1.3;
-  margin-bottom: 2px;
+  margin: 0;
   padding: 3px 0;
+  font-weight: var(--fw-650);
+  text-wrap: balance;
 }
 .prose h1 {
-  font-size: 1.875em;
-  font-weight: 700;
-  margin-top: 1.1em;
-  letter-spacing: -0.02em;
+  font-size: 1.75em;
+  line-height: 1.25;
+  letter-spacing: -0.022em;
+  margin-top: 1.2em;
+  margin-bottom: 0.1em;
 }
 .prose h2 {
-  font-size: 1.45em;
-  font-weight: 650;
-  margin-top: 0.9em;
-  letter-spacing: -0.015em;
+  font-size: 1.375em;
+  line-height: 1.3;
+  letter-spacing: -0.018em;
+  margin-top: 1em;
+  margin-bottom: 0.05em;
 }
 .prose h3 {
-  font-size: 1.2em;
-  font-weight: 600;
-  margin-top: 0.7em;
+  font-size: 1.125em;
+  line-height: 1.4;
+  letter-spacing: -0.012em;
+  margin-top: 0.8em;
 }
 .prose > :first-child {
   margin-top: 0;
 }
 
 .prose strong {
-  font-weight: 650;
+  font-weight: var(--fw-650);
+}
+.prose em {
+  font-style: italic;
+}
+.prose s {
+  text-decoration-color: var(--text-3);
+}
+.prose u {
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
 }
 
 .prose a {
   color: inherit;
   text-decoration: underline;
-  text-decoration-color: var(--text-3);
-  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  text-decoration-color: var(--text-4);
+  text-underline-offset: 0.22em;
   cursor: text;
+  transition: text-decoration-color var(--dur-fast) var(--ease);
 }
 .prose a:hover {
   text-decoration-color: var(--text);
 }
 
 .prose mark {
-  background: var(--highlight);
+  background: var(--mark);
   color: inherit;
-  border-radius: 3px;
-  padding: 1px 2px;
+  border-radius: 4px;
+  padding: 0.1em 0.2em;
+  margin: 0 -0.05em;
   box-decoration-break: clone;
 }
 
 .prose code {
   font-family: var(--font-mono);
-  font-size: 0.86em;
-  background: var(--code-bg);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 1px 5px;
+  font-size: 0.85em;
+  letter-spacing: 0;
+  background: var(--fill-2);
+  border-radius: 5px;
+  corner-shape: var(--corner);
+  padding: 0.18em 0.38em;
+  box-decoration-break: clone;
 }
 
 .prose pre {
   margin: 6px 0;
-  padding: 16px 18px;
+  padding: 16px 20px;
   background: var(--code-bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r-md);
+  corner-shape: var(--corner);
   font-family: var(--font-mono);
   font-size: 13.5px;
   line-height: 1.6;
+  letter-spacing: 0;
   overflow-x: auto;
   tab-size: 2;
 }
 .prose pre code {
   background: none;
-  border: none;
   padding: 0;
   font-size: inherit;
+  border-radius: 0;
 }
 
 .prose blockquote {
-  margin: 6px 0;
-  padding: 0 0 0 16px;
-  border-left: 3px solid var(--text);
+  position: relative;
+  margin: 4px 0;
+  padding: 0 0 0 18px;
+}
+.prose blockquote::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 5px;
+  bottom: 5px;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--text);
 }
 
 .prose hr {
   border: none;
   margin: 0;
-  padding: 12px 0;
-  cursor: pointer;
+  padding: 14px 0;
+  cursor: default;
 }
 .prose hr::after {
   content: '';
   display: block;
-  border-top: 1px solid var(--border-strong);
+  height: 1px;
+  background: var(--separator-strong);
 }
 
-/* Lists */
+/* Lists: bullets drawn to sit on the x-height of the first line. */
+/* Inter sits slightly low in its line box: the optical centre of a line (the
+   middle of the x-height) is 0.094em below the box centre. Markers that sit
+   beside text are offset by this so they line up with the letters. */
+.prose {
+  --optical: 0.094em;
+}
+
 .prose ul,
 .prose ol {
-  margin: 2px 0;
-  padding-left: 1.6em;
+  margin: 0;
+  padding: 0 0 0 1.625em;
 }
 .prose li > p {
-  padding: 2px 0;
+  padding: 1px 0;
 }
-.prose li::marker {
+.prose ul:not([data-type='taskList']) {
+  list-style: none;
+}
+.prose ul:not([data-type='taskList']) > li {
+  position: relative;
+}
+.prose ul:not([data-type='taskList']) > li::before {
+  content: '';
+  position: absolute;
+  left: -1em;
+  top: calc(1px + 0.8125em + var(--optical) - 2.5px);
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  corner-shape: round;
+  background: currentColor;
+}
+.prose ul:not([data-type='taskList']) ul > li::before {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.25px currentColor;
+}
+.prose ul:not([data-type='taskList']) ul ul > li::before {
+  border-radius: 1px;
+  background: currentColor;
+  box-shadow: none;
+  width: 4.5px;
+  height: 4.5px;
+}
+.prose ol > li::marker {
   color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
 }
-.prose ul ul {
-  list-style-type: circle;
+.prose ol ol {
+  list-style-type: lower-alpha;
 }
-.prose ul ul ul {
-  list-style-type: square;
+.prose ol ol ol {
+  list-style-type: lower-roman;
 }
 
 /* To-do lists */
 .prose ul[data-type='taskList'] {
   list-style: none;
-  padding-left: 2px;
+  padding-left: 0;
+}
+.prose ul[data-type='taskList'] ul[data-type='taskList'] {
+  padding-left: 26px;
 }
 .prose ul[data-type='taskList'] li {
   display: flex;
   align-items: flex-start;
-  gap: 9px;
+  gap: 10px;
 }
 .prose ul[data-type='taskList'] li > label {
   flex: none;
-  display: flex;
-  align-items: center;
-  height: calc(1.65em + 4px);
+  display: block;
+  padding-top: calc(1px + 0.8125em + var(--optical) - 8px);
   user-select: none;
+}
+.prose ul[data-type='taskList'] li > div > p {
+  padding: 1px 0;
 }
 .prose ul[data-type='taskList'] li > div {
   flex: 1;
@@ -386,54 +639,72 @@ kbd {
 }
 .prose ul[data-type='taskList'] input[type='checkbox'] {
   appearance: none;
+  display: block;
   width: 16px;
   height: 16px;
   margin: 0;
-  border: 1.5px solid var(--text);
-  border-radius: 4px;
-  background: var(--bg);
-  cursor: pointer;
-  transition: background 100ms;
+  border-radius: 5px;
+  corner-shape: var(--corner);
+  box-shadow: inset 0 0 0 1.5px var(--text-3);
+  background: transparent;
+  cursor: default;
+  transition:
+    background-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    transform var(--dur-fast) var(--ease);
 }
 .prose ul[data-type='taskList'] input[type='checkbox']:hover {
-  background: var(--hover);
+  box-shadow: inset 0 0 0 1.5px var(--text-2);
+}
+.prose ul[data-type='taskList'] input[type='checkbox']:active {
+  transform: scale(0.9);
 }
 .prose ul[data-type='taskList'] input[type='checkbox']:checked {
-  background: var(--text) var(--check) center / 12px no-repeat;
+  background: var(--accent) var(--check) center / 14px no-repeat;
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+  animation: check-pop var(--dur-slow) var(--spring);
+}
+@keyframes check-pop {
+  from {
+    transform: scale(0.82);
+  }
 }
 .prose ul[data-type='taskList'] li[data-checked='true'] > div > p {
   color: var(--text-3);
   text-decoration: line-through;
   text-decoration-color: var(--text-4);
+  transition: color var(--dur) var(--ease);
 }
 
 /* Toggles */
 .prose .toggle {
   display: flex;
   align-items: flex-start;
-  gap: 2px;
-  margin: 2px 0;
+  /* Body text lands on the same 26px indent as list and to-do text. */
+  gap: 8px;
+  margin: 0;
 }
 .prose .toggle > button {
   flex: none;
   display: grid;
   place-items: center;
-  width: 24px;
-  height: calc(1.65em + 6px);
-  border-radius: 4px;
-  margin-left: -4px;
+  width: 22px;
+  height: 22px;
+  margin: calc(3px + 0.8125em + var(--optical) - 11px) 0 0 -4px;
+  border-radius: var(--r-xs);
+  transition: background-color var(--dur-fast) var(--ease);
 }
 .prose .toggle > button:hover {
-  background: var(--hover);
+  background: var(--fill);
 }
 .prose .toggle > button::before {
   content: '';
-  width: 0;
-  height: 0;
-  border-left: 6px solid var(--text);
-  border-top: 4.5px solid transparent;
-  border-bottom: 4.5px solid transparent;
-  transition: transform 120ms;
+  width: 14px;
+  height: 14px;
+  background: var(--text-2);
+  -webkit-mask: var(--chevron) center / contain no-repeat;
+  mask: var(--chevron) center / contain no-repeat;
+  transition: transform var(--dur) var(--ease-out);
 }
 .prose .toggle.is-open > button::before {
   transform: rotate(90deg);
@@ -446,13 +717,10 @@ kbd {
   display: block;
   list-style: none;
   padding: 3px 0;
-  font-weight: 500;
+  font-weight: var(--fw-550);
 }
 .prose .toggle summary::-webkit-details-marker {
   display: none;
-}
-.prose .toggle [data-type='detailsContent'] {
-  padding-left: 0;
 }
 
 /* Callouts */
@@ -460,24 +728,25 @@ kbd {
   display: flex;
   gap: 10px;
   margin: 6px 0;
-  padding: 14px 16px 14px 12px;
+  padding: 14px 18px 14px 14px;
   background: var(--callout-bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r-md);
+  corner-shape: var(--corner);
 }
 .prose .callout-icon {
   flex: none;
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
-  margin-top: -1px;
-  font-size: 19px;
-  border-radius: 5px;
+  width: 26px;
+  height: calc(1.625em + 6px);
+  font-size: 18px;
+  line-height: 1;
+  border-radius: var(--r-xs);
   font-family: var(--font-ui);
+  transition: background-color var(--dur-fast) var(--ease);
 }
 .prose .callout-icon:hover {
-  background: var(--active);
+  background: var(--fill-2);
 }
 .prose .callout-content {
   flex: 1;
@@ -489,27 +758,28 @@ kbd {
   display: block;
   max-width: 100%;
   height: auto;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
+  corner-shape: var(--corner);
 }
 .prose [data-resize-container] {
-  margin: 8px 0;
+  margin: 10px 0;
 }
 .prose [data-resize-handle] {
-  width: 14px;
+  width: 16px;
   display: grid;
   place-items: center;
   cursor: ew-resize;
   opacity: 0;
-  transition: opacity 120ms;
+  transition: opacity var(--dur) var(--ease);
 }
 .prose [data-resize-handle]::after {
   content: '';
   width: 5px;
-  height: 44px;
-  max-height: 50%;
+  height: 40px;
+  max-height: 46%;
   border-radius: 3px;
-  background: var(--bg);
-  box-shadow: 0 0 0 1px var(--text);
+  background: var(--bg-elevated);
+  box-shadow: 0 0 0 0.5px var(--hairline), var(--shadow-sm);
 }
 .prose [data-resize-container]:hover [data-resize-handle],
 .prose [data-resize-state='true'] [data-resize-handle] {
@@ -518,34 +788,53 @@ kbd {
 .prose .ProseMirror-selectednode img,
 .prose img.ProseMirror-selectednode {
   outline: 2px solid var(--text);
-  outline-offset: 2px;
+  outline-offset: 3px;
 }
 
-/* Tables */
+/* Tables: a single rounded frame with hairline cell rules. */
 .prose .tableWrapper {
   margin: 8px 0;
   overflow-x: auto;
-  padding-bottom: 4px;
+  padding: 0 0 6px;
 }
 .prose table {
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   table-layout: fixed;
   width: 100%;
   margin: 0;
-  overflow: hidden;
+  border: 1px solid var(--separator-strong);
+  border-radius: var(--r-sm);
+  corner-shape: var(--corner);
 }
 .prose td,
 .prose th {
   position: relative;
   min-width: 80px;
-  padding: 6px 10px;
-  border: 1px solid var(--border-strong);
+  padding: 7px 12px;
+  border: 0 solid var(--separator);
+  border-right-width: 1px;
+  border-bottom-width: 1px;
   vertical-align: top;
   text-align: left;
+  font-size: 0.9375em;
+}
+.prose tr > :last-child {
+  border-right-width: 0;
+}
+.prose tr:last-child > * {
+  border-bottom-width: 0;
 }
 .prose th {
-  font-weight: 600;
-  background: var(--hover);
+  font-weight: var(--fw-600);
+  background: var(--fill);
+  border-bottom-color: var(--separator-strong);
+}
+.prose tr:first-child > :first-child {
+  border-top-left-radius: calc(var(--r-sm) - 1px);
+}
+.prose tr:first-child > :last-child {
+  border-top-right-radius: calc(var(--r-sm) - 1px);
 }
 .prose td > p,
 .prose th > p {
@@ -562,9 +851,10 @@ kbd {
   position: absolute;
   top: 0;
   right: -2px;
-  bottom: -1px;
+  bottom: 0;
   width: 3px;
-  background: var(--text);
+  border-radius: 2px;
+  background: var(--text-3);
   pointer-events: none;
 }
 .prose.resize-cursor {
@@ -573,7 +863,7 @@ kbd {
 
 /* Page links */
 .prose .page-link {
-  margin: 2px 0;
+  margin: 1px 0;
 }
 .prose .page-mention {
   display: inline;
@@ -587,23 +877,15 @@ kbd {
   color: var(--text-4);
   pointer-events: none;
 }
-.prose.ProseMirror-focused > .is-empty:only-child::before,
-.prose > .is-empty:only-child::before {
-  content: attr(data-placeholder);
-}
 
-/* Selection of whole blocks */
-.prose .ProseMirror-selectednode:not(img):not([data-resize-container]) {
-  border-radius: 4px;
-  box-shadow: 0 0 0 2px var(--selection);
+/* A whole block selected (via the handle or arrow keys). */
+.prose .ProseMirror-selectednode:not(img):not([data-resize-container]):not(hr) {
+  border-radius: var(--r-xs);
   background: var(--selection);
-}
-.prose hr.ProseMirror-selectednode {
-  background: none;
-  box-shadow: none;
+  box-shadow: 0 0 0 3px var(--selection);
 }
 .prose hr.ProseMirror-selectednode::after {
-  border-top-color: var(--text);
+  background: var(--text);
 }
 
 /* Gap cursor (e.g. before a table) */
@@ -618,7 +900,7 @@ kbd {
   position: absolute;
   top: -2px;
   width: 20px;
-  border-top: 1px solid var(--text);
+  border-top: 1.5px solid var(--text);
   animation: gap-blink 1.1s steps(2, start) infinite;
 }
 @keyframes gap-blink {
@@ -638,9 +920,10 @@ kbd {
   z-index: 5;
   display: flex;
   align-items: center;
+  gap: 1px;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 120ms;
+  transition: opacity var(--dur) var(--ease);
 }
 .block-handle.visible {
   opacity: 1;
@@ -654,11 +937,14 @@ kbd {
   place-items: center;
   width: 22px;
   height: 24px;
-  border-radius: 4px;
+  border-radius: var(--r-xs);
   color: var(--text-4);
+  transition:
+    background-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
 }
 .block-handle-btn:hover {
-  background: var(--hover);
+  background: var(--fill);
   color: var(--text-2);
 }
 .block-handle-btn.grip {
@@ -669,8 +955,9 @@ kbd {
   cursor: grabbing;
 }
 
-/* Slash command trigger text */
+/* The "/" or "@" being typed while a suggestion menu is open. */
 .prose .suggestion {
-  background: var(--hover);
-  border-radius: 3px;
+  background: var(--fill-2);
+  border-radius: 4px;
+  padding: 0 1px;
 }

@@ -247,7 +247,7 @@ class Store {
       await api.trashPage(id);
       this.#leave(id);
       await this.refresh();
-      ui.toast(`Moved “${page.title || 'Untitled'}” to trash`, {
+      ui.toast(`Moved “${page.title || 'Untitled'}” to Trash`, {
         label: 'Undo',
         run: () => void this.restore(id),
       });
@@ -269,8 +269,8 @@ class Store {
   async deleteForever(id: string) {
     const page = this.byId.get(id);
     const ok = await ui.confirm({
-      title: 'Delete permanently?',
-      message: `“${page?.title || 'Untitled'}” and its sub-pages will be gone for good.`,
+      title: 'Delete Permanently?',
+      message: `“${page?.title || 'Untitled'}” and its sub-pages will be deleted. You can’t undo this.`,
       confirmLabel: 'Delete',
       danger: true,
     });
@@ -286,9 +286,9 @@ class Store {
   async emptyTrash() {
     if (this.trash.length === 0) return;
     const ok = await ui.confirm({
-      title: 'Empty trash?',
-      message: `${this.trash.length} page${this.trash.length === 1 ? '' : 's'} will be permanently deleted.`,
-      confirmLabel: 'Empty trash',
+      title: 'Empty the Trash?',
+      message: `${this.trash.length} page${this.trash.length === 1 ? '' : 's'} will be deleted. You can’t undo this.`,
+      confirmLabel: 'Empty Trash',
       danger: true,
     });
     if (!ok) return;

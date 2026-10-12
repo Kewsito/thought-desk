@@ -45,7 +45,7 @@ export const Callout = Node.create({
       icon.contentEditable = 'false';
       icon.tabIndex = -1;
       icon.textContent = node.attrs.icon;
-      icon.title = 'Change icon';
+      icon.dataset.tip = 'Change icon';
 
       const content = document.createElement('div');
       content.className = 'callout-content';

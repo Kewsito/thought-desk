@@ -28,7 +28,7 @@
           const table = currentTable();
           return table ? { getBoundingClientRect: () => table.getBoundingClientRect() } : null;
         },
-        options: { strategy: 'fixed', placement: 'top-end', offset: 6, flip: false, shift: { padding: 8 } },
+        options: { strategy: 'fixed', placement: 'top-end', offset: 8, flip: false, shift: { padding: 8 } },
       }),
     );
     return () => {
@@ -43,14 +43,14 @@
 </script>
 
 <div class="table-menu popover" bind:this={el} style="visibility: hidden">
-  <button onmousedown={run(() => editor.chain().focus().addRowAfter().run())} title="Add row below"><Icon name="row-plus" size={15} /></button>
-  <button onmousedown={run(() => editor.chain().focus().addColumnAfter().run())} title="Add column to the right"><Icon name="col-plus" size={15} /></button>
+  <button onmousedown={run(() => editor.chain().focus().addRowAfter().run())} data-tip="Add row below"><Icon name="row-plus" size={15} /></button>
+  <button onmousedown={run(() => editor.chain().focus().addColumnAfter().run())} data-tip="Add column to the right"><Icon name="col-plus" size={15} /></button>
   <span class="sep"></span>
-  <button onmousedown={run(() => editor.chain().focus().deleteRow().run())} title="Delete row"><Icon name="row-minus" size={15} /></button>
-  <button onmousedown={run(() => editor.chain().focus().deleteColumn().run())} title="Delete column"><Icon name="col-minus" size={15} /></button>
+  <button onmousedown={run(() => editor.chain().focus().deleteRow().run())} data-tip="Delete row"><Icon name="row-minus" size={15} /></button>
+  <button onmousedown={run(() => editor.chain().focus().deleteColumn().run())} data-tip="Delete column"><Icon name="col-minus" size={15} /></button>
   <span class="sep"></span>
-  <button onmousedown={run(() => editor.chain().focus().toggleHeaderRow().run())} title="Toggle header row"><Icon name="header" size={15} /></button>
-  <button onmousedown={run(() => editor.chain().focus().deleteTable().run())} title="Delete table"><Icon name="trash" size={15} /></button>
+  <button onmousedown={run(() => editor.chain().focus().toggleHeaderRow().run())} data-tip="Toggle header row"><Icon name="header" size={15} /></button>
+  <button onmousedown={run(() => editor.chain().focus().deleteTable().run())} data-tip="Delete table"><Icon name="trash" size={15} /></button>
 </div>
 
 <style>
@@ -62,24 +62,36 @@
     display: flex;
     align-items: center;
     gap: 1px;
-    padding: 2px;
+    height: 34px;
+    padding: 0 3px;
+    border-radius: var(--r-md);
+    animation: table-menu-in var(--dur) var(--ease-out);
+  }
+  @keyframes table-menu-in {
+    from {
+      opacity: 0;
+      scale: 0.97;
+    }
   }
   button {
     display: grid;
     place-items: center;
-    width: 26px;
-    height: 26px;
-    border-radius: 5px;
+    width: 28px;
+    height: 28px;
+    border-radius: var(--r-sm);
     color: var(--text-2);
+    transition:
+      background-color var(--dur-fast) var(--ease),
+      color var(--dur-fast) var(--ease);
   }
   button:hover {
-    background: var(--hover);
+    background: var(--fill-2);
     color: var(--text);
   }
   .sep {
     width: 1px;
     height: 16px;
-    background: var(--border);
-    margin: 0 2px;
+    background: var(--hairline);
+    margin: 0 3px;
   }
 </style>
