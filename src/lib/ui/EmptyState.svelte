@@ -11,10 +11,14 @@
   }: { icon: string; title: string; text?: string; compact?: boolean; children?: Snippet } = $props();
 </script>
 
+<!-- Full size: centred, for an empty view. Compact: one row inside a list
+     group, lined up with the rows that will replace it. -->
 <div class="empty" class:compact>
-  <span class="badge"><Icon name={icon} size={compact ? 18 : 22} /></span>
-  <strong>{title}</strong>
-  {#if text}<span class="text">{text}</span>{/if}
+  <span class="badge"><Icon name={icon} size={compact ? 16 : 22} /></span>
+  <span class="copy">
+    <strong>{title}</strong>
+    {#if text}<span class="text">{text}</span>{/if}
+  </span>
   {#if children}<div class="actions">{@render children()}</div>{/if}
 </div>
 
@@ -29,8 +33,8 @@
     font-size: var(--fs-ui);
     color: var(--text-3);
   }
-  .empty.compact {
-    padding: 20px 16px 24px;
+  .copy {
+    display: contents;
   }
   .badge {
     display: grid;
@@ -41,12 +45,6 @@
     border-radius: var(--r-lg);
     background: var(--fill);
     color: var(--tint);
-  }
-  .compact .badge {
-    width: 36px;
-    height: 36px;
-    margin-bottom: 6px;
-    border-radius: var(--r-md);
   }
   strong {
     font-size: var(--fs-callout);
@@ -63,5 +61,42 @@
     display: flex;
     gap: 8px;
     margin-top: 14px;
+  }
+
+  .compact {
+    flex-direction: row;
+    gap: 12px;
+    min-height: 60px;
+    padding: 10px 16px;
+    text-align: left;
+  }
+  .compact .badge {
+    flex: none;
+    width: 28px;
+    height: 28px;
+    margin: 0;
+    border-radius: var(--r-sm);
+    color: var(--text-3);
+  }
+  .compact .copy {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .compact strong {
+    font-size: var(--fs-body-ui);
+    font-weight: var(--fw-500);
+  }
+  .compact .text {
+    max-width: none;
+    font-size: var(--fs-footnote);
+    line-height: 16px;
+    text-wrap: pretty;
+  }
+  .compact .actions {
+    flex: none;
+    margin: 0;
   }
 </style>

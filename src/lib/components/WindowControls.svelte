@@ -73,14 +73,15 @@
     background: var(--fill-2);
     color: var(--text-2);
   }
+  /* Windows 11's close red, in either theme. */
   .close:hover {
-    background: var(--ink);
-    color: var(--on-ink);
+    background: #c42b1c;
+    color: #fff;
   }
   .close:active {
-    background: var(--ink);
-    color: var(--on-ink);
-    opacity: 0.85;
+    background: #c42b1c;
+    color: rgba(255, 255, 255, 0.85);
+    opacity: 0.9;
   }
   .close svg {
     shape-rendering: geometricPrecision;

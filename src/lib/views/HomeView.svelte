@@ -109,7 +109,7 @@
             {/each}
           </div>
         {:else}
-          <div class="group"><EmptyState compact icon="calendar" title="A free day" text="No classes or events on the calendar." /></div>
+          <div class="group"><EmptyState compact icon="calendar" title="A free day" text="No classes or events today." /></div>
         {/if}
       </section>
 
@@ -177,7 +177,7 @@
               <span class="meta">{relativeTime(p.updatedAt)}</span>
             </button>
           {:else}
-            <EmptyState compact icon="page" title="No pages yet" />
+            <EmptyState compact icon="page" title="No pages yet" text="Pages you edit show up here." />
           {/each}
         </div>
       </section>
