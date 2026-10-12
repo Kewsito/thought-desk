@@ -62,9 +62,13 @@ export interface Course {
   room: string;
   /** The page holding this course's notes; lecture notes go inside it. */
   pageId: string | null;
+  /** Grade category → weight in percent. Empty: the grade is total points. */
+  weights: Record<string, number>;
 }
 
-export type CoursePatch = Partial<Pick<Course, 'name' | 'color' | 'teacher' | 'email' | 'officeHours' | 'room' | 'pageId'>>;
+export type CoursePatch = Partial<
+  Pick<Course, 'name' | 'color' | 'teacher' | 'email' | 'officeHours' | 'room' | 'pageId' | 'weights'>
+>;
 
 export type AssignmentStatus = 'todo' | 'doing' | 'done';
 
@@ -89,10 +93,18 @@ export interface Assignment {
   tags: string[];
   /** UID of the calendar entry it was imported from. */
   sourceUid: string | null;
+  /** Points earned and possible, once graded. */
+  score: number | null;
+  maxScore: number | null;
+  /** Grade category ("Homework", "Exams"), weighted by the course. */
+  category: string;
 }
 
 export type AssignmentPatch = Partial<
-  Pick<Assignment, 'title' | 'courseId' | 'dueDate' | 'dueTime' | 'status' | 'priority' | 'notes' | 'pageId' | 'fileIds'>
+  Pick<
+    Assignment,
+    'title' | 'courseId' | 'dueDate' | 'dueTime' | 'status' | 'priority' | 'notes' | 'pageId' | 'fileIds' | 'score' | 'maxScore' | 'category'
+  >
 > & { sourceUid?: string };
 
 export type Repeat = 'none' | 'daily' | 'weekly' | 'monthly';
@@ -127,6 +139,26 @@ export interface OccurrencePage {
   eventId: string;
   date: string;
   pageId: string;
+}
+
+/** Spaced-repetition progress of a flashcard. */
+export interface CardReview {
+  /** Next due date. */
+  due: string;
+  /** Days until the next review (0 = again today). */
+  interval: number;
+  ease: number;
+  reps: number;
+  lapses: number;
+}
+
+/** A flashcard block in a page. */
+export interface Card {
+  pageId: string;
+  id: string;
+  front: string;
+  back: string;
+  review: CardReview | null;
 }
 
 export interface Reminder {

@@ -6,6 +6,7 @@
   import { dueState, formatDue, formatTime } from '../dates';
   import { assignmentMenuItems } from '../item-actions';
   import { planner } from '../planner.svelte';
+  import { formatPercent, formatPoints, isGraded, scorePercent } from '../grades';
   import { store } from '../store.svelte';
   import { ui } from '../ui.svelte';
   import type { Assignment } from '../types';
@@ -49,8 +50,11 @@
   />
   <div class="main">
     <span class="title">{a.title || 'Untitled'}</span>
-    {#if (showCourse && course) || a.status === 'doing' || a.priority || a.fileIds.length || (page && !page.deletedAt)}
+    {#if (showCourse && course) || a.status === 'doing' || a.priority || a.fileIds.length || (page && !page.deletedAt) || isGraded(a)}
       <span class="meta">
+        {#if isGraded(a)}
+          <span class="bit grade" data-tip="{formatPoints(a.score!)} / {formatPoints(a.maxScore!)} points">{formatPercent(scorePercent(a))}</span>
+        {/if}
         {#if showCourse && course}<span class="bit"><span class="dot" style:--dot={planner.courseColor(course.id)}></span>{course.name}</span>{/if}
         {#if a.status === 'doing'}<span class="bit doing"><Icon name="clock" size={12} stroke={2.2} />In progress</span>{/if}
         {#if a.priority}
@@ -192,5 +196,10 @@
   .act:hover {
     background: var(--fill-2);
     color: var(--text);
+  }
+  .grade {
+    color: var(--text-2);
+    font-weight: var(--fw-600);
+    font-variant-numeric: tabular-nums;
   }
 </style>

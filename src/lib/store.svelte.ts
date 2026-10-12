@@ -8,9 +8,9 @@ import type { PageMeta, PagePatch } from './types';
 const SAVE_DELAY = 400;
 
 /** What fills the main area: a page, a tag's items, a course, or an app view. */
-export type View = 'page' | 'tag' | 'course' | 'home' | 'assignments' | 'calendar' | 'files';
+export type View = 'page' | 'tag' | 'course' | 'home' | 'assignments' | 'calendar' | 'files' | 'cards';
 export type AppView = Exclude<View, 'page' | 'tag' | 'course'>;
-export const VIEWS: AppView[] = ['home', 'assignments', 'calendar', 'files'];
+export const VIEWS: AppView[] = ['home', 'assignments', 'calendar', 'files', 'cards'];
 
 interface Entry {
   view: View;
@@ -147,7 +147,7 @@ class Store {
     if (push) this.#push({ view: 'page', id });
   }
 
-  /** Shows Home, Assignments, Calendar or Files. */
+  /** Shows Home, Assignments, Calendar, Files or Flashcards. */
   go(view: AppView, { push = true }: { push?: boolean } = {}) {
     if (this.view === view) return;
     this.view = view;

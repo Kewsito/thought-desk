@@ -2,6 +2,7 @@
 
 import type { AssignmentPatch, EventPatch, FileMeta, TrashTable } from './types';
 import type { IcsItem } from './ics';
+import type { Card } from './types';
 
 export type MenuItem =
   | {
@@ -97,6 +98,8 @@ class UI {
   filePreview = $state<string | null>(null);
   /** Calendar file being imported. */
   importSheet = $state<{ name: string; items: IcsItem[] } | null>(null);
+  /** A flashcard study session. */
+  study = $state<{ title: string; cards: Card[] } | null>(null);
   toasts = $state<Toast[]>([]);
   /** Page whose title should take focus once shown (new page, "Rename"). */
   focusTitle = $state<string | null>(null);
@@ -112,6 +115,7 @@ class UI {
       this.eventSheet !== null ||
       this.filePreview !== null ||
       this.importSheet !== null ||
+      this.study !== null ||
       this.capture !== null
     );
   }

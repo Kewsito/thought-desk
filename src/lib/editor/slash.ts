@@ -237,6 +237,15 @@ export const SLASH_ITEMS: MenuEntry[] = [
     run: (e, r) => clear(e, r).insertContent('@').run(),
   },
   {
+    id: 'flashcard',
+    group: 'Study',
+    title: 'Flashcard',
+    description: 'A term and its answer, to study later',
+    icon: 'cards',
+    keywords: 'card study term definition question answer quiz memorize anki vocabulary',
+    run: (e, r) => clear(e, r).insertFlashcard().run(),
+  },
+  {
     id: 'date',
     group: 'Inline',
     title: 'Today’s Date',

@@ -37,13 +37,15 @@ A fast, local-first notes workspace in the spirit of Notion: nested pages, a blo
 - **Calendar import:** bring in a `.ics` file from Canvas, Google Calendar or Outlook (Calendar → Import, Settings, or `Ctrl+K`). A preview lets you pick what to import and whether each entry is an event or an assignment. Time zones are converted, weekly "Mon/Wed/Fri" classes become one repeat per weekday, skipped and moved sessions carry over, and Canvas "Title [Course]" entries are matched to courses (created if needed). Importing the same file again updates instead of duplicating.
 - **Course hubs:** each course has a page of its own (sidebar → Courses): the next two weeks of classes, open assignments, notes, files from its assignments, and details (teacher, email, office hours, room).
 - **Lecture notes in one click:** *Take Notes* on a class (in the calendar, Home, a course hub or the event sheet) opens a dated page, "Biology lecture — Oct 14", filed inside the course's notes folder and linked to that exact session. The course's *Take Notes* button picks the class under way.
+- **Flashcards:** type `/flashcard` in any page for a card with a front and a back (Enter moves to the back, then on to the next card, so a whole deck can be typed in one go). Every page with cards is a deck; the Flashcards view (`Ctrl+5`) groups decks by course and shows what's due, new and mastered. Study sessions use spaced repetition (Again / Hard / Good / Easy, keys `1`–`4`, `Space` to flip), so each card comes back just before you'd forget it. *Study* buttons sit on the deck's page, its course and Home's summary.
+- **Grades:** give an assignment a score (points earned / possible) and a category. Each course shows its current grade and letter, weighted by category ("Exams 60%, Labs 40%") or by total points when there are no weights; weights are edited right on the course page.
+- **Export as PDF or Word:** *Export as PDF* opens the print dialog with just the page, in light colors (choose *Save as PDF*). *Export as Word* writes a real `.docx` to Downloads, with Word heading styles, lists, to-dos, tables, images, code and flashcards, ready to hand in. Markdown export is still there too.
 - **Reminders:** system notifications the evening before (or the morning of) a due date, an hour before anything with a due time, and 5–30 minutes before timed events. They're scheduled on the Rust side, so they fire even while the window is minimized.
 - **Files:** one library for everything you add: imports, drops, attachments and images in pages. Grid or list, filters by type and an *Unused* filter, previews for images, PDFs, audio, video and text, *Open in default app*, *Show in folder*, *Save a copy*, and where each file is used.
 - **One workspace:** `@` links a page to pages, assignments, events or files (assignment chips show a live check and due date); `/assignment`, `/event` and `/file` create or insert them from a page; a notes page links back to its assignment; due assignments show in the calendar; files dropped anywhere land in the library.
 - **Search:** `Ctrl+K` over pages (SQLite FTS5 with prefix matching and a substring fallback), assignments, events and files, with quick *Go to* and *Create* actions.
 - **Trash:** one trash for pages, assignments, events and files: soft delete with *Undo*, restore (pages with their sub-pages), permanent delete, empty trash.
 - **Custom title bar:** back/forward, breadcrumbs, save status, favorite, page menu, and Windows-style window controls. Drag anywhere on the bar; double-click maximizes.
-- **Export:** copy as Markdown, or export a `.md` file to Downloads.
 - **Settings:** light / dark / system theme, six color themes (Default, Paper, Slate, Sage, Rose, Dusk), accent color (Graphite plus nine colors), Default / Serif / Mono page fonts, small text, spell check, Quick Capture from anywhere, first day of the week, calendar import, reminders, courses.
 - Window size and position are remembered, a second launch focuses the running window, and changes autosave and are flushed on close/minimize.
 
@@ -54,7 +56,7 @@ A fast, local-first notes workspace in the spirit of Notion: nested pages, a blo
 | `Ctrl+K` / `Ctrl+P` | Search (with text selected in the editor, `Ctrl+K` adds a link) |
 | `Ctrl+N` | New page |
 | `Ctrl+Shift+Space` | Quick Capture (system-wide when enabled in Settings) |
-| `Ctrl+1` … `Ctrl+4` | Home / Assignments / Calendar / Files |
+| `Ctrl+1` … `Ctrl+5` | Home / Assignments / Calendar / Files / Flashcards |
 | `←` / `→`, `T` | Calendar: previous or next month or week, today |
 | `Ctrl+\` | Toggle sidebar |
 | `Alt+←` / `Alt+→`, mouse back/forward | Navigate history |

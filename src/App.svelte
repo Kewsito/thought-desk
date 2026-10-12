@@ -37,6 +37,9 @@
   import EventSheet from './lib/sheets/EventSheet.svelte';
   import FilePreview from './lib/sheets/FilePreview.svelte';
   import ImportSheet from './lib/sheets/ImportSheet.svelte';
+  import StudySheet from './lib/sheets/StudySheet.svelte';
+  import FlashcardsView from './lib/views/FlashcardsView.svelte';
+  import { cards } from './lib/cards.svelte';
 
   const win = getCurrentWindow();
   const webviewWin = getCurrentWebviewWindow();
@@ -116,6 +119,7 @@
       try {
         // Pages decide where to start, so the planner and files load alongside.
         await Promise.all([planner.load(), library.load(), tags.load(), store.load()]);
+        void cards.load();
       } catch (e) {
         ui.error(e);
       }
@@ -168,9 +172,9 @@
     } else if (mod && key === ',') {
       e.preventDefault();
       ui.settingsOpen = true;
-    } else if (mod && !e.shiftKey && !e.altKey && ['1', '2', '3', '4'].includes(e.key)) {
+    } else if (mod && !e.shiftKey && !e.altKey && ['1', '2', '3', '4', '5'].includes(e.key)) {
       e.preventDefault();
-      store.go((['home', 'assignments', 'calendar', 'files'] as const)[Number(e.key) - 1]);
+      store.go((['home', 'assignments', 'calendar', 'files', 'cards'] as const)[Number(e.key) - 1]);
     } else if (mod && e.shiftKey && e.code === 'Space') {
       // Also caught system-wide when that's on; inside the app it always works.
       e.preventDefault();
@@ -255,6 +259,8 @@
         {#if planner.loaded}<CalendarView />{/if}
       {:else if store.view === 'files'}
         {#if library.loaded}<FilesView />{/if}
+      {:else if store.view === 'cards'}
+        <FlashcardsView />
       {:else if page && store.currentId === page.id}
         {#key page.id}
           <PageView {page} onstats={(w) => (words = w)} />
@@ -294,6 +300,9 @@
 {/if}
 {#if ui.filePreview}
   {#key ui.filePreview}<FilePreview id={ui.filePreview} />{/key}
+{/if}
+{#if ui.study}
+  {#key ui.study}<StudySheet title={ui.study.title} deck={ui.study.cards} />{/key}
 {/if}
 {#if ui.importSheet}
   {#key ui.importSheet}<ImportSheet name={ui.importSheet.name} items={ui.importSheet.items} />{/key}

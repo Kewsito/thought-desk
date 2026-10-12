@@ -784,6 +784,16 @@ kbd {
 .group .field:focus {
   box-shadow: 0 0 0 1.5px var(--focus);
 }
+/* Number fields are typed into, not nudged: no spinner arrows. */
+.field input[type='number'] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.field input[type='number']::-webkit-inner-spin-button,
+.field input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
 .field input,
 .field select {
   flex: 1;
@@ -1262,6 +1272,60 @@ input[type='time']::-webkit-calendar-picker-indicator {
   display: none;
 }
 
+/* Flashcards: front and back side by side, stacked when narrow. */
+.prose .flashcard {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  margin: 6px 0;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  corner-shape: var(--corner);
+  overflow: hidden;
+  background: var(--bg);
+}
+.prose .flashcard + .flashcard {
+  margin-top: -2px;
+}
+.prose .fc-side {
+  position: relative;
+  min-height: 1.625em;
+  padding: 26px 14px 10px;
+}
+.prose .fc-side::before {
+  position: absolute;
+  top: 8px;
+  left: 14px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: var(--fw-600);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  pointer-events: none;
+}
+.prose .fc-front {
+  font-weight: var(--fw-600);
+  background: var(--callout-bg);
+}
+.prose .fc-front::before {
+  content: 'Front';
+}
+.prose .fc-back {
+  box-shadow: inset 1px 0 0 var(--hairline);
+}
+.prose .fc-back::before {
+  content: 'Back';
+}
+@media (max-width: 760px) {
+  .prose .flashcard {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .prose .fc-back {
+    box-shadow: inset 0 1px 0 var(--hairline);
+  }
+}
+
 /* Callouts */
 .prose .callout {
   display: flex;
@@ -1499,4 +1563,56 @@ input[type='time']::-webkit-calendar-picker-indicator {
   background: var(--fill-2);
   border-radius: 4px;
   padding: 0 1px;
+}
+
+/* ------------------------------------------------------------------ printing */
+
+/* "Export as PDF" prints just the open page: no app chrome, light colours,
+   and blocks kept whole across page breaks. */
+@media print {
+  @page {
+    margin: 16mm 18mm;
+  }
+  html.printing,
+  html.printing body {
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+  html.printing .app,
+  html.printing .main,
+  html.printing .scroller {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+    background: none !important;
+  }
+  html.printing .app > :not(.main),
+  html.printing .main > :not(.scroller),
+  html.printing .toasts,
+  html.printing .tip,
+  html.printing .popover,
+  html.printing .block-handle,
+  html.printing .head-tools,
+  html.printing .backlinks,
+  html.printing .tail {
+    display: none !important;
+  }
+  html.printing .page {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+  html.printing .page .head {
+    padding-top: 0 !important;
+  }
+  html.printing .prose :is(h1, h2, h3) {
+    break-after: avoid;
+  }
+  html.printing .prose :is(pre, table, img, blockquote, .callout, .flashcard, .file-block, li) {
+    break-inside: avoid;
+  }
+  html.printing * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }

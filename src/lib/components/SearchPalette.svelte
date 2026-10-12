@@ -1,6 +1,7 @@
 <script lang="ts">
   import { colorVar } from '../colors';
   import { importCalendar } from '../ics-import.svelte';
+  import { cards } from '../cards.svelte';
   import { onMount } from 'svelte';
   import Icon from './Icon.svelte';
   import Modal from './Modal.svelte';
@@ -93,6 +94,8 @@
     { title: 'Quick Capture', icon: 'bolt', keywords: 'capture inbox note todo add', run: () => (ui.capture = { text: '' }) },
     { title: 'Assignments', icon: 'assignment', keywords: 'homework tasks due', run: () => store.go('assignments') },
     { title: 'Calendar', icon: 'calendar', keywords: 'schedule events week month', run: () => store.go('calendar') },
+    { title: 'Flashcards', icon: 'cards', keywords: 'study cards decks review memorize quiz', run: () => store.go('cards') },
+    { title: 'Study Flashcards', icon: 'cards', keywords: 'review due cards learn', run: () => void cards.study(null, 'All Decks') },
     { title: 'Import Calendar', icon: 'download', keywords: 'ics canvas google outlook schedule timetable', run: () => void importCalendar() },
     { title: 'Files', icon: 'files', keywords: 'library attachments documents', run: () => store.go('files') },
     { title: 'Settings', icon: 'settings', keywords: 'preferences theme accent color', run: () => (ui.settingsOpen = true) },

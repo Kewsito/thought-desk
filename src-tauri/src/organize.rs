@@ -51,7 +51,7 @@ const TAGGED: [Table; 4] = [Table::Pages, Table::Assignments, Table::Events, Tab
 
 /// Text of an inline run. `titles` names linked items; without it, links
 /// are written as their ids (a stable key that survives renames).
-fn inline_text(node: &Value, titles: Option<&HashMap<String, String>>, out: &mut String) {
+pub(crate) fn inline_text(node: &Value, titles: Option<&HashMap<String, String>>, out: &mut String) {
     match node.get("type").and_then(Value::as_str) {
         Some("text") => out.push_str(node.get("text").and_then(Value::as_str).unwrap_or("")),
         Some("hardBreak") => out.push(' '),
@@ -198,7 +198,7 @@ impl Db {
     }
 
     /// Titles of everything a mention can point at.
-    fn titles(&self) -> Result<HashMap<String, String>> {
+    pub(crate) fn titles(&self) -> Result<HashMap<String, String>> {
         let conn = self.conn();
         let mut map = HashMap::new();
         for sql in [

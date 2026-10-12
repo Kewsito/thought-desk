@@ -7,6 +7,8 @@ import type {
   CoursePatch,
   OccurrencePage,
   Reminder,
+  Card,
+  CardReview,
   DataInfo,
   EventPatch,
   FileMeta,
@@ -79,6 +81,15 @@ export const api = {
   setOccurrencePage: (eventId: string, date: string, pageId: string) =>
     invoke<void>('set_occurrence_page', { eventId, date, pageId }),
   setReminders: (list: Reminder[]) => invoke<void>('set_reminders', { list }),
+  listCards: () => invoke<Card[]>('list_cards'),
+  saveReview: (pageId: string, cardId: string, review: CardReview) => invoke<void>('save_review', { pageId, cardId, review }),
+  resetReviews: (pageId: string) => invoke<void>('reset_reviews', { pageId }),
+  /** Saves an exported document to Downloads; returns its path. */
+  exportDocument: (name: string, ext: 'docx' | 'md' | 'html', bytes: Uint8Array) =>
+    invoke<string>('export_document', bytes, {
+      headers: { 'x-name': encodeURIComponent(name), 'x-ext': ext },
+    }),
+  printPage: () => invoke<void>('print_page'),
   setCaptureShortcut: (enabled: boolean) => invoke<void>('set_capture_shortcut', { enabled }),
 
   trashItem: (table: TrashTable, id: string) => invoke<number>('trash_item', { table, id }),

@@ -15,6 +15,7 @@
   import { tags } from '../tags.svelte';
   import { relativeTime, formatBytes } from '../time';
   import { todos } from '../todos.svelte';
+  import { cards } from '../cards.svelte';
   import type { Todo } from '../types';
 
   onMount(() => void todos.load());
@@ -66,6 +67,7 @@
     parts.push(todayEvents.length ? `${todayEvents.length} event${todayEvents.length === 1 ? '' : 's'} today` : 'Nothing scheduled today');
     if (due.length) parts.push(`${due.length} due this week${overdue ? `, ${overdue} overdue` : ''}`);
     if (openTodos) parts.push(`${openTodos} to-do${openTodos === 1 ? '' : 's'}`);
+    if (cards.dueCount) parts.push(`${cards.dueCount} flashcard${cards.dueCount === 1 ? '' : 's'} to study`);
     return parts.join(' · ');
   });
 </script>

@@ -11,6 +11,7 @@
   import { colorVar, nextColor } from '../colors';
   import { addDays, dueState, formatDue, startOfWeek } from '../dates';
   import { openNotesPage } from '../item-actions';
+  import { courseCategories, formatPercent, letterGrade, scorePercent } from '../grades';
   import { library } from '../library.svelte';
   import { planner } from '../planner.svelte';
   import { store } from '../store.svelte';
@@ -42,6 +43,40 @@
   const page = $derived(existing?.pageId ? store.byId.get(existing.pageId) : undefined);
   const files = $derived(form.fileIds.map((fid) => library.byId.get(fid)).filter((f): f is FileMeta => !!f && !f.deletedAt));
   const urgency = $derived(dueState(form, clock.today, clock.time));
+  const percent = $derived(existing ? scorePercent(existing) : null);
+
+  /** A number field's value: empty means "not set". */
+  function points(raw: string): number | null {
+    const n = Number(raw.replace(',', '.'));
+    return raw.trim() === '' || !Number.isFinite(n) || n < 0 ? null : n;
+  }
+
+  function categoryMenu(e: MouseEvent) {
+    const current = existing?.category ?? '';
+    const weights = course?.weights ?? {};
+    ui.openMenuAt(
+      e.currentTarget as Element,
+      [
+        { label: 'No Category', icon: 'x', checked: !current, action: () => set({ category: '' }) },
+        ...courseCategories(course, planner.assignments).map((name) => ({
+          label: name,
+          hint: name in weights ? `${weights[name]}%` : undefined,
+          checked: current === name,
+          action: () => set({ category: name }),
+        })),
+        { separator: true },
+        {
+          label: 'New Category…',
+          icon: 'plus',
+          action: async () => {
+            const res = await ui.prompt({ title: 'New Category', placeholder: 'Homework, Exams, Labs…', confirmLabel: 'Add', icon: 'assignment' });
+            if (res) set({ category: res.value.trim() });
+          },
+        },
+      ],
+      { alignRight: true },
+    );
+  }
 
   let titleEl: HTMLInputElement;
   let dropping = $state(false);
@@ -269,6 +304,55 @@
         </div>
       {/if}
 
+      {#if existing}
+        <h3 class="group-title">Grade</h3>
+        <div class="group">
+          <div class="group-row">
+            <div class="row-label">
+              Score
+              <small>{percent !== null ? `${formatPercent(percent)} · ${letterGrade(percent)}` : 'Points earned out of points possible'}</small>
+            </div>
+            <div class="score">
+              <label class="field num">
+                <input
+                  type="number"
+                  inputmode="decimal"
+                  min="0"
+                  step="any"
+                  value={existing.score ?? ''}
+                  placeholder="—"
+                  aria-label="Points earned"
+                  oninput={(e) => set({ score: points(e.currentTarget.value) }, { typing: true })}
+                />
+              </label>
+              <span class="slash">/</span>
+              <label class="field num">
+                <input
+                  type="number"
+                  inputmode="decimal"
+                  min="0"
+                  step="any"
+                  value={existing.maxScore ?? ''}
+                  placeholder="—"
+                  aria-label="Points possible"
+                  oninput={(e) => set({ maxScore: points(e.currentTarget.value) }, { typing: true })}
+                />
+              </label>
+            </div>
+          </div>
+          <div class="group-row">
+            <div class="row-label">
+              Category
+              {#if course && Object.keys(course.weights).length}<small>Weighted in {course.name || 'the course'}’s grade</small>{/if}
+            </div>
+            <button class="btn small raised picker" onclick={categoryMenu}>
+              {#if existing.category}{existing.category}{:else}<span class="muted">None</span>{/if}
+              <Icon name="chevron-down" size={12} stroke={2.2} />
+            </button>
+          </div>
+        </div>
+      {/if}
+
       <h3 class="group-title">Notes</h3>
       <div class="group">
         <div class="group-row stack">
@@ -434,6 +518,21 @@
 
   .tags-group {
     margin-top: 8px;
+  }
+  .score {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .field.num {
+    width: 80px;
+  }
+  .field.num input {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .slash {
+    color: var(--text-3);
   }
   .tags-row {
     min-height: 48px;

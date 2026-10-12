@@ -11,6 +11,8 @@
   import { planner } from '../planner.svelte';
   import { store } from '../store.svelte';
   import { formatBytes, relativeTime } from '../time';
+  import { courseGrade, formatPercent } from '../grades';
+  import { cards } from '../cards.svelte';
   import { ui } from '../ui.svelte';
   import type { CoursePatch, FileMeta } from '../types';
 
@@ -37,6 +39,35 @@
   const open = $derived(assignments.filter((a) => a.status !== 'done'));
   const done = $derived(assignments.length - open.length);
 
+  const decks = $derived(folder ? cards.decksUnder(folder.id) : []);
+  const studyCount = $derived(decks.reduce((n, d) => n + d.due + d.fresh, 0));
+  const deckCards = $derived(decks.reduce((n, d) => n + d.cards.length, 0));
+  const grade = $derived(course ? courseGrade(course, planner.assignments) : null);
+  const weightSum = $derived(Object.values(course?.weights ?? {}).reduce((n, w) => n + w, 0));
+
+  function setWeight(name: string, raw: string) {
+    if (!course) return;
+    const weights = { ...course.weights };
+    const n = Number(raw);
+    if (raw.trim() === '' || !Number.isFinite(n)) delete weights[name];
+    else weights[name] = Math.min(100, Math.max(0, n));
+    planner.updateCourse(id, { weights }, { typing: true });
+  }
+
+  function removeCategory(name: string) {
+    if (!course) return;
+    const { [name]: _, ...weights } = course.weights;
+    planner.updateCourse(id, { weights });
+  }
+
+  async function addCategory() {
+    if (!course) return;
+    const res = await ui.prompt({ title: 'New Grade Category', placeholder: 'Homework, Exams, Labs…', confirmLabel: 'Add', icon: 'assignment' });
+    const name = res?.value.trim();
+    if (!name || name in course.weights) return;
+    planner.updateCourse(id, { weights: { ...course.weights, [name]: Math.max(0, 100 - weightSum) } });
+  }
+
   const notes = $derived(folder ? (store.childrenMap.get(folder.id) ?? []) : []);
 
   /** Files attached to this course's assignments. */
@@ -56,6 +87,7 @@
     if (course?.teacher) parts.push(course.teacher);
     parts.push(thisWeek ? `${thisWeek} class${thisWeek === 1 ? '' : 'es'} this week` : 'No classes this week');
     parts.push(open.length ? `${open.length} open assignment${open.length === 1 ? '' : 's'}` : 'All caught up');
+    if (grade?.percent != null) parts.push(`${formatPercent(grade.percent)} ${grade.letter}`);
     return parts.join(' · ');
   });
 
@@ -103,7 +135,7 @@
 </script>
 
 {#if course}
-  <div class="view course">
+  <div class="view course" style:--course={colorVar(course.color)}>
     <header class="view-head">
       <div>
         <div class="eyebrow">Course</div>
@@ -113,6 +145,11 @@
       <div class="view-actions">
         <button class="icon-btn" onclick={menu} data-tip="Course options" aria-label="Course options"><Icon name="more" /></button>
         <button class="btn" onclick={() => planner.newAssignment({ courseId: id })}><Icon name="plus" size={15} stroke={2.2} /> Assignment</button>
+        {#if decks.length}
+          <button class="btn" onclick={() => cards.study(decks.map((d) => d.pageId), course.name || 'Course', { all: !studyCount })} data-tip="{deckCards} flashcard{deckCards === 1 ? '' : 's'} in this course’s notes">
+            <Icon name="cards" size={15} stroke={2} /> Study{studyCount ? ` ${studyCount}` : ''}
+          </button>
+        {/if}
         <button class="btn primary" onclick={() => void planner.courseNotes(id)}><Icon name="note" size={15} stroke={2} /> Take Notes</button>
       </div>
     </header>
@@ -157,6 +194,64 @@
       </div>
 
       <div class="col">
+        {#if grade}
+          <section>
+            <h2 class="group-title">
+              <span>Grades</span>
+              <button class="see-all" onclick={addCategory}>Add Category <Icon name="plus" size={12} stroke={2.2} /></button>
+            </h2>
+            <div class="group">
+              <div class="group-row grade-row">
+                <div class="row-label">
+                  Current grade
+                  <small>
+                    {#if grade.graded}{grade.graded} graded · {grade.weighted ? 'weighted' : 'by points'}{:else}Add scores to assignments{/if}
+                  </small>
+                </div>
+                <span class="grade-value">{formatPercent(grade.percent)}</span>
+                {#if grade.letter}<span class="letter">{grade.letter}</span>{/if}
+              </div>
+              {#each grade.categories as c (c.name)}
+                <div class="group-row compact cat-row">
+                  <span class="cat-name">
+                    {c.name || 'Uncategorized'}
+                    {#if c.uncounted}<small>Not counted: give it a weight</small>{/if}
+                  </span>
+                  {#if c.name}
+                    <label class="field weight" data-tip="Share of the course grade">
+                      <input
+                        type="number"
+                        inputmode="decimal"
+                        min="0"
+                        max="100"
+                        step="any"
+                        value={course.weights[c.name] ?? ''}
+                        placeholder="—"
+                        aria-label="{c.name} weight"
+                        oninput={(e) => setWeight(c.name, e.currentTarget.value)}
+                      />
+                      <span class="unit">%</span>
+                    </label>
+                  {/if}
+                  <span class="cat-grade">{formatPercent(c.percent)}</span>
+                  {#if c.name in course.weights}
+                    <button class="icon-btn remove" onclick={() => removeCategory(c.name)} data-tip="Remove weight" aria-label="Remove {c.name}">
+                      <Icon name="x" size={13} />
+                    </button>
+                  {:else}
+                    <span class="remove-gap"></span>
+                  {/if}
+                </div>
+              {/each}
+              {#if grade.weighted && Math.round(weightSum) !== 100}
+                <div class="group-row compact">
+                  <small class="weight-note">Weights add up to {Math.round(weightSum * 10) / 10}%; the grade is scaled to fit.</small>
+                </div>
+              {/if}
+            </div>
+          </section>
+        {/if}
+
         <section>
           <h2 class="group-title"><span>Details</span></h2>
           <div class="group">
@@ -270,6 +365,96 @@
     font-variant-numeric: tabular-nums;
   }
 
+  .grade-row {
+    justify-content: flex-start;
+    gap: 12px;
+    min-height: 64px;
+  }
+  .grade-row .row-label {
+    flex: 1;
+  }
+  .grade-value {
+    font-size: 24px;
+    line-height: 32px;
+    font-weight: var(--fw-700);
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  .letter {
+    display: grid;
+    place-items: center;
+    min-width: 32px;
+    height: var(--h-sm);
+    padding: 0 8px;
+    border-radius: var(--r-sm);
+    background: color-mix(in srgb, var(--course) 16%, transparent);
+    color: color-mix(in srgb, var(--course) 75%, var(--text));
+    font-size: var(--fs-ui);
+    font-weight: var(--fw-700);
+  }
+  .cat-row {
+    justify-content: flex-start;
+    gap: 8px;
+  }
+  .cat-name {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    font-size: var(--fs-body-ui);
+    font-weight: var(--fw-500);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .cat-name small {
+    font-size: var(--fs-footnote);
+    font-weight: var(--fw-400);
+    color: var(--c-orange);
+  }
+  .field.weight {
+    flex: none;
+    width: 72px;
+    gap: 2px;
+    padding: 0 8px;
+  }
+  .field.weight input {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .unit {
+    color: var(--text-3);
+  }
+  .cat-grade {
+    flex: none;
+    width: 56px;
+    text-align: right;
+    font-size: var(--fs-body-ui);
+    color: var(--text-2);
+    font-variant-numeric: tabular-nums;
+  }
+  .remove,
+  .remove-gap {
+    flex: none;
+    width: var(--h-xs);
+    height: var(--h-xs);
+  }
+  .remove {
+    opacity: 0;
+    margin-right: -4px;
+    transition: opacity var(--dur-fast) var(--ease);
+  }
+  .remove-gap {
+    margin-right: -4px;
+  }
+  .cat-row:hover .remove,
+  .remove:focus-visible {
+    opacity: 1;
+  }
+  .weight-note {
+    font-size: var(--fs-footnote);
+    color: var(--text-3);
+  }
   .detail {
     justify-content: flex-start;
     gap: 12px;

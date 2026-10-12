@@ -114,6 +114,11 @@ function block(n: JNode, titleOf: TitleOf): string {
     }
     case 'horizontalRule':
       return '---';
+    case 'flashcard': {
+      // "front :: back", the format flashcard tools read.
+      const [front, back] = n.content ?? [];
+      return `${inline(front?.content, titleOf)} :: ${inline(back?.content, titleOf)}`;
+    }
     case 'image':
       return `![${n.attrs?.alt ?? ''}](${n.attrs?.src ?? ''})`;
     case 'pageLink':

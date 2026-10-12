@@ -8,6 +8,7 @@
   import { relativeTime } from '../time';
   import { pageMenuItems } from '../page-actions';
   import { planner } from '../planner.svelte';
+  import { cards } from '../cards.svelte';
 
   let { words = 0, scrolled = false }: { words?: number; scrolled?: boolean } = $props();
 
@@ -18,11 +19,13 @@
   });
 
   const page = $derived(store.view === 'page' ? store.current : null);
+  const deck = $derived(page ? cards.deck(page.id) : undefined);
   const VIEW_CRUMBS: Record<string, { label: string; icon: string }> = {
     home: { label: 'Home', icon: 'home' },
     assignments: { label: 'Assignments', icon: 'assignment' },
     calendar: { label: 'Calendar', icon: 'calendar' },
     files: { label: 'Files', icon: 'files' },
+    cards: { label: 'Flashcards', icon: 'cards' },
   };
   const viewCrumb = $derived(
     store.view === 'tag'
@@ -99,6 +102,11 @@
       <span class="status" data-tauri-drag-region>
         {store.saving ? 'Saving…' : status}
       </span>
+      {#if deck}
+        <button class="btn small study" onclick={() => cards.study([deck.pageId], page.title || 'Untitled')} data-tip="Study this page’s {deck.cards.length} flashcard{deck.cards.length === 1 ? '' : 's'}">
+          <Icon name="cards" size={14} stroke={2} /> Study{deck.due + deck.fresh ? ` ${deck.due + deck.fresh}` : ''}
+        </button>
+      {/if}
       <button
         class="icon-btn"
         class:on={!!page.favorite}
@@ -223,6 +231,10 @@
     color: var(--text-3);
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
+  }
+  .study {
+    gap: 6px;
+    margin-right: 4px;
   }
   .icon-btn.on {
     color: var(--text);

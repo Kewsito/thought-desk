@@ -261,6 +261,26 @@ CREATE TABLE occurrence_pages (
 );
 ";
 
+/// Grades (score, points possible and category on assignments; category
+/// weights on courses) and spaced-repetition progress for flashcards.
+const SCHEMA_V5: &str = "
+ALTER TABLE assignments ADD COLUMN score REAL;
+ALTER TABLE assignments ADD COLUMN max_score REAL;
+ALTER TABLE assignments ADD COLUMN category TEXT NOT NULL DEFAULT '';
+ALTER TABLE courses ADD COLUMN weights TEXT NOT NULL DEFAULT '{}';
+CREATE TABLE card_reviews (
+  page_id     TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+  card_id     TEXT NOT NULL,
+  due         TEXT NOT NULL,
+  interval    INTEGER NOT NULL,
+  ease        REAL NOT NULL,
+  reps        INTEGER NOT NULL,
+  lapses      INTEGER NOT NULL,
+  reviewed_at INTEGER NOT NULL,
+  PRIMARY KEY (page_id, card_id)
+);
+";
+
 const WELCOME_HTML: &str = r#"<p>Thought Desk is a quiet place to write. Everything stays on this computer, in a single local database.</p>
 <h2>The basics</h2>
 <ul data-type="taskList">
@@ -357,6 +377,12 @@ impl Db {
             let tx = conn.transaction()?;
             tx.execute_batch(SCHEMA_V4)?;
             tx.execute_batch("PRAGMA user_version = 4;")?;
+            tx.commit()?;
+        }
+        if version < 5 {
+            let tx = conn.transaction()?;
+            tx.execute_batch(SCHEMA_V5)?;
+            tx.execute_batch("PRAGMA user_version = 5;")?;
             tx.commit()?;
         }
         Ok(())

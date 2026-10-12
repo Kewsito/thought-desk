@@ -16,6 +16,7 @@ import { MentionSuggest } from './mention';
 import { BlockHandle, type BlockHandleOptions } from './block-handle';
 import { ImageDrop } from './images';
 import { FileBlock } from './file-block';
+import { Flashcard, FlashcardBack, FlashcardFront } from './flashcard';
 import { ui } from '../ui.svelte';
 
 /** Editor-wide shortcuts that don't belong to a single node type. */
@@ -133,6 +134,8 @@ export function buildExtensions(handle: BlockHandleOptions): AnyExtension[] {
         if (node.type.name === 'heading') return `Heading ${node.attrs.level}`;
         if (node.type.name === 'detailsSummary') return 'Toggle';
         if (node.type.name === 'codeBlock') return '';
+        if (node.type.name === 'flashcardFront') return 'Term or question';
+        if (node.type.name === 'flashcardBack') return 'Definition or answer';
         const parent = editor.state.doc.resolve(pos).parent;
         if (['listItem', 'taskItem'].includes(parent.type.name)) return 'List';
         if (parent.type.name === 'tableCell' || parent.type.name === 'tableHeader') return '';
@@ -143,6 +146,9 @@ export function buildExtensions(handle: BlockHandleOptions): AnyExtension[] {
     PageLink,
     Mention,
     FileBlock,
+    Flashcard,
+    FlashcardFront,
+    FlashcardBack,
     SlashCommand,
     MentionSuggest,
     ImageDrop,

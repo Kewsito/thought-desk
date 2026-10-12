@@ -1,6 +1,7 @@
 // Hide the console window on Windows in release builds.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod cards;
 mod commands;
 mod db;
 mod files;
@@ -132,6 +133,11 @@ fn main() {
             commands::list_occurrence_pages,
             commands::set_occurrence_page,
             commands::set_reminders,
+            commands::export_document,
+            commands::print_page,
+            commands::list_cards,
+            commands::save_review,
+            commands::reset_reviews,
             commands::trash_item,
             commands::restore_item,
             commands::delete_item,

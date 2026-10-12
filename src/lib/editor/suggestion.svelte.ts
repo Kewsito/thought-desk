@@ -98,25 +98,45 @@ function isSubsequence(needle: string, hay: string) {
   return needle.length === 0;
 }
 
+/** How well an entry's title/keywords match a (lowercased) query; 0 = not at all. */
+export function matchScore(item: { title: string; keywords?: string }, q: string): number {
+  const sq = squash(q);
+  const title = item.title.toLowerCase();
+  const words = `${title} ${item.keywords ?? ''}`.toLowerCase();
+  if (title === q) return 100;
+  if (title.startsWith(q) || (sq && squash(title).startsWith(sq))) return 80;
+  if (words.split(/\s+/).some((w) => w.startsWith(q) || (sq && squash(w).startsWith(sq)))) return 60;
+  if (words.includes(q)) return 40;
+  if (sq.length > 1 && isSubsequence(sq, squash(title))) return 10;
+  return 0;
+}
+
 /** Ranks entries by how well their title/keywords match the query. */
 export function rank<T extends { title: string; keywords?: string }>(items: T[], query: string, limit = 50): T[] {
   const q = query.trim().toLowerCase();
   if (!q) return items.slice(0, limit);
-  const sq = squash(q);
   const scored: { item: T; score: number }[] = [];
   for (const item of items) {
-    const title = item.title.toLowerCase();
-    const words = `${title} ${item.keywords ?? ''}`.toLowerCase();
-    let score = 0;
-    if (title === q) score = 100;
-    else if (title.startsWith(q) || (sq && squash(title).startsWith(sq))) score = 80;
-    else if (words.split(/\s+/).some((w) => w.startsWith(q) || (sq && squash(w).startsWith(sq)))) score = 60;
-    else if (words.includes(q)) score = 40;
-    else if (sq.length > 1 && isSubsequence(sq, squash(title))) score = 10;
+    const score = matchScore(item, q);
     if (score) scored.push({ item, score });
   }
   return scored
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
     .map((s) => s.item);
+}
+
+/**
+ * Ranks several kinds of entries (pages, assignments…), each kept together
+ * under its heading, with the kind holding the best match listed first.
+ */
+export function rankGroups<T extends { title: string; keywords?: string }>(groups: [T[], number][], query: string): T[] {
+  const q = query.trim().toLowerCase();
+  return groups
+    .map(([items, limit], order) => {
+      const ranked = rank(items, q, limit);
+      return { ranked, order, best: ranked.length ? matchScore(ranked[0], q) : 0 };
+    })
+    .sort((a, b) => b.best - a.best || a.order - b.order)
+    .flatMap((g) => g.ranked);
 }

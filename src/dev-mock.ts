@@ -4,7 +4,7 @@
  */
 
 import { mockConvertFileSrc, mockIPC, mockWindows } from '@tauri-apps/api/mocks';
-import type { Assignment, CalEvent, Course, FileMeta, OccurrencePage, PageMeta, Tag } from './lib/types';
+import type { Assignment, CalEvent, CardReview, Course, FileMeta, OccurrencePage, PageMeta, Tag } from './lib/types';
 
 type Row = PageMeta & { content: string; text: string };
 
@@ -138,6 +138,7 @@ interface PlannerData {
   files: FileMeta[];
   tags: Tag[];
   sessions: OccurrencePage[];
+  reviews: (CardReview & { pageId: string; cardId: string })[];
 }
 const PLANNER_KEY = 'thoughtdesk.devmock.planner.v1';
 const BLOBS_KEY = 'thoughtdesk.devmock.blobs.v1';
@@ -176,7 +177,8 @@ for (const x of [...planner.assignments, ...planner.events, ...planner.files]) x
 // …and course details, skipped dates and session notes.
 planner.sessions ??= [];
 for (const c of planner.courses) Object.assign(c, { ...newCourse(c.name, c.color, c.position), ...c });
-for (const x of planner.assignments) x.sourceUid ??= null;
+for (const x of planner.assignments) Object.assign(x, { ...newAssignment(), ...x });
+planner.reviews ??= [];
 for (const x of planner.events) {
   x.exdates ??= [];
   x.sourceUid ??= null;
@@ -184,12 +186,12 @@ for (const x of planner.events) {
 const persistPlanner = () => localStorage.setItem(PLANNER_KEY, JSON.stringify(planner));
 
 function newCourse(name: string, color: string, position: number): Course {
-  return { id: crypto.randomUUID(), name, color, position, createdAt: Date.now(), teacher: '', email: '', officeHours: '', room: '', pageId: null };
+  return { id: crypto.randomUUID(), name, color, position, createdAt: Date.now(), teacher: '', email: '', officeHours: '', room: '', pageId: null, weights: {} };
 }
 
 function newAssignment(): Assignment {
   const ts = Date.now();
-  return { id: crypto.randomUUID(), title: '', courseId: null, dueDate: null, dueTime: null, status: 'todo', priority: 0, notes: '', pageId: null, fileIds: [], createdAt: ts, updatedAt: ts, completedAt: null, deletedAt: null, tags: [], sourceUid: null };
+  return { id: crypto.randomUUID(), title: '', courseId: null, dueDate: null, dueTime: null, status: 'todo', priority: 0, notes: '', pageId: null, fileIds: [], createdAt: ts, updatedAt: ts, completedAt: null, deletedAt: null, tags: [], sourceUid: null, score: null, maxScore: null, category: '' };
 }
 
 function newEvent(startDate: string): CalEvent {
@@ -199,7 +201,38 @@ function newEvent(startDate: string): CalEvent {
 
 function seedPlanner(): PlannerData {
   const ts = Date.now();
-  const bio = { ...newCourse('Biology', 'green', 0), teacher: 'Dr. Rivera', room: 'Science 204', officeHours: 'Tue 2–4 PM' };
+  // Biology's notes folder holds a flashcard deck.
+  const folder = make(null, 'Biology', '📘');
+  folder.position = 4;
+  const deck = make(folder.id, 'Cell vocabulary', '🧬');
+  const fc = (id: string, front: string, back: string) => ({
+    type: 'flashcard',
+    attrs: { id },
+    content: [
+      { type: 'flashcardFront', content: [{ type: 'text', text: front }] },
+      { type: 'flashcardBack', content: [{ type: 'text', text: back }] },
+    ],
+  });
+  deck.content = JSON.stringify({
+    type: 'doc',
+    content: [
+      { type: 'paragraph', content: [{ type: 'text', text: 'Key terms for the midterm.' }] },
+      fc('k1', 'Mitochondria', 'Makes the cell’s energy (ATP)'),
+      fc('k2', 'Ribosome', 'Builds proteins'),
+      fc('k3', 'Osmosis', 'Water moving across a membrane toward more solute'),
+      fc('k4', 'Nucleus', 'Holds the DNA'),
+    ],
+  });
+  rows.push(folder, deck);
+  persist();
+  const bio = {
+    ...newCourse('Biology', 'green', 0),
+    teacher: 'Dr. Rivera',
+    room: 'Science 204',
+    officeHours: 'Tue 2–4 PM',
+    pageId: folder.id,
+    weights: { Exams: 60, Labs: 40 },
+  };
   const hist = newCourse('History', 'orange', 1);
   const cs = newCourse('Computer Science', 'blue', 2);
   const assignment = (title: string, c: Course | null, dueDate: string | null, extra: Partial<Assignment> = {}): Assignment => ({
@@ -229,7 +262,9 @@ function seedPlanner(): PlannerData {
   return {
     courses: [bio, hist, cs],
     assignments: [
-      assignment('Lab report: osmosis', bio, iso(1), { dueTime: '23:59', priority: 3, status: 'doing', fileIds: [diagram.id], tags: ['lab'] }),
+      assignment('Lab report: osmosis', bio, iso(1), { dueTime: '23:59', priority: 3, status: 'doing', fileIds: [diagram.id], tags: ['lab'], category: 'Labs' }),
+      assignment('Quiz 1: cells', bio, iso(-10), { status: 'done', completedAt: ts, score: 17, maxScore: 20, category: 'Exams' }),
+      assignment('Lab: microscopes', bio, iso(-6), { status: 'done', completedAt: ts, score: 46, maxScore: 50, category: 'Labs' }),
       assignment('Read chapter 4', hist, iso(0), { priority: 1 }),
       assignment('Problem set 3', cs, iso(4), { dueTime: '17:00', priority: 2 }),
       assignment('Essay outline', hist, iso(-1)),
@@ -250,6 +285,7 @@ function seedPlanner(): PlannerData {
       { name: 'lab', color: 'green' },
     ],
     sessions: [],
+    reviews: [],
   };
 }
 
@@ -377,7 +413,7 @@ mockIPC((cmd, payload) => {
       }
       case 'update_course': {
         const c = planner.courses.find((x) => x.id === a.id)!;
-        patchFields(c, a.patch, ['name', 'color', 'teacher', 'email', 'officeHours', 'room', 'pageId']);
+        patchFields(c, a.patch, ['name', 'color', 'teacher', 'email', 'officeHours', 'room', 'pageId', 'weights']);
         return c;
       }
       case 'delete_course':
@@ -395,7 +431,7 @@ mockIPC((cmd, payload) => {
           planner.assignments.push(x);
         }
         if (p.status !== undefined && p.status !== x.status) x.completedAt = p.status === 'done' ? Date.now() : null;
-        patchFields(x, p, ['title', 'courseId', 'dueDate', 'dueTime', 'status', 'priority', 'notes', 'pageId', 'fileIds', 'sourceUid']);
+        patchFields(x, p, ['title', 'courseId', 'dueDate', 'dueTime', 'status', 'priority', 'notes', 'pageId', 'fileIds', 'sourceUid', 'score', 'maxScore', 'category']);
         if (!x.dueDate) x.dueTime = null;
         x.fileIds = x.fileIds.filter((id) => planner.files.some((f) => f.id === id));
         x.updatedAt = Date.now();
@@ -509,6 +545,40 @@ mockIPC((cmd, payload) => {
         planner.sessions = planner.sessions.filter((s) => !(s.eventId === a.eventId && s.date === a.date));
         planner.sessions.push({ eventId: a.eventId, date: a.date, pageId: a.pageId });
         return null;
+      case 'list_cards': {
+        const out: unknown[] = [];
+        const walk = (n: any, f: (c: any) => void) => {
+          if (n?.type === 'flashcard') return f(n);
+          for (const c of n?.content ?? []) walk(c, f);
+        };
+        for (const r of rows.filter((x) => !x.deletedAt)) {
+          let doc: any;
+          try {
+            doc = JSON.parse(r.content);
+          } catch {
+            continue;
+          }
+          walk(doc, (c) => {
+            const side = (i: number) => (c.content?.[i] ? itemText({ content: [c.content[i]] }, true) : '');
+            const front = side(0);
+            if (!c.attrs?.id || !front) return;
+            const rv = planner.reviews.find((x) => x.pageId === r.id && x.cardId === c.attrs.id);
+            const review = rv ? { due: rv.due, interval: rv.interval, ease: rv.ease, reps: rv.reps, lapses: rv.lapses } : null;
+            out.push({ pageId: r.id, id: c.attrs.id, front, back: side(1), review });
+          });
+        }
+        return out;
+      }
+      case 'save_review':
+        planner.reviews = planner.reviews.filter((x) => !(x.pageId === a.pageId && x.cardId === a.cardId));
+        planner.reviews.push({ pageId: a.pageId, cardId: a.cardId, ...a.review });
+        return null;
+      case 'reset_reviews':
+        planner.reviews = planner.reviews.filter((x) => x.pageId !== a.pageId);
+        return null;
+      case 'print_page':
+        window.print();
+        return null;
       case 'set_reminders':
         console.info('[dev] reminders', a.list);
         return null;
@@ -574,6 +644,17 @@ mockIPC((cmd, payload) => {
   const internals = (window as any).__TAURI_INTERNALS__;
   const invoke = internals.invoke;
   internals.invoke = async (cmd: string, args: unknown, options?: { headers?: Record<string, string> }) => {
+    if (cmd === 'export_document') {
+      const name = decodeURIComponent(options?.headers?.['x-name'] ?? 'Untitled');
+      const ext = options?.headers?.['x-ext'] ?? 'bin';
+      // Hand the file to the browser so it can be checked by hand.
+      const url = URL.createObjectURL(new Blob([args as BlobPart]));
+      const link = Object.assign(document.createElement('a'), { href: url, download: `${name}.${ext}` });
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      (window as any).__lastExport = { name, ext, bytes: args };
+      return `C:\\Downloads\\${name}.${ext}`;
+    }
     if (cmd !== 'save_file') return invoke(cmd, args, options);
     const bytes = args as Uint8Array;
     const name = decodeURIComponent(options?.headers?.['x-name'] ?? 'Untitled');

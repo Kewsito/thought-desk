@@ -6,6 +6,7 @@
   import { tags } from '../tags.svelte';
   import { planner } from '../planner.svelte';
   import { library } from '../library.svelte';
+  import { cards } from '../cards.svelte';
   import { itemsByDay } from '../calendar.svelte';
   import { clock } from '../clock.svelte';
   import { dueState } from '../dates';
@@ -69,16 +70,19 @@
     { view: 'assignments', label: 'Assignments', icon: 'assignment', key: 'Ctrl+2' },
     { view: 'calendar', label: 'Calendar', icon: 'calendar', key: 'Ctrl+3' },
     { view: 'files', label: 'Files', icon: 'files', key: 'Ctrl+4' },
+    { view: 'cards', label: 'Flashcards', icon: 'cards', key: 'Ctrl+5' },
   ];
   const counts = $derived<Record<string, number>>({
     assignments: planner.dueSoon.length,
     calendar: todayEvents,
     files: library.live.length,
+    cards: cards.dueCount,
   });
   const countTips = $derived<Record<string, string>>({
     assignments: `${planner.dueSoon.length} due within a week${overdue ? ', some overdue' : ''}`,
     calendar: `${todayEvents} event${todayEvents === 1 ? '' : 's'} today`,
     files: `${library.live.length} file${library.live.length === 1 ? '' : 's'}`,
+    cards: `${cards.dueCount} card${cards.dueCount === 1 ? '' : 's'} to study today`,
   });
 
   const themeIcon = $derived(prefs.theme === 'system' ? 'monitor' : prefs.theme === 'dark' ? 'moon' : 'sun');

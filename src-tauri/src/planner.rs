@@ -7,6 +7,7 @@
 use crate::db::{fail, new_id, now, Db, Result};
 use rusqlite::{params, OptionalExtension, ToSql, Transaction};
 use serde::{Deserialize, Deserializer, Serialize};
+use std::collections::BTreeMap;
 
 /// Lets a patch tell "leave as is" (field missing) apart from "clear it"
 /// (field present and null).
@@ -29,7 +30,7 @@ fn is_time(s: &str) -> bool {
     b.len() == 5 && b[2] == b':' && b.iter().enumerate().all(|(i, c)| i == 2 || c.is_ascii_digit())
 }
 
-fn check_date(v: &Option<String>) -> Result<()> {
+pub(crate) fn check_date(v: &Option<String>) -> Result<()> {
     match v {
         Some(d) if !is_date(d) => fail("Dates must look like 2026-10-12"),
         _ => Ok(()),
@@ -73,6 +74,8 @@ pub struct Course {
     pub room: String,
     /// The page that holds this course's notes (lecture notes go inside).
     pub page_id: Option<String>,
+    /// Grade category → weight (percent). Empty: grades are total points.
+    pub weights: BTreeMap<String, f64>,
 }
 
 #[derive(Deserialize, Default)]
@@ -86,6 +89,7 @@ pub struct CoursePatch {
     pub room: Option<String>,
     #[serde(deserialize_with = "nullable")]
     pub page_id: Option<Option<String>>,
+    pub weights: Option<BTreeMap<String, f64>>,
 }
 
 fn course_from_row(r: &rusqlite::Row) -> rusqlite::Result<Course> {
@@ -100,10 +104,35 @@ fn course_from_row(r: &rusqlite::Row) -> rusqlite::Result<Course> {
         office_hours: r.get(7)?,
         room: r.get(8)?,
         page_id: r.get(9)?,
+        weights: serde_json::from_str(&r.get::<_, String>(10)?).unwrap_or_default(),
     })
 }
 
-const COURSE_COLS: &str = "id, name, color, position, created_at, teacher, email, office_hours, room, page_id";
+const COURSE_COLS: &str = "id, name, color, position, created_at, teacher, email, office_hours, room, page_id, weights";
+
+/// Grade weights: up to 20 named categories, each 0–100%.
+fn check_weights(weights: &BTreeMap<String, f64>) -> Result<()> {
+    if weights.len() > 20 {
+        return fail("Too many grade categories");
+    }
+    for (name, w) in weights {
+        if name.trim().is_empty() || name.chars().count() > 40 {
+            return fail("Grade categories need a short name");
+        }
+        if !w.is_finite() || !(0.0..=100.0).contains(w) {
+            return fail("Weights are percentages from 0 to 100");
+        }
+    }
+    Ok(())
+}
+
+/// Points: finite, not negative, and not absurd.
+fn check_points(v: &Option<f64>) -> Result<()> {
+    match v {
+        Some(p) if !p.is_finite() || *p < 0.0 || *p > 1e6 => fail("Scores are numbers of points"),
+        _ => Ok(()),
+    }
+}
 
 // ----------------------------------------------------------------- assignments
 
@@ -130,6 +159,11 @@ pub struct Assignment {
     pub tags: Vec<String>,
     /// UID of the calendar entry this was imported from.
     pub source_uid: Option<String>,
+    /// Points earned and possible, once graded.
+    pub score: Option<f64>,
+    pub max_score: Option<f64>,
+    /// Grade category ("Homework", "Exams"); weighted by the course.
+    pub category: String,
 }
 
 #[derive(Deserialize, Default)]
@@ -149,10 +183,15 @@ pub struct AssignmentPatch {
     #[serde(deserialize_with = "nullable")]
     pub page_id: Option<Option<String>>,
     pub file_ids: Option<Vec<String>>,
+    #[serde(deserialize_with = "nullable")]
+    pub score: Option<Option<f64>>,
+    #[serde(deserialize_with = "nullable")]
+    pub max_score: Option<Option<f64>>,
+    pub category: Option<String>,
 }
 
 const ASSIGNMENT_COLS: &str = "id, title, course_id, due_date, due_time, status, priority, notes, page_id,
-     created_at, updated_at, completed_at, deleted_at, tags, source_uid";
+     created_at, updated_at, completed_at, deleted_at, tags, source_uid, score, max_score, category";
 
 fn assignment_from_row(r: &rusqlite::Row) -> rusqlite::Result<Assignment> {
     Ok(Assignment {
@@ -172,6 +211,9 @@ fn assignment_from_row(r: &rusqlite::Row) -> rusqlite::Result<Assignment> {
         deleted_at: r.get(12)?,
         tags: crate::organize::parse_tags(&r.get::<_, String>(13)?),
         source_uid: r.get(14)?,
+        score: r.get(15)?,
+        max_score: r.get(16)?,
+        category: r.get(17)?,
     })
 }
 
@@ -234,6 +276,17 @@ fn apply_assignment(tx: &Transaction, id: &str, patch: &AssignmentPatch) -> Resu
     }
     if let Some(v) = &patch.source_uid {
         set(tx, T, "source_uid", id, v)?;
+    }
+    if let Some(v) = &patch.score {
+        check_points(v)?;
+        set(tx, T, "score", id, v)?;
+    }
+    if let Some(v) = &patch.max_score {
+        check_points(v)?;
+        set(tx, T, "max_score", id, v)?;
+    }
+    if let Some(v) = &patch.category {
+        set(tx, T, "category", id, v.trim())?;
     }
     if let Some(files) = &patch.file_ids {
         tx.execute("DELETE FROM attachments WHERE assignment_id = ?1", [id])?;
@@ -463,6 +516,11 @@ impl Db {
         }
         if let Some(v) = &patch.page_id {
             set(&tx, "courses", "page_id", id, v)?;
+        }
+        if let Some(w) = &patch.weights {
+            check_weights(w)?;
+            let clean: BTreeMap<String, f64> = w.iter().map(|(k, v)| (k.trim().to_string(), *v)).collect();
+            set(&tx, "courses", "weights", id, serde_json::to_string(&clean)?)?;
         }
         let course = tx
             .query_row(&format!("SELECT {COURSE_COLS} FROM courses WHERE id = ?1"), [id], course_from_row)
@@ -708,6 +766,26 @@ mod tests {
         assert_eq!(db.list_events().unwrap().len(), 1);
         assert!(db.list_files().unwrap().is_empty());
         assert!(!disk.exists(), "emptying the trash removes the file");
+    }
+
+    #[test]
+    fn grades_and_weights() {
+        let (db, _) = temp_db();
+        let c = db.create_course("Physics", "teal").unwrap();
+        let c = db
+            .update_course(&c.id, serde_json::from_str(r#"{"weights":{" Exams ":60,"Homework":40}}"#).unwrap())
+            .unwrap();
+        assert_eq!(c.weights.get("Exams"), Some(&60.0), "names trimmed");
+        assert!(db.update_course(&c.id, serde_json::from_str(r#"{"weights":{"Labs":140}}"#).unwrap()).is_err());
+        assert!(db.update_course(&c.id, serde_json::from_str(r#"{"weights":{"":10}}"#).unwrap()).is_err());
+
+        let a = db
+            .create_assignment(serde_json::from_str(r#"{"title":"Lab 1","score":18.5,"maxScore":20,"category":" Homework "}"#).unwrap())
+            .unwrap();
+        assert_eq!((a.score, a.max_score, a.category.as_str()), (Some(18.5), Some(20.0), "Homework"));
+        let a = db.update_assignment(&a.id, serde_json::from_str(r#"{"score":null}"#).unwrap()).unwrap();
+        assert_eq!((a.score, a.max_score), (None, Some(20.0)), "null clears only the score");
+        assert!(db.update_assignment(&a.id, serde_json::from_str(r#"{"score":-1}"#).unwrap()).is_err());
     }
 
     #[test]

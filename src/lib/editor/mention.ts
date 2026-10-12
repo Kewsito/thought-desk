@@ -7,7 +7,7 @@ import { KINDS, fileKind, library } from '../library.svelte';
 import { planner } from '../planner.svelte';
 import { store } from '../store.svelte';
 import type { MentionKind } from './page-link';
-import { rank, suggestionRenderer, type MenuEntry } from './suggestion.svelte';
+import { rankGroups, suggestionRenderer, type MenuEntry } from './suggestion.svelte';
 
 function insertMention(editor: Editor, range: Range | null, id: string, kind: MentionKind) {
   const content = [{ type: 'mention', attrs: { id, kind } }, { type: 'text', text: ' ' }];
@@ -81,7 +81,7 @@ export const MentionSuggest = Extension.create({
           }));
 
           const results: MenuEntry[] = q
-            ? [...rank(pages, q, 5), ...rank(assignments, q, 4), ...rank(events, q, 3), ...rank(files, q, 3)]
+            ? rankGroups([[pages, 5], [assignments, 4], [events, 3], [files, 3]], q)
             : [...pages.slice(0, 5), ...assignments.slice(0, 3), ...events.slice(0, 2), ...files.slice(0, 2)];
           if (q) {
             results.push(

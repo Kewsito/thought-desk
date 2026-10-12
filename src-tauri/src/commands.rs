@@ -1,5 +1,6 @@
 //! Commands invoked from the frontend.
 
+use crate::cards::{Card, Review};
 use crate::db::{Db, Error, Page, PageMeta, PagePatch, Result, SearchHit, Table};
 use crate::library::{FileMeta, FilePatch, FileUsage};
 use crate::organize::{Tag, Todo};
@@ -339,6 +340,52 @@ pub fn export_markdown(app: AppHandle, title: String, markdown: String) -> Resul
     let path = unique_path(&dir, &safe_file_name(&title), "md");
     std::fs::write(&path, markdown)?;
     Ok(path.to_string_lossy().into_owned())
+}
+
+/// Saves an exported document (raw request body) to Downloads. The title
+/// and extension come in the percent-encoded `x-name` and `x-ext` headers.
+#[tauri::command]
+pub fn export_document(app: AppHandle, request: tauri::ipc::Request<'_>) -> Result<String> {
+    let InvokeBody::Raw(bytes) = request.body() else {
+        return Err(Error("Expected raw file bytes".into()));
+    };
+    let header = |key: &str| {
+        request.headers().get(key).and_then(|v| v.to_str().ok()).map(percent_decode).unwrap_or_default()
+    };
+    let ext = header("x-ext");
+    if !matches!(ext.as_str(), "docx" | "md" | "html") {
+        return Err(Error("Unsupported export format".into()));
+    }
+    let dir = app.path().download_dir()?;
+    let path = unique_path(&dir, &safe_file_name(&header("x-name")), &ext);
+    std::fs::write(&path, bytes)?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+/// Opens the system print dialog for the window (with Save as PDF).
+#[tauri::command]
+pub fn print_page(app: AppHandle) -> Result<()> {
+    match app.get_webview_window("main") {
+        Some(w) => w.print().map_err(|e| Error(e.to_string())),
+        None => Err(Error("No window to print".into())),
+    }
+}
+
+// ---------------------------------------------------------------- flashcards
+
+#[tauri::command]
+pub fn list_cards(db: State<Db>) -> Result<Vec<Card>> {
+    db.list_cards()
+}
+
+#[tauri::command]
+pub fn save_review(db: State<Db>, page_id: String, card_id: String, review: Review) -> Result<()> {
+    db.save_review(&page_id, &card_id, &review)
+}
+
+#[tauri::command]
+pub fn reset_reviews(db: State<Db>, page_id: String) -> Result<()> {
+    db.reset_reviews(&page_id)
 }
 
 #[derive(Serialize)]
