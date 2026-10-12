@@ -1,6 +1,6 @@
 /** UI preferences, persisted in localStorage (they are per-device anyway). */
 
-import { ACCENTS, type Accent } from './colors';
+import { ACCENTS, PALETTES, type Accent, type Palette } from './colors';
 
 export type Theme = 'system' | 'light' | 'dark';
 export type Font = 'sans' | 'serif' | 'mono';
@@ -12,6 +12,7 @@ export type AssignmentScope = 'upcoming' | 'all' | 'done';
 
 interface Stored {
   theme: Theme;
+  palette: Palette;
   accent: Accent;
   font: Font;
   smallText: boolean;
@@ -27,6 +28,10 @@ interface Stored {
   calendarMode: CalendarMode;
   filesLayout: FilesLayout;
   assignmentScope: AssignmentScope;
+  /** System-wide Quick Capture shortcut (Ctrl+Shift+Space). */
+  globalCapture: boolean;
+  /** The page captured notes and to-dos go to. */
+  inboxId: string | null;
 }
 
 /** Monday in most of the world, Sunday where the locale says so. */
@@ -46,6 +51,7 @@ const KEY = 'thoughtdesk.prefs.v1';
 
 const defaults: Stored = {
   theme: 'system',
+  palette: 'default',
   accent: 'graphite',
   font: 'sans',
   smallText: false,
@@ -55,11 +61,13 @@ const defaults: Stored = {
   expanded: {},
   sections: {},
   lastPageId: null,
-  lastView: 'page',
+  lastView: 'home',
   weekStart: localeWeekStart(),
   calendarMode: 'month',
   filesLayout: 'grid',
   assignmentScope: 'upcoming',
+  globalCapture: true,
+  inboxId: null,
 };
 
 function read(): Stored {
@@ -68,6 +76,7 @@ function read(): Stored {
     if (raw) {
       const stored = { ...defaults, ...JSON.parse(raw) } as Stored;
       if (!ACCENTS.some((a) => a.key === stored.accent)) stored.accent = 'graphite';
+      if (!PALETTES.some((p) => p.key === stored.palette)) stored.palette = 'default';
       return stored;
     }
   } catch {
@@ -81,6 +90,7 @@ const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
 class Prefs {
   #initial = read();
   theme = $state<Theme>(this.#initial.theme);
+  palette = $state<Palette>(this.#initial.palette);
   accent = $state<Accent>(this.#initial.accent);
   font = $state<Font>(this.#initial.font);
   smallText = $state(this.#initial.smallText);
@@ -95,6 +105,8 @@ class Prefs {
   calendarMode = $state<CalendarMode>(this.#initial.calendarMode);
   filesLayout = $state<FilesLayout>(this.#initial.filesLayout);
   assignmentScope = $state<AssignmentScope>(this.#initial.assignmentScope);
+  globalCapture = $state(this.#initial.globalCapture);
+  inboxId = $state<string | null>(this.#initial.inboxId);
 
   systemDark = $state(darkQuery.matches);
   resolvedTheme = $derived<'light' | 'dark'>(
@@ -108,6 +120,7 @@ class Prefs {
   snapshot(): Stored {
     return {
       theme: this.theme,
+      palette: this.palette,
       accent: this.accent,
       font: this.font,
       smallText: this.smallText,
@@ -122,6 +135,8 @@ class Prefs {
       calendarMode: this.calendarMode,
       filesLayout: this.filesLayout,
       assignmentScope: this.assignmentScope,
+      globalCapture: this.globalCapture,
+      inboxId: this.inboxId,
     };
   }
 }
@@ -138,6 +153,7 @@ $effect.root(() => {
     const root = document.documentElement;
     root.dataset.theme = prefs.resolvedTheme;
     root.dataset.accent = prefs.accent;
+    root.dataset.palette = prefs.palette;
     root.dataset.font = prefs.font;
     root.classList.toggle('small-text', prefs.smallText);
     root.style.colorScheme = prefs.resolvedTheme;

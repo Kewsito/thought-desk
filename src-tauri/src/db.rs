@@ -89,6 +89,7 @@ pub struct PageMeta {
     pub created_at: i64,
     pub updated_at: i64,
     pub deleted_at: Option<i64>,
+    pub tags: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -123,7 +124,7 @@ pub struct SearchHit {
 }
 
 const META_COLS: &str =
-    "id, parent_id, title, icon, position, favorite, full_width, created_at, updated_at, deleted_at";
+    "id, parent_id, title, icon, position, favorite, full_width, created_at, updated_at, deleted_at, tags";
 
 fn meta_from_row(r: &rusqlite::Row) -> rusqlite::Result<PageMeta> {
     Ok(PageMeta {
@@ -137,6 +138,7 @@ fn meta_from_row(r: &rusqlite::Row) -> rusqlite::Result<PageMeta> {
         created_at: r.get(7)?,
         updated_at: r.get(8)?,
         deleted_at: r.get(9)?,
+        tags: crate::organize::parse_tags(&r.get::<_, String>(10)?),
     })
 }
 
@@ -226,6 +228,19 @@ CREATE TABLE attachments (
 );
 ";
 
+/// Tags on every kind of item (a JSON array of names), and tag colours.
+const SCHEMA_V3: &str = "
+ALTER TABLE pages ADD COLUMN tags TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE assignments ADD COLUMN tags TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE events ADD COLUMN tags TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE files ADD COLUMN tags TEXT NOT NULL DEFAULT '[]';
+CREATE TABLE tags (
+  name       TEXT PRIMARY KEY,
+  color      TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL
+);
+";
+
 const WELCOME_HTML: &str = r#"<p>Thought Desk is a quiet place to write. Everything stays on this computer, in a single local database.</p>
 <h2>The basics</h2>
 <ul data-type="taskList">
@@ -249,9 +264,11 @@ const WELCOME_HTML: &str = r#"<p>Thought Desk is a quiet place to write. Everyth
 <div data-callout="" data-icon="💡"><p>Pages can be nested as deep as you like. Drag pages in the sidebar to reorder them or drop one onto another to nest it.</p></div>
 <h2>Plan your work</h2>
 <ul>
-<li><p><strong>Assignments</strong> (<code>Ctrl+1</code>) keep track of due dates by course. Give one a notes page and it links back.</p></li>
-<li><p><strong>Calendar</strong> (<code>Ctrl+2</code>) shows events and everything that's due. Drag to reschedule.</p></li>
-<li><p><strong>Files</strong> (<code>Ctrl+3</code>) holds every file you attach, drop into a page or import.</p></li>
+<li><p><strong>Home</strong> (<code>Ctrl+1</code>) shows your day: classes, what's due and open to-dos from every page.</p></li>
+<li><p><strong>Quick Capture</strong> (<code>Ctrl+Shift+Space</code>) saves a thought from anywhere, even with the app in the background.</p></li>
+<li><p><strong>Assignments</strong> (<code>Ctrl+2</code>) keep track of due dates by course. Give one a notes page and it links back.</p></li>
+<li><p><strong>Calendar</strong> (<code>Ctrl+3</code>) shows events and everything that's due. Drag to reschedule.</p></li>
+<li><p><strong>Files</strong> (<code>Ctrl+4</code>) holds every file you attach, drop into a page or import.</p></li>
 <li><p>Type <code>@</code> to link a page, assignment, event or file, or <code>/assignment</code>, <code>/event</code> and <code>/file</code> to add one right here.</p></li>
 </ul>
 <p></p>"#;
@@ -310,6 +327,12 @@ impl Db {
             tx.execute_batch("PRAGMA user_version = 2;")?;
             tx.commit()?;
         }
+        if version < 3 {
+            let tx = conn.transaction()?;
+            tx.execute_batch(SCHEMA_V3)?;
+            tx.execute_batch("PRAGMA user_version = 3;")?;
+            tx.commit()?;
+        }
         Ok(())
     }
 
@@ -331,7 +354,7 @@ impl Db {
                 |r| {
                     Ok(Page {
                         meta: meta_from_row(r)?,
-                        content: r.get(10)?,
+                        content: r.get(11)?,
                     })
                 },
             )
@@ -504,8 +527,9 @@ impl Db {
                 row.title.clone()
             };
             tx.execute(
-                "INSERT INTO pages (id, parent_id, title, icon, content, position, full_width, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, (SELECT position FROM pages WHERE id = ?6), ?7, ?8, ?8)",
+                "INSERT INTO pages (id, parent_id, title, icon, content, position, full_width, tags, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, (SELECT position FROM pages WHERE id = ?6), ?7,
+                         (SELECT tags FROM pages WHERE id = ?6), ?8, ?8)",
                 params![new_id, parent, title, row.icon, content, row.id, row.full_width, ts],
             )?;
             let new_rid = tx.last_insert_rowid();

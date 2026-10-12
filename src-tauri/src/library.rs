@@ -23,6 +23,7 @@ pub struct FileMeta {
     pub deleted_at: Option<i64>,
     /// The bytes are gone from disk (e.g. deleted by hand).
     pub missing: bool,
+    pub tags: Vec<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -39,7 +40,7 @@ pub struct FileUsage {
     pub page_ids: Vec<String>,
 }
 
-const FILE_COLS: &str = "id, name, stored, mime, size, created_at, updated_at, deleted_at";
+const FILE_COLS: &str = "id, name, stored, mime, size, created_at, updated_at, deleted_at, tags";
 
 fn file_from_row(r: &rusqlite::Row) -> rusqlite::Result<FileMeta> {
     Ok(FileMeta {
@@ -52,6 +53,7 @@ fn file_from_row(r: &rusqlite::Row) -> rusqlite::Result<FileMeta> {
         updated_at: r.get(6)?,
         deleted_at: r.get(7)?,
         missing: false,
+        tags: crate::organize::parse_tags(&r.get::<_, String>(8)?),
     })
 }
 

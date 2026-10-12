@@ -4,6 +4,8 @@
   import Modal from '../components/Modal.svelte';
   import FileTile from '../ui/FileTile.svelte';
   import Segmented from '../ui/Segmented.svelte';
+  import Backlinks from '../ui/Backlinks.svelte';
+  import TagRow from '../ui/TagRow.svelte';
   import StatusCheck from '../ui/StatusCheck.svelte';
   import { clock } from '../clock.svelte';
   import { colorVar, nextColor } from '../colors';
@@ -258,6 +260,15 @@
         </div>
       </div>
 
+      {#if existing}
+        <div class="group tags-group">
+        <div class="group-row tags-row">
+          <div class="row-label">Tags</div>
+          <TagRow table="assignments" id={existing.id} compact />
+        </div>
+        </div>
+      {/if}
+
       <h3 class="group-title">Notes</h3>
       <div class="group">
         <div class="group-row stack">
@@ -312,6 +323,8 @@
           </div>
         {/each}
       </div>
+
+      {#if existing}<Backlinks id={existing.id} inSheet />{/if}
     </div>
 
     <footer class="modal-foot">
@@ -361,7 +374,7 @@
     text-decoration-color: var(--text-4);
   }
   .picker {
-    gap: 7px;
+    gap: 8px;
     max-width: 240px;
   }
   .muted {
@@ -408,7 +421,7 @@
   }
   .quick .chip {
     height: 24px;
-    padding: 0 9px;
+    padding: 0 10px;
     font-size: var(--fs-footnote);
     background: var(--raised);
     box-shadow: 0 0 0 0.5px var(--hairline);
@@ -419,6 +432,15 @@
     box-shadow: none;
   }
 
+  .tags-group {
+    margin-top: 8px;
+  }
+  .tags-row {
+    min-height: 48px;
+  }
+  .modal-body :global(.backlinks) {
+    margin-top: 0;
+  }
   .notes {
     min-height: 84px;
   }

@@ -18,11 +18,14 @@
 
   const page = $derived(store.view === 'page' ? store.current : null);
   const VIEW_CRUMBS: Record<string, { label: string; icon: string }> = {
+    home: { label: 'Home', icon: 'home' },
     assignments: { label: 'Assignments', icon: 'assignment' },
     calendar: { label: 'Calendar', icon: 'calendar' },
     files: { label: 'Files', icon: 'files' },
   };
-  const viewCrumb = $derived(VIEW_CRUMBS[store.view]);
+  const viewCrumb = $derived(
+    store.view === 'tag' ? { label: `#${store.tag ?? ''}`, icon: 'tag' } : VIEW_CRUMBS[store.view],
+  );
   const crumbs = $derived.by(() => {
     if (!page) return [];
     const all = [...store.ancestors(page.id), page];
@@ -139,7 +142,7 @@
     display: flex;
     align-items: center;
     gap: 2px;
-    padding: 0 6px 0 10px;
+    padding: 0 4px 0 8px;
     flex: none;
   }
   .crumbs {

@@ -6,10 +6,12 @@ mod db;
 mod files;
 mod library;
 mod memory;
+mod organize;
 mod planner;
 
 use std::path::PathBuf;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
+use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
 use tauri_plugin_window_state::StateFlags;
 
 /// THOUGHTDESK_DATA_DIR points the app at another notes folder (portable
@@ -18,6 +20,11 @@ fn custom_data_dir() -> Option<PathBuf> {
     std::env::var_os("THOUGHTDESK_DATA_DIR")
         .filter(|d| !d.is_empty())
         .map(PathBuf::from)
+}
+
+/// The system-wide Quick Capture shortcut.
+pub fn capture_shortcut() -> Shortcut {
+    Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::Space)
 }
 
 fn main() {
@@ -38,6 +45,23 @@ fn main() {
 
     builder
         .plugin(tauri_plugin_opener::init())
+        .plugin(
+            // Quick Capture from anywhere: bring the window up and ask the UI
+            // to open the capture box. Registered on demand (Settings).
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, shortcut, event| {
+                    if event.state() != ShortcutState::Pressed || *shortcut != capture_shortcut() {
+                        return;
+                    }
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.unminimize();
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
+                    let _ = app.emit("td-quick-capture", ());
+                })
+                .build(),
+        )
         .plugin(
             // Remember size, position and maximized state. Visibility is left
             // alone: the frontend shows the window once it has painted, which
@@ -92,6 +116,14 @@ fn main() {
             commands::list_events,
             commands::create_event,
             commands::update_event,
+            commands::list_tags,
+            commands::set_item_tags,
+            commands::set_tag_color,
+            commands::rename_tag,
+            commands::backlinks,
+            commands::list_todos,
+            commands::set_todo,
+            commands::set_capture_shortcut,
             commands::trash_item,
             commands::restore_item,
             commands::delete_item,

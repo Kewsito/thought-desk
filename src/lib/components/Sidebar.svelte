@@ -2,7 +2,8 @@
   import Icon from './Icon.svelte';
   import TreeItem, { drag } from './TreeItem.svelte';
   import { prefs } from '../prefs.svelte';
-  import { store, type View } from '../store.svelte';
+  import { store, type AppView } from '../store.svelte';
+  import { tags } from '../tags.svelte';
   import { planner } from '../planner.svelte';
   import { library } from '../library.svelte';
   import { itemsByDay } from '../calendar.svelte';
@@ -62,10 +63,11 @@
     return d ? d.allDay.length + d.timed.length : 0;
   });
 
-  const nav: { view: Exclude<View, 'page'>; label: string; icon: string; key: string }[] = [
-    { view: 'assignments', label: 'Assignments', icon: 'assignment', key: 'Ctrl+1' },
-    { view: 'calendar', label: 'Calendar', icon: 'calendar', key: 'Ctrl+2' },
-    { view: 'files', label: 'Files', icon: 'files', key: 'Ctrl+3' },
+  const nav: { view: AppView; label: string; icon: string; key: string }[] = [
+    { view: 'home', label: 'Home', icon: 'home', key: 'Ctrl+1' },
+    { view: 'assignments', label: 'Assignments', icon: 'assignment', key: 'Ctrl+2' },
+    { view: 'calendar', label: 'Calendar', icon: 'calendar', key: 'Ctrl+3' },
+    { view: 'files', label: 'Files', icon: 'files', key: 'Ctrl+4' },
   ];
   const counts = $derived<Record<string, number>>({
     assignments: planner.dueSoon.length,
@@ -95,7 +97,7 @@
 <aside class="sidebar" class:resizing style:width="{prefs.sidebarWidth}px">
   <div class="head" data-tauri-drag-region>
     <div class="brand" data-tauri-drag-region>
-      <svg class="logo" width="18" height="18" viewBox="0 0 1024 1024" aria-hidden="true">
+      <svg class="logo" width="20" height="20" viewBox="0 0 1024 1024" aria-hidden="true">
         <rect x="64" y="64" width="896" height="896" rx="230" fill="var(--text)" />
         <circle cx="512" cy="430" r="150" fill="var(--bg-sidebar)" />
         <rect x="262" y="660" width="500" height="68" rx="34" fill="var(--bg-sidebar)" />
@@ -121,7 +123,7 @@
   <nav class="views" aria-label="Views">
     {#each nav as n (n.view)}
       <div class="nav-row" class:active={store.view === n.view}>
-        <button class="nav-main" onclick={() => store.go(n.view)} aria-current={store.view === n.view ? 'page' : undefined}>
+        <button class="nav-main" onclick={() => store.go(n.view)} aria-current={store.view === n.view ? 'page' : undefined} data-tip={n.label} data-tip-key={n.key}>
           <span class="lead tinted"><Icon name={n.icon} /></span>
           <span class="label">{n.label}</span>
         </button>
@@ -145,6 +147,30 @@
           <div role="tree" aria-label="Favorites">
             {#each store.favorites as p (p.id)}
               <TreeItem page={p} favorite />
+            {/each}
+          </div>
+        {/if}
+      </section>
+    {/if}
+
+    {#if tags.used.length}
+      <section>
+        <div class="section-head">
+          <button class="section-title" onclick={() => toggleSection('tags')} aria-expanded={!prefs.sections.tags}>
+            Tags
+            <span class="caret" class:closed={prefs.sections.tags}><Icon name="chevron-down" size={11} stroke={2.4} /></span>
+          </button>
+        </div>
+        {#if !prefs.sections.tags}
+          <div class="tag-list">
+            {#each tags.used as name (name)}
+              <div class="nav-row" class:active={store.view === 'tag' && store.tag === name}>
+                <button class="nav-main" onclick={() => store.openTag(name)}>
+                  <span class="lead"><span class="dot" style:--dot={tags.color(name)}></span></span>
+                  <span class="label">#{name}</span>
+                </button>
+                <span class="count">{tags.counts.get(name)}</span>
+              </div>
             {/each}
           </div>
         {/if}
@@ -236,12 +262,14 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 10px 0 19px;
+    /* The logo sits in the rows' 20px icon column (16px in), the name on
+       the label column, and the buttons line up with the rows' actions. */
+    padding: 0 10px 0 16px;
   }
   .brand {
     display: flex;
     align-items: center;
-    gap: 9px;
+    gap: 8px;
     min-width: 0;
     font-size: var(--fs-body-ui);
     font-weight: var(--fw-650);
@@ -278,8 +306,8 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    height: 30px;
-    margin: 2px 10px 12px;
+    height: var(--h-md);
+    margin: 0 8px 16px;
     padding: 0 6px 0 8px;
     border-radius: var(--r-sm);
     background: var(--fill);
@@ -311,21 +339,21 @@
     padding-bottom: 8px;
   }
   section + section {
-    margin-top: 14px;
+    margin-top: 16px;
   }
 
   /* Section headers */
   .section-head {
     display: flex;
     align-items: center;
-    height: 26px;
-    padding: 0 12px 0 12px;
+    height: var(--h-sm);
+    padding: 0 12px 0 8px;
   }
   .section-title {
     display: flex;
     align-items: center;
     gap: 4px;
-    height: 22px;
+    height: var(--h-xs);
     padding: 0 8px;
     border-radius: var(--r-xs);
     font-size: var(--fs-caption);
@@ -355,8 +383,8 @@
     margin-left: auto;
     display: grid;
     place-items: center;
-    width: 22px;
-    height: 22px;
+    width: var(--h-xs);
+    height: var(--h-xs);
     border-radius: var(--r-xs);
     color: var(--text-3);
     opacity: 0;
@@ -379,8 +407,8 @@
   .nav-row {
     display: flex;
     align-items: center;
-    height: 30px;
-    margin: 0 10px;
+    height: var(--h-row);
+    margin: 0 8px;
     border-radius: var(--r-sm);
     color: var(--text-sidebar);
     transition: background-color var(--dur-fast) var(--ease);
@@ -413,7 +441,7 @@
     box-shadow: inset 0 0 0 1.5px var(--focus);
   }
   .nav-row .count {
-    margin-right: 10px;
+    margin-right: 12px;
   }
   .count.alert {
     color: var(--danger);
@@ -422,8 +450,8 @@
   .acc {
     display: grid;
     place-items: center;
-    width: 22px;
-    height: 22px;
+    width: var(--h-xs);
+    height: var(--h-xs);
     margin-right: 4px;
     border-radius: var(--r-xs);
     color: var(--text-3);
@@ -439,11 +467,16 @@
     flex: none;
     display: flex;
     flex-direction: column;
-    gap: 1px;
-    margin-bottom: 14px;
+    gap: 2px;
+    margin-bottom: 16px;
   }
   .tinted {
     color: var(--tint);
+  }
+  .tag-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
   }
 
   .row-btn {
@@ -452,8 +485,8 @@
     gap: 8px;
     flex: 1;
     min-width: 0;
-    height: 30px;
-    margin: 0 10px;
+    height: var(--h-row);
+    margin: 0 8px;
     padding: 0 8px;
     border-radius: var(--r-sm);
     font-size: var(--fs-body-ui);
@@ -492,7 +525,7 @@
   }
   .root-drop {
     height: 24px;
-    margin: 0 10px;
+    margin: 0 8px;
     border-radius: var(--r-sm);
   }
   .root-drop.over {
@@ -503,8 +536,8 @@
     flex: none;
     display: flex;
     flex-direction: column;
-    gap: 1px;
-    padding: 8px 0 10px;
+    gap: 2px;
+    padding: 8px 0;
     box-shadow: inset 0 1px 0 var(--separator);
   }
 

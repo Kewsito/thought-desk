@@ -2,6 +2,8 @@
   import { onMount, tick } from 'svelte';
   import Icon from './Icon.svelte';
   import Editor from '../editor/Editor.svelte';
+  import Backlinks from '../ui/Backlinks.svelte';
+  import TagRow from '../ui/TagRow.svelte';
   import { randomEmoji } from '../emoji';
   import { store } from '../store.svelte';
   import { ui } from '../ui.svelte';
@@ -70,12 +72,21 @@
   <div class="head" class:has-icon={!!meta?.icon}>
     {#if meta?.icon}
       <button class="page-icon" onclick={pickIcon} data-tip="Change icon">{meta.icon}</button>
-    {:else}
+    {/if}
+    {#if !meta?.icon || !meta?.tags.length}
       <div class="head-tools">
-        <button class="tool" onclick={() => store.update(page.id, { icon: randomEmoji() }, { immediate: true })}>
-          <Icon name="smile" size={15} />
-          Add icon
-        </button>
+        {#if !meta?.icon}
+          <button class="tool" onclick={() => store.update(page.id, { icon: randomEmoji() }, { immediate: true })}>
+            <Icon name="smile" size={16} />
+            Add icon
+          </button>
+        {/if}
+        {#if !meta?.tags.length}
+          <button class="tool" onclick={(e) => ui.pickTags(e.currentTarget as Element, 'pages', page.id)}>
+            <Icon name="tag" size={16} />
+            Add tag
+          </button>
+        {/if}
       </div>
     {/if}
     <!-- svelte-ignore a11y_missing_content (filled imperatively to keep the caret stable) -->
@@ -90,7 +101,13 @@
     ></h1>
   </div>
 
+  {#if meta?.tags.length}
+    <div class="page-tags"><TagRow table="pages" id={page.id} /></div>
+  {/if}
+
   <Editor bind:this={editor} {page} {onstats} />
+
+  <Backlinks id={page.id} />
 
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div class="tail" onclick={onTailClick}></div>
@@ -113,12 +130,19 @@
   .head.has-icon {
     padding-top: 56px;
   }
+  /* With an icon, the tools float in the space above it instead. */
+  .has-icon .head-tools {
+    top: 16px;
+  }
+  .page-tags {
+    margin: -2px 0 16px;
+  }
   .page-icon {
     display: grid;
     place-items: center;
     width: 80px;
     height: 80px;
-    margin: 0 0 14px -8px;
+    margin: 0 0 16px -8px;
     font-size: 60px;
     line-height: 1;
     border-radius: var(--r-lg);
@@ -135,8 +159,8 @@
   /* "Add icon" floats in the space above the title, so it never shifts it. */
   .head-tools {
     position: absolute;
-    top: 46px;
-    left: -10px;
+    top: 48px;
+    left: -8px;
     display: flex;
     gap: 2px;
     opacity: 0;
@@ -150,7 +174,7 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    height: 28px;
+    height: var(--h-sm);
     padding: 0 10px 0 8px;
     border-radius: var(--r-sm);
     font-size: var(--fs-ui);

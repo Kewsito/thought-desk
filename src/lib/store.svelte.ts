@@ -7,13 +7,14 @@ import type { PageMeta, PagePatch } from './types';
 
 const SAVE_DELAY = 400;
 
-/** What fills the main area: a page, or one of the app views. */
-export type View = 'page' | 'assignments' | 'calendar' | 'files';
-export const VIEWS: Exclude<View, 'page'>[] = ['assignments', 'calendar', 'files'];
+/** What fills the main area: a page, a tag's items, or an app view. */
+export type View = 'page' | 'tag' | 'home' | 'assignments' | 'calendar' | 'files';
+export type AppView = Exclude<View, 'page' | 'tag'>;
+export const VIEWS: AppView[] = ['home', 'assignments', 'calendar', 'files'];
 
 interface Entry {
   view: View;
-  /** The page, for page entries. */
+  /** The page id, or the tag name. */
   id: string | null;
 }
 
@@ -32,6 +33,8 @@ class Store {
   view = $state<View>('page');
   /** The open page; null while an app view is showing. */
   currentId = $state<string | null>(null);
+  /** The tag whose items are showing (view "tag"). */
+  tag = $state<string | null>(null);
   saving = $state(false);
   #history = $state<Entry[]>([]);
   #historyIndex = $state(-1);
@@ -111,6 +114,7 @@ class Store {
     const last = prefs.lastPageId ? this.byId.get(prefs.lastPageId) : undefined;
     const start = last && !last.deletedAt ? last : this.roots[0];
     if (start) this.open(start.id);
+    else this.go('home');
   }
 
   /** Reloads the page list, keeping local edits that aren't saved yet. */
@@ -131,6 +135,7 @@ class Store {
     if (!page || page.deletedAt) return;
     if (this.view === 'page' && this.currentId === id) return;
     this.view = 'page';
+    this.tag = null;
     this.currentId = id;
     prefs.lastPageId = id;
     prefs.lastView = 'page';
@@ -139,13 +144,23 @@ class Store {
     if (push) this.#push({ view: 'page', id });
   }
 
-  /** Shows Assignments, Calendar or Files. */
-  go(view: Exclude<View, 'page'>, { push = true }: { push?: boolean } = {}) {
+  /** Shows Home, Assignments, Calendar or Files. */
+  go(view: AppView, { push = true }: { push?: boolean } = {}) {
     if (this.view === view) return;
     this.view = view;
     this.currentId = null;
+    this.tag = null;
     prefs.lastView = view;
     if (push) this.#push({ view, id: null });
+  }
+
+  /** Shows everything tagged `name`. */
+  openTag(name: string, { push = true }: { push?: boolean } = {}) {
+    if (this.view === 'tag' && this.tag === name) return;
+    this.view = 'tag';
+    this.tag = name;
+    this.currentId = null;
+    if (push) this.#push({ view: 'tag', id: name });
   }
 
   #push(entry: Entry) {
@@ -168,6 +183,11 @@ class Store {
     let i = this.#historyIndex + dir;
     while (i >= 0 && i < this.#history.length) {
       const entry = this.#history[i];
+      if (entry.view === 'tag') {
+        this.#historyIndex = i;
+        this.openTag(entry.id ?? '', { push: false });
+        return;
+      }
       if (entry.view !== 'page') {
         this.#historyIndex = i;
         this.go(entry.view, { push: false });

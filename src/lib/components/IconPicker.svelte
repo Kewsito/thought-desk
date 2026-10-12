@@ -107,7 +107,7 @@
   .picker {
     position: fixed;
     z-index: 95;
-    width: 348px;
+    width: 352px;
     display: flex;
     flex-direction: column;
     max-height: 380px;
@@ -117,16 +117,16 @@
     display: flex;
     align-items: center;
     gap: 4px;
-    padding: 10px 10px 8px;
+    padding: 12px 12px 8px;
   }
   .field {
     flex: 1;
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 7px;
-    height: 30px;
-    padding: 0 9px;
+    gap: 8px;
+    height: var(--h-md);
+    padding: 0 10px;
     border-radius: var(--r-sm);
     background: var(--fill-2);
     color: var(--text-3);
@@ -139,8 +139,8 @@
     font-size: var(--fs-ui);
   }
   .text-btn {
-    height: 30px;
-    padding: 0 9px;
+    height: var(--h-md);
+    padding: 0 10px;
     border-radius: var(--r-sm);
     font-size: var(--fs-ui);
     font-weight: var(--fw-500);
@@ -155,10 +155,10 @@
   }
   .grid-wrap {
     overflow-y: auto;
-    padding: 0 8px 10px;
+    padding: 0 8px 12px;
   }
   .group {
-    padding: 10px 4px 6px;
+    padding: 12px 4px 4px;
     font-size: var(--fs-caption);
     font-weight: var(--fw-600);
     letter-spacing: 0.01em;

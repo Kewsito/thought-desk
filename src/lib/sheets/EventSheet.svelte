@@ -4,6 +4,8 @@
   import Modal from '../components/Modal.svelte';
   import Swatches from '../ui/Swatches.svelte';
   import Switch from '../ui/Switch.svelte';
+  import Backlinks from '../ui/Backlinks.svelte';
+  import TagRow from '../ui/TagRow.svelte';
   import { clock } from '../clock.svelte';
   import { colorVar, nextColor } from '../colors';
   import { addDays, diffDays, formatDate, fromMinutes, minutes, REPEAT_LABELS } from '../dates';
@@ -243,6 +245,15 @@
       </div>
     </div>
 
+    {#if existing}
+      <div class="group tags-group">
+        <div class="group-row">
+          <div class="row-label">Tags</div>
+          <TagRow table="events" id={existing.id} compact />
+        </div>
+      </div>
+    {/if}
+
     <h3 class="group-title">Notes</h3>
     <div class="group">
       <div class="group-row stack">
@@ -264,6 +275,8 @@
         {/if}
       </div>
     </div>
+
+    {#if existing}<Backlinks id={existing.id} inSheet />{/if}
   </div>
 
   <footer class="modal-foot">
@@ -286,9 +299,10 @@
 <style>
   .swatch {
     flex: none;
-    width: 14px;
-    height: 14px;
-    margin: 0 3px;
+    /* 4 + 12 + 4 = the 20px check in the assignment sheet, so titles line up. */
+    width: 12px;
+    height: 12px;
+    margin: 0 4px;
     border-radius: 50%;
     background: var(--c);
   }
@@ -302,6 +316,9 @@
     font-weight: var(--fw-650);
     letter-spacing: -0.016em;
     color: var(--text);
+  }
+  .tags-group {
+    margin-top: 8px;
   }
   .when {
     display: flex;
@@ -322,7 +339,7 @@
     color: var(--text);
   }
   .picker {
-    gap: 7px;
+    gap: 8px;
   }
   .picker :global(svg) {
     color: var(--text-3);

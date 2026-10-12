@@ -100,8 +100,8 @@
     align-items: center;
     gap: 8px;
     height: 24px;
-    padding: 0 9px;
-    border-radius: 7px;
+    padding: 0 8px;
+    border-radius: var(--r-xs);
     background: color-mix(in srgb, var(--ink) 90%, transparent);
     -webkit-backdrop-filter: blur(16px);
     backdrop-filter: blur(16px);

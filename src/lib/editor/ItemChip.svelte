@@ -157,7 +157,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    min-height: 34px;
+    min-height: var(--h-md);
     padding: 4px 8px;
     margin: 0 -8px;
     border-radius: var(--r-sm);
@@ -167,7 +167,7 @@
     background: var(--fill);
   }
   .chip.block .chip-icon {
-    width: 22px;
+    width: 24px;
     justify-content: center;
   }
   .chip.block .emoji {

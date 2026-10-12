@@ -11,6 +11,7 @@
   import { KINDS, fileKind, library } from '../library.svelte';
   import { planner } from '../planner.svelte';
   import { store } from '../store.svelte';
+  import { tags } from '../tags.svelte';
   import { ui } from '../ui.svelte';
   import { formatBytes, relativeTime } from '../time';
   import type { FileMeta, SearchHit } from '../types';
@@ -86,6 +87,8 @@
   }
 
   const GOTO = [
+    { title: 'Home', icon: 'home', keywords: 'today start dashboard', run: () => store.go('home') },
+    { title: 'Quick Capture', icon: 'bolt', keywords: 'capture inbox note todo add', run: () => (ui.capture = { text: '' }) },
     { title: 'Assignments', icon: 'assignment', keywords: 'homework tasks due', run: () => store.go('assignments') },
     { title: 'Calendar', icon: 'calendar', keywords: 'schedule events week month', run: () => store.go('calendar') },
     { title: 'Files', icon: 'files', keywords: 'library attachments documents', run: () => store.go('files') },
@@ -135,14 +138,32 @@
       return out;
     }
 
+    // "#exam" lists matching tags first.
+    const tagQuery = q.replace(/^#/, '').toLowerCase();
+    const tagRows = tags.used
+      .filter((t) => t.includes(tagQuery))
+      .slice(0, q.startsWith('#') ? 8 : 3)
+      .map(
+        (t): Row => ({
+          key: `t:${t}`,
+          group: 'Tags',
+          title: `#${t}`,
+          icon: 'tag',
+          color: tags.color(t),
+          meta: `${tags.counts.get(t) ?? 0} item${tags.counts.get(t) === 1 ? '' : 's'}`,
+          run: () => store.openTag(t),
+        }),
+      );
+    if (q.startsWith('#')) out.push(...tagRows);
     out.push(...pages);
+    const tagWords = (list: string[]) => list.map((t) => `#${t} ${t}`).join(' ');
     const assignments = planner.live.map((a) => ({
       a,
       title: a.title,
-      keywords: `${a.notes} ${a.courseId ? (planner.courseById.get(a.courseId)?.name ?? '') : ''}`,
+      keywords: `${a.notes} ${a.courseId ? (planner.courseById.get(a.courseId)?.name ?? '') : ''} ${tagWords(a.tags)}`,
     }));
     out.push(...rank(assignments, q, 6).map(({ a }) => assignmentRow(a)));
-    const events = planner.liveEvents.map((e) => ({ e, title: e.title, keywords: `${e.location} ${e.notes}` }));
+    const events = planner.liveEvents.map((e) => ({ e, title: e.title, keywords: `${e.location} ${e.notes} ${tagWords(e.tags)}` }));
     out.push(
       ...rank(events, q, 5).map(
         ({ e }): Row => ({
@@ -160,7 +181,7 @@
         }),
       ),
     );
-    const files = library.live.map((f) => ({ f, title: f.name, keywords: KINDS[fileKind(f)].label }));
+    const files = library.live.map((f) => ({ f, title: f.name, keywords: `${KINDS[fileKind(f)].label} ${tagWords(f.tags)}` }));
     out.push(
       ...rank(files, q, 5).map(
         ({ f }): Row => ({
@@ -174,6 +195,7 @@
         }),
       ),
     );
+    if (!q.startsWith('#')) out.push(...tagRows);
     out.push(...rank(GOTO, q, 3).map((g): Row => ({ key: `g:${g.title}`, group: 'Go To', title: g.title, icon: g.icon, run: g.run })));
     out.push(
       { key: 'new-page', group: 'Create', title: `New page “${q}”`, icon: 'page-plus', meta: 'Page', run: () => void store.create(null, { title: q }) },
@@ -288,7 +310,9 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    height: 58px;
+    height: 56px;
+    /* The search icon (20px, centred 30px in) shares a column with the
+       result icons below (6px list + 10px row padding + half of 28px). */
     padding: 0 20px;
     flex: none;
     color: var(--text-3);
@@ -313,7 +337,7 @@
     box-shadow: inset 0 1px 0 var(--hairline);
   }
   .group {
-    padding: 8px 12px 6px;
+    padding: 8px 10px 4px;
     font-size: var(--fs-caption);
     font-weight: var(--fw-600);
     letter-spacing: 0.01em;
@@ -325,7 +349,7 @@
     gap: 12px;
     width: 100%;
     min-height: 44px;
-    padding: 6px 14px 6px 10px;
+    padding: 6px 12px 6px 10px;
     border-radius: var(--r-md);
     text-align: left;
   }
@@ -334,8 +358,8 @@
   }
   .hit-icon {
     flex: none;
-    width: 30px;
-    height: 30px;
+    width: 28px;
+    height: 28px;
     display: grid;
     place-items: center;
     color: var(--text-2);
@@ -400,7 +424,7 @@
     color: var(--c-orange);
   }
   .none {
-    padding: 18px 16px 10px;
+    padding: 16px 16px 8px;
     text-align: center;
     color: var(--text-3);
     font-size: var(--fs-body-ui);
@@ -408,10 +432,10 @@
   .foot {
     flex: none;
     display: flex;
-    gap: 18px;
-    height: 38px;
+    gap: 16px;
+    height: 40px;
     align-items: center;
-    padding: 0 18px;
+    padding: 0 16px;
     box-shadow: inset 0 1px 0 var(--hairline);
     font-size: var(--fs-footnote);
     color: var(--text-3);

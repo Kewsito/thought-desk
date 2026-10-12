@@ -155,8 +155,8 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    height: 30px;
-    margin: 0 10px;
+    height: var(--h-row);
+    margin: 0 8px 2px;
     padding-right: 4px;
     border-radius: var(--r-sm);
     color: var(--text-sidebar);
@@ -272,8 +272,8 @@
   .act {
     display: grid;
     place-items: center;
-    width: 22px;
-    height: 22px;
+    width: var(--h-xs);
+    height: var(--h-xs);
     border-radius: var(--r-xs);
     color: var(--text-3);
     transition:

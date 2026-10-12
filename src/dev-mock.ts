@@ -4,7 +4,7 @@
  */
 
 import { mockConvertFileSrc, mockIPC, mockWindows } from '@tauri-apps/api/mocks';
-import type { Assignment, CalEvent, Course, FileMeta, PageMeta } from './lib/types';
+import type { Assignment, CalEvent, Course, FileMeta, PageMeta, Tag } from './lib/types';
 
 type Row = PageMeta & { content: string; text: string };
 
@@ -16,7 +16,8 @@ const load = (): Row[] => {
     return [];
   }
 };
-let rows: Row[] = load();
+// Data saved by older previews has no tags yet.
+let rows: Row[] = load().map((r) => ({ ...r, tags: r.tags ?? [] }));
 const persist = () => localStorage.setItem(KEY, JSON.stringify(rows));
 
 function make(parentId: string | null, title = '', icon = '', content = ''): Row {
@@ -32,6 +33,7 @@ function make(parentId: string | null, title = '', icon = '', content = ''): Row
     createdAt: ts,
     updatedAt: ts,
     deletedAt: null,
+    tags: [],
     content,
     text: '',
   };
@@ -106,6 +108,24 @@ if (rows.length === 0) {
   showcase.position = 2;
   showcase.favorite = Date.now();
   rows.push(showcase);
+  // A page saved as editor JSON, so its to-dos roll up onto Home.
+  const plan = make(null, 'Study plan', '📚');
+  plan.position = 3;
+  plan.tags = ['exam'];
+  const task = (text: string, checked = false) => ({
+    type: 'taskItem',
+    attrs: { checked },
+    content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
+  });
+  plan.content = JSON.stringify({
+    type: 'doc',
+    content: [
+      { type: 'paragraph', content: [{ type: 'text', text: 'Before the midterm:' }] },
+      { type: 'taskList', content: [task('Review chapters 1–3', true), task('Redo practice exam'), task('Make flashcards for cell parts')] },
+      { type: 'paragraph', content: [{ type: 'text', text: 'Linked from ' }, { type: 'mention', attrs: { id: welcome.id } }] },
+    ],
+  });
+  rows.push(plan);
   persist();
 }
 
@@ -116,6 +136,7 @@ interface PlannerData {
   assignments: Assignment[];
   events: CalEvent[];
   files: FileMeta[];
+  tags: Tag[];
 }
 const PLANNER_KEY = 'thoughtdesk.devmock.planner.v1';
 const BLOBS_KEY = 'thoughtdesk.devmock.blobs.v1';
@@ -148,6 +169,9 @@ const persistBlobs = () => {
 };
 
 let planner: PlannerData = loadPlanner() ?? seedPlanner();
+// Older preview data predates tags.
+planner.tags ??= [];
+for (const x of [...planner.assignments, ...planner.events, ...planner.files]) x.tags ??= [];
 const persistPlanner = () => localStorage.setItem(PLANNER_KEY, JSON.stringify(planner));
 
 function seedPlanner(): PlannerData {
@@ -171,6 +195,7 @@ function seedPlanner(): PlannerData {
     updatedAt: ts,
     completedAt: null,
     deletedAt: null,
+    tags: [],
     ...extra,
   });
   const event = (title: string, startDate: string, startTime: string | null, endTime: string | null, extra: Partial<CalEvent> = {}): CalEvent => ({
@@ -190,6 +215,7 @@ function seedPlanner(): PlannerData {
     createdAt: ts,
     updatedAt: ts,
     deletedAt: null,
+    tags: [],
     ...extra,
   });
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="420" viewBox="0 0 640 420"><rect width="640" height="420" fill="#e8f5e9"/><circle cx="320" cy="210" r="120" fill="#34c759" opacity=".35"/><circle cx="320" cy="210" r="60" fill="#34c759"/><text x="320" y="390" font-family="sans-serif" font-size="22" text-anchor="middle" fill="#1d1d1f">Plant cell</text></svg>`;
@@ -197,7 +223,7 @@ function seedPlanner(): PlannerData {
   const file = (name: string, mime: string, data: string): FileMeta => {
     const stored = `${crypto.randomUUID().replace(/-/g, '')}.${name.split('.').pop()}`;
     blobs[stored] = data;
-    return { id: crypto.randomUUID(), name, stored, mime, size: data.length, createdAt: ts, updatedAt: ts, deletedAt: null, missing: false };
+    return { id: crypto.randomUUID(), name, stored, mime, size: data.length, createdAt: ts, updatedAt: ts, deletedAt: null, missing: false, tags: [] };
   };
   const diagram = file('Plant cell.svg', 'image/svg+xml', `data:image/svg+xml;base64,${btoa(svg)}`);
   const syllabus = file('Biology syllabus.txt', 'text/plain', `data:text/plain;charset=utf-8,${encodeURIComponent(text)}`);
@@ -205,7 +231,7 @@ function seedPlanner(): PlannerData {
   return {
     courses: [bio, hist, cs],
     assignments: [
-      assignment('Lab report: osmosis', bio, iso(1), { dueTime: '23:59', priority: 3, status: 'doing', fileIds: [diagram.id] }),
+      assignment('Lab report: osmosis', bio, iso(1), { dueTime: '23:59', priority: 3, status: 'doing', fileIds: [diagram.id], tags: ['lab'] }),
       assignment('Read chapter 4', hist, iso(0), { priority: 1 }),
       assignment('Problem set 3', cs, iso(4), { dueTime: '17:00', priority: 2 }),
       assignment('Essay outline', hist, iso(-1)),
@@ -217,11 +243,46 @@ function seedPlanner(): PlannerData {
       event('Biology lecture', iso(-2), '09:00', '10:30', { courseId: bio.id, repeat: 'weekly', location: 'Hall B' }),
       event('History seminar', iso(-1), '13:00', '14:00', { courseId: hist.id, repeat: 'weekly' }),
       event('Study group', iso(1), '16:00', '18:00', { color: 'purple', location: 'Library' }),
-      event('Midterm exam', iso(6), '10:00', '12:00', { courseId: cs.id }),
+      event('Midterm exam', iso(6), '10:00', '12:00', { courseId: cs.id, tags: ['exam'] }),
       event('Spring break', iso(12), null, null, { endDate: iso(16), color: 'teal' }),
     ],
     files: [diagram, syllabus],
+    tags: [
+      { name: 'exam', color: 'red' },
+      { name: 'lab', color: 'green' },
+    ],
   };
+}
+
+const cleanTag = (t: string) =>
+  t.trim().replace(/^#+/, '').split(/\s+/).filter(Boolean).join('-').replace(/[",]/g, '').slice(0, 40).toLowerCase();
+
+const itemList = (table: string): { id: string; tags: string[]; deletedAt: number | null }[] =>
+  table === 'pages' ? rows : (planner as any)[table];
+
+function walkTodos(node: any, f: (item: any) => void) {
+  if (node?.type === 'taskItem') f(node);
+  for (const child of node?.content ?? []) walkTodos(child, f);
+}
+
+function itemText(item: any, titles: boolean): string {
+  const run = (n: any): string => {
+    if (n.type === 'text') return n.text ?? '';
+    if (n.type === 'hardBreak') return ' ';
+    if (n.type === 'mention') {
+      if (!titles) return n.attrs?.id ?? '';
+      const id = n.attrs?.id;
+      return (
+        rows.find((r) => r.id === id)?.title ||
+        planner.assignments.find((x) => x.id === id)?.title ||
+        planner.events.find((x) => x.id === id)?.title ||
+        planner.files.find((x) => x.id === id)?.name ||
+        'Untitled'
+      );
+    }
+    return (n.content ?? []).map(run).join('');
+  };
+  return item.content?.[0] ? run(item.content[0]).split(/\s+/).filter(Boolean).join(' ') : '';
 }
 
 const patchFields = <T extends object>(target: T, patch: Record<string, any>, keys: (keyof T)[]) => {
@@ -332,7 +393,7 @@ mockIPC((cmd, payload) => {
         const p = (a.patch ?? a.input) as Record<string, any>;
         if (!x) {
           const ts = Date.now();
-          x = { id: crypto.randomUUID(), title: '', courseId: null, dueDate: null, dueTime: null, status: 'todo', priority: 0, notes: '', pageId: null, fileIds: [], createdAt: ts, updatedAt: ts, completedAt: null, deletedAt: null };
+          x = { id: crypto.randomUUID(), title: '', courseId: null, dueDate: null, dueTime: null, status: 'todo', priority: 0, notes: '', pageId: null, fileIds: [], createdAt: ts, updatedAt: ts, completedAt: null, deletedAt: null, tags: [] };
           planner.assignments.push(x);
         }
         if (p.status !== undefined && p.status !== x.status) x.completedAt = p.status === 'done' ? Date.now() : null;
@@ -350,7 +411,7 @@ mockIPC((cmd, payload) => {
         const p = (a.patch ?? a.input) as Record<string, any>;
         if (!x) {
           const ts = Date.now();
-          x = { id: crypto.randomUUID(), title: '', startDate: p.startDate, startTime: null, endDate: p.startDate, endTime: null, color: '', courseId: null, location: '', notes: '', repeat: 'none', repeatUntil: null, pageId: null, createdAt: ts, updatedAt: ts, deletedAt: null };
+          x = { id: crypto.randomUUID(), title: '', startDate: p.startDate, startTime: null, endDate: p.startDate, endTime: null, color: '', courseId: null, location: '', notes: '', repeat: 'none', repeatUntil: null, pageId: null, createdAt: ts, updatedAt: ts, deletedAt: null, tags: [] };
           planner.events.push(x);
         }
         patchFields(x, p, ['title', 'startDate', 'startTime', 'endDate', 'endTime', 'color', 'courseId', 'location', 'notes', 'repeat', 'repeatUntil', 'pageId']);
@@ -378,6 +439,74 @@ mockIPC((cmd, payload) => {
         return null;
       case 'export_file':
         return `C:\\Downloads\\${planner.files.find((f) => f.id === a.id)?.name}`;
+      case 'list_tags':
+        return [...planner.tags].sort((x, y) => x.name.localeCompare(y.name));
+      case 'set_item_tags': {
+        const clean = [...new Set((a.tags as string[]).map(cleanTag).filter(Boolean))];
+        itemList(a.table).find((x) => x.id === a.id)!.tags = clean;
+        for (const t of clean) if (!planner.tags.some((x) => x.name === t)) planner.tags.push({ name: t, color: '' });
+        return clean;
+      }
+      case 'set_tag_color': {
+        const t = planner.tags.find((x) => x.name === a.name);
+        if (t) t.color = a.color;
+        else planner.tags.push({ name: a.name, color: a.color });
+        return null;
+      }
+      case 'rename_tag': {
+        const to = a.to === null ? null : cleanTag(a.to);
+        for (const table of ['pages', 'assignments', 'events', 'files']) {
+          for (const x of itemList(table)) {
+            if (!x.tags.includes(a.from)) continue;
+            x.tags = [...new Set(x.tags.flatMap((t) => (t === a.from ? (to ? [to] : []) : [t])))];
+          }
+        }
+        const old = planner.tags.find((x) => x.name === a.from);
+        planner.tags = planner.tags.filter((x) => x.name !== a.from);
+        if (to && !planner.tags.some((x) => x.name === to)) planner.tags.push({ name: to, color: old?.color ?? '' });
+        return null;
+      }
+      case 'backlinks':
+        return rows.filter((r) => !r.deletedAt && r.id !== a.id && r.content.includes(a.id)).map((r) => r.id);
+      case 'list_todos': {
+        const out: { pageId: string; index: number; text: string; key: string }[] = [];
+        for (const r of rows.filter((x) => !x.deletedAt)) {
+          let doc: any;
+          try {
+            doc = JSON.parse(r.content);
+          } catch {
+            continue;
+          }
+          let index = 0;
+          walkTodos(doc, (item) => {
+            if (!item.attrs?.checked) {
+              const text = itemText(item, true);
+              if (text) out.push({ pageId: r.id, index, text, key: itemText(item, false) });
+            }
+            index++;
+          });
+        }
+        return out;
+      }
+      case 'set_todo': {
+        const r = find(a.pageId);
+        const doc = JSON.parse(r.content);
+        let at = 0;
+        let found = false;
+        walkTodos(doc, (item) => {
+          if (at === a.index && itemText(item, false) === a.key) {
+            item.attrs.checked = a.checked;
+            found = true;
+          }
+          at++;
+        });
+        if (!found) throw 'That to-do changed. Refresh and try again.';
+        r.content = JSON.stringify(doc);
+        r.updatedAt = Date.now();
+        return r.updatedAt;
+      }
+      case 'set_capture_shortcut':
+        return null;
       case 'trash_item':
       case 'restore_item':
       case 'delete_item': {
@@ -451,7 +580,7 @@ mockIPC((cmd, payload) => {
     });
     persistBlobs();
     const ts = Date.now();
-    const meta: FileMeta = { id: crypto.randomUUID(), name, stored, mime, size: bytes.byteLength, createdAt: ts, updatedAt: ts, deletedAt: null, missing: false };
+    const meta: FileMeta = { id: crypto.randomUUID(), name, stored, mime, size: bytes.byteLength, createdAt: ts, updatedAt: ts, deletedAt: null, missing: false, tags: [] };
     planner.files.push(meta);
     persistPlanner();
     return meta;

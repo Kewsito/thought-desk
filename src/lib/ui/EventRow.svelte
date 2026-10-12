@@ -54,7 +54,7 @@
   .e-row {
     gap: 12px;
     min-height: 48px;
-    padding: 7px 12px;
+    padding: 8px 12px;
     cursor: default;
     outline: none;
     transition: background-color var(--dur-fast) var(--ease);

@@ -3,6 +3,7 @@
   import Icon from '../components/Icon.svelte';
   import Modal from '../components/Modal.svelte';
   import FileTile from '../ui/FileTile.svelte';
+  import TagRow from '../ui/TagRow.svelte';
   import { fileMenuItems, renameFile } from '../file-actions';
   import { KINDS, fileKind, fileSrc, library, previewable } from '../library.svelte';
   import { planner } from '../planner.svelte';
@@ -96,6 +97,7 @@
             <div class="group-row compact"><div class="row-label">Kind</div><span class="v">{KINDS[fileKind(file)].label}</span></div>
             <div class="group-row compact"><div class="row-label">Size</div><span class="v">{formatBytes(file.size)}</span></div>
             <div class="group-row compact"><div class="row-label">Added</div><span class="v">{relativeTime(file.createdAt)}</span></div>
+            <div class="group-row compact"><div class="row-label">Tags</div><TagRow table="files" id={file.id} compact /></div>
           </div>
         </div>
         <div>
@@ -175,7 +177,7 @@
     padding: 16px 18px;
     overflow: auto;
     font-family: var(--font-mono);
-    font-size: 12.5px;
+    font-size: 13px;
     line-height: 1.6;
     white-space: pre-wrap;
     overflow-wrap: anywhere;

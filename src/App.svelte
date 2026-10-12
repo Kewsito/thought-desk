@@ -7,6 +7,8 @@
   import { store } from './lib/store.svelte';
   import { planner } from './lib/planner.svelte';
   import { library } from './lib/library.svelte';
+  import { tags } from './lib/tags.svelte';
+  import { listen } from '@tauri-apps/api/event';
   import { ui } from './lib/ui.svelte';
   import type { Page } from './lib/types';
   import Sidebar from './lib/components/Sidebar.svelte';
@@ -22,6 +24,10 @@
   import Icon from './lib/components/Icon.svelte';
   import Tooltip from './lib/components/Tooltip.svelte';
   import FilePicker from './lib/components/FilePicker.svelte';
+  import TagPicker from './lib/components/TagPicker.svelte';
+  import HomeView from './lib/views/HomeView.svelte';
+  import TagView from './lib/views/TagView.svelte';
+  import CaptureSheet from './lib/sheets/CaptureSheet.svelte';
   import AssignmentsView from './lib/views/AssignmentsView.svelte';
   import CalendarView from './lib/views/CalendarView.svelte';
   import FilesView from './lib/views/FilesView.svelte';
@@ -41,8 +47,25 @@
   // nothing flashes white while resizing in dark mode.
   $effect(() => {
     const dark = prefs.resolvedTheme === 'dark';
+    void prefs.palette;
     void win.setTheme(dark ? 'dark' : 'light').catch(() => {});
-    void webviewWin.setBackgroundColor(dark ? [0, 0, 0, 255] : [255, 255, 255, 255]).catch(() => {});
+    // Read the theme's background once the new attributes are applied.
+    requestAnimationFrame(() => {
+      const hex = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+      const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+      const rgb = m ? [1, 2, 3].map((i) => parseInt(m[i], 16)) : dark ? [0, 0, 0] : [255, 255, 255];
+      void webviewWin.setBackgroundColor([rgb[0], rgb[1], rgb[2], 255]).catch(() => {});
+    });
+  });
+
+  // The system-wide Quick Capture shortcut follows its setting.
+  $effect(() => {
+    const on = prefs.globalCapture;
+    api.setCaptureShortcut(on).catch((e) => {
+      if (!on) return;
+      ui.error(e);
+      prefs.globalCapture = false;
+    });
   });
 
   // Each view starts at the top.
@@ -83,10 +106,11 @@
 
   onMount(() => {
     let unlistenClose: (() => void) | undefined;
+    let unlistenCapture: (() => void) | undefined;
     void (async () => {
       try {
         // Pages decide where to start, so the planner and files load alongside.
-        await Promise.all([planner.load(), library.load(), store.load()]);
+        await Promise.all([planner.load(), library.load(), tags.load(), store.load()]);
       } catch (e) {
         ui.error(e);
       }
@@ -104,12 +128,19 @@
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'hidden') void flushAll();
       });
+      // Quick Capture from anywhere (the Rust side shows the window first).
+      unlistenCapture = await listen('td-quick-capture', () => {
+        if (!ui.capture) ui.capture = { text: '' };
+      }).catch(() => undefined);
       unlistenClose = await win.onCloseRequested(async () => {
         window.dispatchEvent(new Event('td:flush'));
         await flushAll();
       });
     })();
-    return () => unlistenClose?.();
+    return () => {
+      unlistenClose?.();
+      unlistenCapture?.();
+    };
   });
 
   function onKeydown(e: KeyboardEvent) {
@@ -132,9 +163,13 @@
     } else if (mod && key === ',') {
       e.preventDefault();
       ui.settingsOpen = true;
-    } else if (mod && !e.shiftKey && !e.altKey && ['1', '2', '3'].includes(e.key)) {
+    } else if (mod && !e.shiftKey && !e.altKey && ['1', '2', '3', '4'].includes(e.key)) {
       e.preventDefault();
-      store.go(e.key === '1' ? 'assignments' : e.key === '2' ? 'calendar' : 'files');
+      store.go((['home', 'assignments', 'calendar', 'files'] as const)[Number(e.key) - 1]);
+    } else if (mod && e.shiftKey && e.code === 'Space') {
+      // Also caught system-wide when that's on; inside the app it always works.
+      e.preventDefault();
+      if (!ui.capture) ui.capture = { text: '' };
     } else if (e.altKey && e.key === 'ArrowLeft') {
       e.preventDefault();
       store.back();
@@ -201,7 +236,11 @@
   <main class="main">
     <TitleBar {words} {scrolled} />
     <div class="scroller" bind:this={scroller} onscroll={() => (scrolled = (scroller?.scrollTop ?? 0) > 2)}>
-      {#if store.view === 'assignments'}
+      {#if store.view === 'home'}
+        {#if planner.loaded && library.loaded}<HomeView />{/if}
+      {:else if store.view === 'tag' && store.tag}
+        {#key store.tag}<TagView name={store.tag} />{/key}
+      {:else if store.view === 'assignments'}
         {#if planner.loaded}<AssignmentsView />{/if}
       {:else if store.view === 'calendar'}
         {#if planner.loaded}<CalendarView />{/if}
@@ -247,6 +286,10 @@
 {#if ui.filePreview}
   {#key ui.filePreview}<FilePreview id={ui.filePreview} />{/key}
 {/if}
+{#if ui.tagPicker}
+  {#key ui.tagPicker}<TagPicker picker={ui.tagPicker} />{/key}
+{/if}
+{#if ui.capture}<CaptureSheet start={ui.capture.text} />{/if}
 {#if ui.filePicker}
   {#key ui.filePicker}<FilePicker picker={ui.filePicker} />{/key}
 {/if}

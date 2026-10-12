@@ -1,6 +1,6 @@
 /** Transient UI state: overlays, menus, dialogs and toasts. */
 
-import type { AssignmentPatch, EventPatch, FileMeta } from './types';
+import type { AssignmentPatch, EventPatch, FileMeta, TrashTable } from './types';
 
 export type MenuItem =
   | {
@@ -55,6 +55,13 @@ export interface FilePickerState {
   onPick: (files: FileMeta[]) => void;
 }
 
+export interface TagPickerState {
+  x: number;
+  y: number;
+  table: TrashTable;
+  id: string;
+}
+
 /** An assignment or event sheet: an existing item (id) or a new one (draft). */
 export interface SheetState<P> {
   id: string | null;
@@ -77,6 +84,9 @@ class UI {
   menu = $state<MenuState | null>(null);
   iconPicker = $state<IconPickerState | null>(null);
   filePicker = $state<FilePickerState | null>(null);
+  tagPicker = $state<TagPickerState | null>(null);
+  /** Quick Capture; the text it opens with. */
+  capture = $state<{ text: string } | null>(null);
   confirmState = $state<ConfirmState | null>(null);
   assignmentSheet = $state<SheetState<AssignmentPatch> | null>(null);
   eventSheet = $state<SheetState<EventPatch> | null>(null);
@@ -95,7 +105,8 @@ class UI {
       this.confirmState !== null ||
       this.assignmentSheet !== null ||
       this.eventSheet !== null ||
-      this.filePreview !== null
+      this.filePreview !== null ||
+      this.capture !== null
     );
   }
 
@@ -125,6 +136,11 @@ class UI {
   pickFile(anchor: Element | DOMRect, onPick: (files: FileMeta[]) => void, opts: { exclude?: string[]; multiple?: boolean } = {}) {
     const r = anchor instanceof Element ? anchor.getBoundingClientRect() : anchor;
     this.filePicker = { x: r.left, y: r.bottom + 6, onPick, ...opts };
+  }
+
+  pickTags(anchor: Element, table: TrashTable, id: string) {
+    const r = anchor.getBoundingClientRect();
+    this.tagPicker = { x: r.left, y: r.bottom + 6, table, id };
   }
 
   pickIcon(anchor: Element | DOMRect, onPick: (emoji: string) => void, onRemove?: () => void) {

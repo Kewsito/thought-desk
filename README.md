@@ -26,6 +26,11 @@ A fast, local-first notes workspace in the spirit of Notion: nested pages, a blo
 - **Formatting bubble** on selection: bold, italic, underline, strike, code, highlight, links, and turn into.
 - **Pages:** nested pages, sub-page blocks (`/page`), and inline page links (`@`) that stay in sync when pages are renamed.
 - **Sidebar:** drag pages to reorder or nest, favorites, collapsible sections, resizable width (double-click the edge to reset).
+- **Home:** the start screen: today's events, what's due soon, open to-dos from every page, recent pages and files, and your tags.
+- **Quick Capture:** `Ctrl+Shift+Space` (even while the app is in the background) or the box on Home. Save a to-do or a note to your Inbox page, or an assignment or event straight to the planner.
+- **Tags** on pages, assignments, events and files, with colors, a sidebar section, a page per tag, and `#tag` search.
+- **Backlinks:** pages, assignments and events show which pages link to them ("Linked from").
+- **To-dos roll up:** checkboxes written in any page collect on Home, where you can check them off.
 - **Assignments:** due dates (with optional times), courses with colors, status (to do / in progress / done), priority, notes, attachments and a linked notes page. Grouped as Overdue, Today, Tomorrow, This Week, Later; quick add, course filters and search.
 - **Calendar:** month view with a day agenda (due assignments, events, pages written that day) and a week view with a time grid. Events can be all-day or timed, span days, repeat daily/weekly/monthly, carry a course, color and location, and link a notes page. Drag events and assignments to reschedule.
 - **Files:** one library for everything you add: imports, drops, attachments and images in pages. Grid or list, filters by type and an *Unused* filter, previews for images, PDFs, audio, video and text, *Open in default app*, *Show in folder*, *Save a copy*, and where each file is used.
@@ -34,7 +39,7 @@ A fast, local-first notes workspace in the spirit of Notion: nested pages, a blo
 - **Trash:** one trash for pages, assignments, events and files: soft delete with *Undo*, restore (pages with their sub-pages), permanent delete, empty trash.
 - **Custom title bar:** back/forward, breadcrumbs, save status, favorite, page menu, and Windows-style window controls. Drag anywhere on the bar; double-click maximizes.
 - **Export:** copy as Markdown, or export a `.md` file to Downloads.
-- **Settings:** light / dark / system theme, accent color (Graphite plus nine colors), Default / Serif / Mono page fonts, small text, spell check, first day of the week, courses.
+- **Settings:** light / dark / system theme, six color themes (Default, Paper, Slate, Sage, Rose, Dusk), accent color (Graphite plus nine colors), Default / Serif / Mono page fonts, small text, spell check, Quick Capture from anywhere, first day of the week, courses.
 - Window size and position are remembered, a second launch focuses the running window, and changes autosave and are flushed on close/minimize.
 
 ## Keyboard
@@ -43,7 +48,8 @@ A fast, local-first notes workspace in the spirit of Notion: nested pages, a blo
 |---|---|
 | `Ctrl+K` / `Ctrl+P` | Search (with text selected in the editor, `Ctrl+K` adds a link) |
 | `Ctrl+N` | New page |
-| `Ctrl+1` / `Ctrl+2` / `Ctrl+3` | Assignments / Calendar / Files |
+| `Ctrl+Shift+Space` | Quick Capture (system-wide when enabled in Settings) |
+| `Ctrl+1` … `Ctrl+4` | Home / Assignments / Calendar / Files |
 | `←` / `→`, `T` | Calendar: previous or next month or week, today |
 | `Ctrl+\` | Toggle sidebar |
 | `Alt+←` / `Alt+→`, mouse back/forward | Navigate history |
@@ -84,8 +90,9 @@ src/                     TypeScript + Svelte UI
   lib/store.svelte.ts    page tree state, navigation history (pages and views), debounced saving
   lib/planner.svelte.ts  courses, assignments and events
   lib/library.svelte.ts  the file library
+  lib/tags.svelte.ts     tags; lib/todos.svelte.ts to-dos rolled up from pages; lib/capture.ts Quick Capture
   lib/editor/            TipTap editor: slash menu, @-links, block handle, callouts, file blocks…
-  lib/views/             Assignments, Calendar (month and week) and Files
+  lib/views/             Home, Assignments, Calendar (month and week), Files and tag pages
   lib/sheets/            assignment and event editors, file preview
   lib/components/        sidebar, title bar, search, settings, trash, menus
   lib/ui/                shared controls: segmented control, switch, swatches, rows…
@@ -94,6 +101,7 @@ src-tauri/src/
   db.rs                  SQLite schema and migrations, page tree, trash, FTS search (+ tests)
   planner.rs             courses, assignments, events (+ tests)
   library.rs             file library: import, rename, usage (+ tests)
+  organize.rs            tags, backlinks, to-dos rolled up from pages (+ tests)
   commands.rs            Tauri commands
   files.rs               `tdfile://` protocol, stray-file cleanup
   memory.rs              WebView2 suspend/trim while minimized

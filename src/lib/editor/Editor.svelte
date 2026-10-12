@@ -105,9 +105,18 @@
     const flushOnHide = () => document.visibilityState === 'hidden' && save();
     document.addEventListener('visibilitychange', flushOnHide);
     window.addEventListener('td:flush', save);
+    // Quick Capture adding a to-do to this page while it's open.
+    const appendTodo = (e: Event) => {
+      const { pageId, text } = (e as CustomEvent<{ pageId: string; text: string }>).detail;
+      if (pageId !== page.id || ed.isDestroyed) return;
+      const item = { type: 'taskItem', attrs: { checked: false }, content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] };
+      ed.chain().insertContentAt(ed.state.doc.content.size, { type: 'taskList', content: [item] }).run();
+    };
+    window.addEventListener('td:append-todo', appendTodo);
     return () => {
       document.removeEventListener('visibilitychange', flushOnHide);
       window.removeEventListener('td:flush', save);
+      window.removeEventListener('td:append-todo', appendTodo);
       save();
       ed.destroy();
     };

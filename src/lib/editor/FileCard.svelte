@@ -27,7 +27,7 @@
 
 <span class="card" class:gone role="button" tabindex="-1" onclick={open} onkeydown={(e) => e.key === 'Enter' && !gone && library.preview(id)}>
   {#if file && !gone}
-    <FileTile {file} size={36} />
+    <FileTile {file} size={40} />
     <span class="text">
       <span class="name">{file.name}</span>
       <span class="meta">{KINDS[fileKind(file)].label} · {file.missing ? 'Missing' : formatBytes(file.size)}</span>
@@ -48,7 +48,7 @@
     align-items: center;
     gap: 12px;
     min-height: 56px;
-    padding: 9px 10px 9px 10px;
+    padding: 8px 12px 8px 8px;
     margin: 4px 0;
     border-radius: var(--r-md);
     background: var(--bg-grouped);
@@ -109,9 +109,9 @@
   .tile-gone {
     display: grid;
     place-items: center;
-    width: 36px;
-    height: 36px;
-    border-radius: 9px;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--r-md);
     background: var(--fill);
     color: var(--text-4);
   }

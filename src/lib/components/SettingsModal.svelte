@@ -6,7 +6,7 @@
   import Swatches from '../ui/Swatches.svelte';
   import Switch from '../ui/Switch.svelte';
   import { api } from '../api';
-  import { ACCENTS, PALETTE, colorVar, nextColor, type Accent } from '../colors';
+  import { ACCENTS, PALETTE, PALETTES, colorVar, nextColor, type Accent } from '../colors';
   import { planner } from '../planner.svelte';
   import { prefs, type Font, type Theme, type WeekStart } from '../prefs.svelte';
   import { ui } from '../ui.svelte';
@@ -36,7 +36,8 @@
   const shortcuts: { label: string; keys: string[][] }[] = [
     { label: 'Search everything', keys: [['Ctrl', 'K']] },
     { label: 'New page', keys: [['Ctrl', 'N']] },
-    { label: 'Assignments, Calendar, Files', keys: [['Ctrl', '1'], ['Ctrl', '2'], ['Ctrl', '3']] },
+    { label: 'Quick Capture', keys: [['Ctrl', 'Shift', 'Space']] },
+    { label: 'Home, Assignments, Calendar, Files', keys: [['Ctrl', '1'], ['Ctrl', '2'], ['Ctrl', '3'], ['Ctrl', '4']] },
     { label: 'Calendar: previous or next', keys: [['←'], ['→']] },
     { label: 'Calendar: today', keys: [['T']] },
     { label: 'Toggle sidebar', keys: [['Ctrl', '\\']] },
@@ -114,6 +115,24 @@
         <div class="row-label">Theme</div>
         <Segmented options={themes} value={prefs.theme} onchange={(v) => (prefs.theme = v)} label="Theme" />
       </div>
+      <div class="group-row stack">
+        <div class="row-label">
+          Color theme
+          <small>Backgrounds and text, in light and dark</small>
+        </div>
+        <div class="palettes" role="radiogroup" aria-label="Color theme">
+          {#each PALETTES as p (p.key)}
+            {@const [bg, side, ink] = prefs.resolvedTheme === 'dark' ? p.dark : p.light}
+            <button class="palette" class:on={prefs.palette === p.key} role="radio" aria-checked={prefs.palette === p.key} onclick={() => (prefs.palette = p.key)}>
+              <span class="mini" style:--bg={bg} style:--side={side} style:--ink={ink}>
+                <span class="mini-side"><i></i><i></i><i></i></span>
+                <span class="mini-page"><b></b><i></i><i></i><i class="short"></i></span>
+              </span>
+              <span class="pname">{p.label}</span>
+            </button>
+          {/each}
+        </div>
+      </div>
       <div class="group-row">
         <div class="row-label">
           Accent color
@@ -152,6 +171,17 @@
           <small>Underline words that look misspelled</small>
         </div>
         <Switch on={prefs.spellcheck} label="Check spelling" onchange={() => (prefs.spellcheck = !prefs.spellcheck)} />
+      </div>
+    </div>
+
+    <h3 class="group-title">Quick Capture</h3>
+    <div class="group">
+      <div class="group-row">
+        <div class="row-label">
+          Capture from anywhere
+          <small>Ctrl+Shift+Space opens Quick Capture even when Thought Desk is in the background</small>
+        </div>
+        <Switch on={prefs.globalCapture} label="Capture from anywhere" onchange={() => (prefs.globalCapture = !prefs.globalCapture)} />
       </div>
     </div>
 
@@ -233,6 +263,79 @@
 </Modal>
 
 <style>
+  /* Colour themes: a tiny window drawn in each theme's colours. */
+  .palettes {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 8px;
+  }
+  .palette {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 4px;
+    border-radius: var(--r-md);
+    color: var(--text-2);
+    transition: color var(--dur) var(--ease);
+  }
+  .palette:hover,
+  .palette.on {
+    color: var(--text);
+  }
+  /* 10px tile − 4px padding = 6px picture corners. */
+  .mini {
+    position: relative;
+    display: flex;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    border-radius: var(--r-xs);
+    background: var(--bg);
+    box-shadow: 0 0 0 1px var(--hairline);
+    overflow: hidden;
+    transition: box-shadow var(--dur) var(--ease);
+  }
+  .palette.on .mini {
+    box-shadow:
+      0 0 0 2px var(--bg-grouped),
+      0 0 0 4px var(--accent);
+  }
+  .mini-side {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 30%;
+    padding: 8px 4px;
+    background: var(--side);
+  }
+  .mini-page {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 6px;
+  }
+  .mini i,
+  .mini b {
+    display: block;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--ink);
+    opacity: 0.22;
+  }
+  .mini b {
+    width: 60%;
+    height: 5px;
+    opacity: 0.85;
+  }
+  .mini i.short {
+    width: 50%;
+  }
+  .pname {
+    font-size: var(--fs-footnote);
+    font-weight: var(--fw-500);
+  }
+
   /* Font picker */
   .fonts {
     display: flex;
@@ -356,7 +459,7 @@
   }
   .path {
     font-family: var(--font-mono);
-    font-size: 11.5px !important;
+    font-size: 12px !important;
     color: var(--text-2) !important;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -373,7 +476,7 @@
   }
   .combo {
     display: flex;
-    gap: 3px;
+    gap: 4px;
   }
   .combo kbd {
     min-width: 20px;

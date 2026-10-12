@@ -52,8 +52,8 @@
     position: relative;
     display: grid;
     place-items: center;
-    width: 22px;
-    height: 22px;
+    width: var(--h-xs);
+    height: var(--h-xs);
     border-radius: 50%;
     background: var(--sw);
     box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.12);

@@ -110,6 +110,7 @@ pub struct Assignment {
     pub updated_at: i64,
     pub completed_at: Option<i64>,
     pub deleted_at: Option<i64>,
+    pub tags: Vec<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -131,7 +132,7 @@ pub struct AssignmentPatch {
 }
 
 const ASSIGNMENT_COLS: &str = "id, title, course_id, due_date, due_time, status, priority, notes, page_id,
-     created_at, updated_at, completed_at, deleted_at";
+     created_at, updated_at, completed_at, deleted_at, tags";
 
 fn assignment_from_row(r: &rusqlite::Row) -> rusqlite::Result<Assignment> {
     Ok(Assignment {
@@ -149,6 +150,7 @@ fn assignment_from_row(r: &rusqlite::Row) -> rusqlite::Result<Assignment> {
         updated_at: r.get(10)?,
         completed_at: r.get(11)?,
         deleted_at: r.get(12)?,
+        tags: crate::organize::parse_tags(&r.get::<_, String>(13)?),
     })
 }
 
@@ -246,6 +248,7 @@ pub struct Event {
     pub created_at: i64,
     pub updated_at: i64,
     pub deleted_at: Option<i64>,
+    pub tags: Vec<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -271,7 +274,7 @@ pub struct EventPatch {
 }
 
 const EVENT_COLS: &str = "id, title, start_date, start_time, end_date, end_time, color, course_id, location, notes,
-     repeat, repeat_until, page_id, created_at, updated_at, deleted_at";
+     repeat, repeat_until, page_id, created_at, updated_at, deleted_at, tags";
 
 fn event_from_row(r: &rusqlite::Row) -> rusqlite::Result<Event> {
     Ok(Event {
@@ -291,6 +294,7 @@ fn event_from_row(r: &rusqlite::Row) -> rusqlite::Result<Event> {
         created_at: r.get(13)?,
         updated_at: r.get(14)?,
         deleted_at: r.get(15)?,
+        tags: crate::organize::parse_tags(&r.get::<_, String>(16)?),
     })
 }
 

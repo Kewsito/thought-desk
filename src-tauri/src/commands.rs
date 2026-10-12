@@ -2,6 +2,7 @@
 
 use crate::db::{Db, Error, Page, PageMeta, PagePatch, Result, SearchHit, Table};
 use crate::library::{FileMeta, FilePatch, FileUsage};
+use crate::organize::{Tag, Todo};
 use crate::planner::{Assignment, AssignmentPatch, Course, CoursePatch, Event, EventPatch};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -241,6 +242,60 @@ pub fn create_event(db: State<Db>, input: EventPatch) -> Result<Event> {
 #[tauri::command]
 pub fn update_event(db: State<Db>, id: String, patch: EventPatch) -> Result<Event> {
     db.update_event(&id, patch)
+}
+
+// ---------------------------------------------------- tags, links, to-dos
+
+#[tauri::command]
+pub fn list_tags(db: State<Db>) -> Result<Vec<Tag>> {
+    db.list_tags()
+}
+
+#[tauri::command]
+pub fn set_item_tags(db: State<Db>, table: Table, id: String, tags: Vec<String>) -> Result<Vec<String>> {
+    db.set_item_tags(table, &id, &tags)
+}
+
+#[tauri::command]
+pub fn set_tag_color(db: State<Db>, name: String, color: String) -> Result<()> {
+    db.set_tag_color(&name, &color)
+}
+
+/// Renames a tag everywhere, or deletes it when `to` is null.
+#[tauri::command]
+pub fn rename_tag(db: State<Db>, from: String, to: Option<String>) -> Result<()> {
+    db.rename_tag(&from, to.as_deref())
+}
+
+#[tauri::command]
+pub fn backlinks(db: State<Db>, id: String) -> Result<Vec<String>> {
+    db.backlinks(&id)
+}
+
+#[tauri::command]
+pub fn list_todos(db: State<Db>) -> Result<Vec<Todo>> {
+    db.list_todos()
+}
+
+#[tauri::command]
+pub fn set_todo(db: State<Db>, page_id: String, index: usize, key: String, checked: bool) -> Result<i64> {
+    db.set_todo(&page_id, index, &key, checked)
+}
+
+/// Turns the system-wide Quick Capture shortcut (Ctrl+Shift+Space) on or off.
+#[tauri::command]
+pub fn set_capture_shortcut(app: AppHandle, enabled: bool) -> Result<()> {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+    let gs = app.global_shortcut();
+    let shortcut = crate::capture_shortcut();
+    let registered = gs.is_registered(shortcut);
+    if enabled && !registered {
+        gs.register(shortcut)
+            .map_err(|_| Error("Ctrl+Shift+Space is already used by another app".into()))?;
+    } else if !enabled && registered {
+        gs.unregister(shortcut).map_err(|e| Error(e.to_string()))?;
+    }
+    Ok(())
 }
 
 // ------------------------------------------------------------ trash (items)

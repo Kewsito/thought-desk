@@ -43,7 +43,7 @@
     gap: 4px;
     height: 40px;
     max-width: min(560px, calc(100vw - 32px));
-    padding: 0 6px 0 18px;
+    padding: 0 6px 0 16px;
     border-radius: 20px;
     background: color-mix(in srgb, var(--ink) 92%, transparent);
     -webkit-backdrop-filter: blur(20px) saturate(0.2);

@@ -10,9 +10,9 @@
   .switch {
     position: relative;
     flex: none;
-    width: 38px;
-    height: 22px;
-    border-radius: 11px;
+    width: 40px;
+    height: var(--h-xs);
+    border-radius: 12px;
     background: var(--fill-3);
     transition: background-color var(--dur) var(--ease);
   }
@@ -20,8 +20,8 @@
     position: absolute;
     top: 2px;
     left: 2px;
-    width: 18px;
-    height: 18px;
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
     background: #ffffff;
     box-shadow:

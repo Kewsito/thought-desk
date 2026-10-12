@@ -99,7 +99,7 @@
   .dialog {
     width: 300px;
     max-width: calc(100vw - 32px);
-    padding: 24px 20px 18px;
+    padding: 24px 20px 20px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -148,7 +148,6 @@
   }
   .field {
     width: 100%;
-    height: 32px;
     text-align: left;
   }
   .colors {
@@ -164,6 +163,5 @@
   }
   .actions .btn {
     min-width: 0;
-    height: 32px;
   }
 </style>

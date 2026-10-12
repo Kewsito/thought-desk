@@ -130,13 +130,13 @@
     position: fixed;
     z-index: 96;
     width: 320px;
-    max-height: 380px;
+    max-height: 384px;
     display: flex;
     flex-direction: column;
     transform-origin: top left;
   }
   .bar {
-    padding: 10px 10px 6px;
+    padding: 12px 12px 8px;
   }
   .field {
     color: var(--text-3);
@@ -147,10 +147,10 @@
   }
   .list {
     overflow-y: auto;
-    padding: 0 5px 5px;
+    padding: 0 4px 4px;
   }
   .head {
-    padding: 8px 9px 5px;
+    padding: 8px 8px 4px;
   }
   .row {
     display: flex;
@@ -158,7 +158,7 @@
     gap: 10px;
     width: 100%;
     min-height: 40px;
-    padding: 5px 8px 5px 6px;
+    padding: 6px 8px;
     border-radius: var(--r-sm);
     text-align: left;
   }
@@ -170,7 +170,7 @@
     place-items: center;
     width: 28px;
     height: 28px;
-    border-radius: 7px;
+    border-radius: var(--r-xs);
     background: var(--fill-2);
     color: var(--tint);
   }

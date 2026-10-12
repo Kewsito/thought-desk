@@ -30,7 +30,7 @@
     color: var(--text-3);
   }
   .empty.compact {
-    padding: 20px 16px 22px;
+    padding: 20px 16px 24px;
   }
   .badge {
     display: grid;

@@ -134,7 +134,7 @@
   .bit {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: 4px;
   }
   .bit :global(svg) {
     flex: none;
@@ -174,8 +174,8 @@
     flex: none;
     display: grid;
     place-items: center;
-    width: 26px;
-    height: 26px;
+    width: var(--h-xs);
+    height: var(--h-xs);
     border-radius: var(--r-xs);
     color: var(--text-3);
     opacity: 0;

@@ -11,7 +11,7 @@
   const pos = $derived.by(() => {
     const r = ctl.rect;
     if (!r) return { left: -9999, top: -9999 };
-    const width = 324;
+    const width = 320;
     const left = Math.max(8, Math.min(r.left, window.innerWidth - width - 8));
     const below = r.bottom + 8;
     const top = below + height > window.innerHeight - 8 && r.top - height - 8 > 8 ? r.top - height - 8 : below;
@@ -70,10 +70,10 @@
   .suggest {
     position: fixed;
     z-index: 60;
-    width: 324px;
+    width: 320px;
     max-height: min(384px, 52vh);
     overflow-y: auto;
-    padding: 5px;
+    padding: 4px;
     animation: suggest-in var(--dur) var(--ease-out);
   }
   @keyframes suggest-in {
@@ -83,14 +83,14 @@
     }
   }
   .group {
-    padding: 8px 9px 5px;
+    padding: 8px 8px 4px;
     font-size: var(--fs-caption);
     font-weight: var(--fw-600);
     letter-spacing: 0.01em;
     color: var(--text-3);
   }
   .group:first-child {
-    padding-top: 5px;
+    padding-top: 4px;
   }
   .row {
     display: flex;
@@ -98,7 +98,7 @@
     gap: 12px;
     width: 100%;
     min-height: 44px;
-    padding: 5px 10px 5px 5px;
+    padding: 6px 12px 6px 6px;
     border-radius: var(--r-sm);
     text-align: left;
   }
@@ -109,8 +109,8 @@
     flex: none;
     display: grid;
     place-items: center;
-    width: 34px;
-    height: 34px;
+    width: 32px;
+    height: 32px;
     border-radius: var(--r-sm);
     background: var(--bg-elevated);
     box-shadow:
@@ -123,7 +123,7 @@
     line-height: 1;
   }
   .label {
-    font-size: 12.5px;
+    font-size: 13px;
     font-weight: var(--fw-650);
     letter-spacing: -0.01em;
   }
@@ -152,7 +152,7 @@
   kbd {
     flex: none;
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
   }
   .empty {
     padding: 12px 12px;

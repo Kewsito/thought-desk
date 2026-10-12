@@ -46,9 +46,11 @@
     align-items: center;
     justify-content: center;
     gap: 6px;
-    height: 26px;
+    /* 28px segments + 2px padding = a 32px control, like buttons and fields;
+       8px − 2px = 6px corners, concentric with the track. */
+    height: var(--h-sm);
     padding: 0 12px;
-    border-radius: 6px;
+    border-radius: var(--r-xs);
     font-size: var(--fs-ui);
     font-weight: var(--fw-500);
     color: var(--text-2);
@@ -59,20 +61,17 @@
       box-shadow var(--dur) var(--ease);
   }
   .icon-only button {
-    width: 30px;
+    width: 32px;
     padding: 0;
   }
   button:hover:not(.on) {
     color: var(--text);
   }
   button.on {
-    background: var(--bg-elevated);
+    background: var(--knob);
     color: var(--text);
     box-shadow:
       0 0 0 0.5px var(--hairline),
       var(--shadow-sm);
-  }
-  :global(:root[data-theme='dark']) button.on {
-    background: #48484a;
   }
 </style>

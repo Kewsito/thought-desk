@@ -323,7 +323,7 @@
   .uses {
     display: inline-flex;
     align-items: center;
-    gap: 3px;
+    gap: 4px;
     color: var(--tint);
   }
   .card-more {
@@ -332,8 +332,8 @@
     right: 12px;
     display: grid;
     place-items: center;
-    width: 26px;
-    height: 26px;
+    width: var(--h-sm);
+    height: var(--h-sm);
     border-radius: var(--r-sm);
     background: var(--material-strong);
     -webkit-backdrop-filter: blur(12px);
@@ -394,8 +394,8 @@
     flex: none;
     display: grid;
     place-items: center;
-    width: 26px;
-    height: 26px;
+    width: var(--h-xs);
+    height: var(--h-xs);
     border-radius: var(--r-xs);
     color: var(--text-3);
     opacity: 0;

@@ -8,6 +8,8 @@ import type {
   EventPatch,
   FileMeta,
   FileUsage,
+  Tag,
+  Todo,
   Page,
   PageMeta,
   PagePatch,
@@ -60,6 +62,17 @@ export const api = {
   listEvents: () => invoke<CalEvent[]>('list_events'),
   createEvent: (input: EventPatch) => invoke<CalEvent>('create_event', { input }),
   updateEvent: (id: string, patch: EventPatch) => invoke<CalEvent>('update_event', { id, patch }),
+
+  listTags: () => invoke<Tag[]>('list_tags'),
+  setItemTags: (table: TrashTable, id: string, tags: string[]) => invoke<string[]>('set_item_tags', { table, id, tags }),
+  setTagColor: (name: string, color: string) => invoke<void>('set_tag_color', { name, color }),
+  /** Renames a tag everywhere, or deletes it with `to = null`. */
+  renameTag: (from: string, to: string | null) => invoke<void>('rename_tag', { from, to }),
+  backlinks: (id: string) => invoke<string[]>('backlinks', { id }),
+  listTodos: () => invoke<Todo[]>('list_todos'),
+  setTodo: (pageId: string, index: number, key: string, checked: boolean) =>
+    invoke<number>('set_todo', { pageId, index, key, checked }),
+  setCaptureShortcut: (enabled: boolean) => invoke<void>('set_capture_shortcut', { enabled }),
 
   trashItem: (table: TrashTable, id: string) => invoke<number>('trash_item', { table, id }),
   restoreItem: (table: TrashTable, id: string) => invoke<void>('restore_item', { table, id }),

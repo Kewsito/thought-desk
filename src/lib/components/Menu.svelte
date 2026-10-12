@@ -119,15 +119,16 @@
     max-width: 320px;
     max-height: calc(100vh - 16px);
     overflow-y: auto;
-    padding: 5px;
+    /* 12px popover − 4px padding = 8px rows: concentric corners. */
+    padding: 4px;
   }
   .item {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     width: 100%;
-    height: 30px;
-    padding: 0 10px 0 8px;
+    height: var(--h-sm);
+    padding: 0 12px 0 8px;
     border-radius: var(--r-sm);
     font-size: var(--fs-body-ui);
     color: var(--text);
@@ -136,7 +137,7 @@
   .icon {
     display: grid;
     place-items: center;
-    width: 18px;
+    width: 20px;
     color: var(--text-2);
   }
   .item.selected:not(:disabled) {
@@ -179,11 +180,11 @@
   }
   .sep {
     height: 1px;
-    margin: 5px 10px;
+    margin: 4px 8px;
     background: var(--hairline);
   }
   .header {
-    padding: 7px 10px 4px;
+    padding: 8px 8px 4px;
     font-size: var(--fs-caption);
     font-weight: var(--fw-600);
     letter-spacing: 0.01em;

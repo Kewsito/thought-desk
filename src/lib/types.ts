@@ -10,6 +10,7 @@ export interface PageMeta {
   createdAt: number;
   updatedAt: number;
   deletedAt: number | null;
+  tags: string[];
 }
 
 export interface Page extends PageMeta {
@@ -77,6 +78,7 @@ export interface Assignment {
   updatedAt: number;
   completedAt: number | null;
   deletedAt: number | null;
+  tags: string[];
 }
 
 export type AssignmentPatch = Partial<
@@ -104,6 +106,7 @@ export interface CalEvent {
   createdAt: number;
   updatedAt: number;
   deletedAt: number | null;
+  tags: string[];
 }
 
 export type EventPatch = Partial<
@@ -137,6 +140,23 @@ export interface FileMeta {
   deletedAt: number | null;
   /** The bytes are gone from disk. */
   missing: boolean;
+  tags: string[];
+}
+
+export interface Tag {
+  name: string;
+  /** Palette key, or empty for the default. */
+  color: string;
+}
+
+/** An unchecked to-do item inside a page. */
+export interface Todo {
+  pageId: string;
+  /** Position among the page's to-dos, in document order. */
+  index: number;
+  text: string;
+  /** Raw content of the item; proves it hasn't changed when toggling. */
+  key: string;
 }
 
 export interface FileUsage {

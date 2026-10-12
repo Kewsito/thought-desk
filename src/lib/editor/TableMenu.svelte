@@ -61,9 +61,10 @@
     z-index: 35;
     display: flex;
     align-items: center;
-    gap: 1px;
-    height: 34px;
-    padding: 0 3px;
+    gap: 2px;
+    /* 36px bar − 4px padding = 28px buttons; 10px − 4px = 6px corners. */
+    height: 36px;
+    padding: 0 4px;
     border-radius: var(--r-md);
     animation: table-menu-in var(--dur) var(--ease-out);
   }
@@ -76,9 +77,9 @@
   button {
     display: grid;
     place-items: center;
-    width: 28px;
-    height: 28px;
-    border-radius: var(--r-sm);
+    width: var(--h-sm);
+    height: var(--h-sm);
+    border-radius: var(--r-xs);
     color: var(--text-2);
     transition:
       background-color var(--dur-fast) var(--ease),
@@ -92,6 +93,6 @@
     width: 1px;
     height: 16px;
     background: var(--hairline);
-    margin: 0 3px;
+    margin: 0 2px;
   }
 </style>

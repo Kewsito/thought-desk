@@ -191,9 +191,10 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 5px;
-    height: 30px;
-    border-radius: var(--r-sm);
+    gap: 6px;
+    /* 40px bar − 4px padding = 32px buttons; 10px − 4px = 6px corners. */
+    height: var(--h-md);
+    border-radius: var(--r-xs);
     color: var(--text-2);
     transition:
       background-color var(--dur-fast) var(--ease),
@@ -204,15 +205,15 @@
     color: var(--text);
   }
   .fmt {
-    min-width: 30px;
-    padding: 0 7px;
+    min-width: var(--h-md);
+    padding: 0 8px;
   }
   .fmt.on {
     background: var(--fill-2);
     color: var(--text);
   }
   .kind {
-    padding: 0 8px 0 10px;
+    padding: 0 8px 0 12px;
     gap: 4px;
     font-size: var(--fs-ui);
     font-weight: var(--fw-550);
@@ -228,7 +229,7 @@
   .sep {
     flex: none;
     width: 1px;
-    height: 18px;
+    height: 16px;
     margin: 0 4px;
     background: var(--hairline);
   }
@@ -240,12 +241,12 @@
   .link-icon {
     display: grid;
     place-items: center;
-    width: 26px;
+    width: 28px;
     color: var(--text-3);
   }
   .link-form input {
     width: 248px;
-    height: 30px;
+    height: var(--h-md);
     padding: 0 6px 0 2px;
     border: none;
     background: transparent;

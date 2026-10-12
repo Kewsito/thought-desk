@@ -32,7 +32,8 @@
     gap: 2px;
     width: var(--size);
     height: var(--size);
-    border-radius: calc(var(--size) * 0.24);
+    /* About a quarter of the size, rounded to whole pixels. */
+    border-radius: round(calc(var(--size) * 0.24), 1px);
     background: color-mix(in srgb, var(--k) 14%, transparent);
     color: var(--k);
     overflow: hidden;
