@@ -9,6 +9,7 @@
   import { pageMenuItems } from '../page-actions';
   import { planner } from '../planner.svelte';
   import { cards } from '../cards.svelte';
+  import { library } from '../library.svelte';
   import { shortcuts } from '../shortcuts.svelte';
 
   let { words = 0, scrolled = false }: { words?: number; scrolled?: boolean } = $props();
@@ -49,6 +50,19 @@
     const untouched = page.updatedAt - page.createdAt < 1500;
     return untouched ? `Created ${relativeTime(page.createdAt, now)}` : `Edited ${relativeTime(page.updatedAt, now)}`;
   });
+
+  // App-wide buttons: appearance, Trash and Settings.
+  const themeIcon = $derived(prefs.theme === 'system' ? 'monitor' : prefs.theme === 'dark' ? 'moon' : 'sun');
+  const themeLabel = $derived(prefs.theme === 'system' ? 'System' : prefs.theme === 'dark' ? 'Dark' : 'Light');
+  function cycleTheme() {
+    prefs.theme = prefs.theme === 'system' ? 'light' : prefs.theme === 'light' ? 'dark' : 'system';
+  }
+  const trashCount = $derived(
+    store.trash.length +
+      planner.assignments.filter((a) => a.deletedAt).length +
+      planner.events.filter((e) => e.deletedAt).length +
+      library.files.filter((f) => f.deletedAt).length,
+  );
 
   let moreOpen = $state(false);
   function openMore(e: MouseEvent) {
@@ -120,7 +134,26 @@
         <Icon name="more" />
       </button>
     </div>
+    <span class="divider"></span>
   {/if}
+  <div class="app-tools">
+    <button class="icon-btn" onclick={cycleTheme} data-tip="Appearance: {themeLabel}" data-tip-key={shortcuts.label('theme')} aria-label="Appearance: {themeLabel}">
+      <Icon name={themeIcon} size={15} />
+    </button>
+    <button
+      class="icon-btn trash"
+      class:open={ui.trashOpen}
+      onclick={() => (ui.trashOpen = true)}
+      data-tip={trashCount ? `Trash · ${trashCount} item${trashCount === 1 ? '' : 's'}` : 'Trash'}
+      aria-label="Trash"
+    >
+      <Icon name="trash" />
+      {#if trashCount}<span class="badge">{trashCount > 99 ? '99+' : trashCount}</span>{/if}
+    </button>
+    <button class="icon-btn" class:open={ui.settingsOpen} onclick={() => (ui.settingsOpen = true)} data-tip="Settings" aria-label="Settings">
+      <Icon name="settings" />
+    </button>
+  </div>
   <span class="divider"></span>
   <WindowControls />
 </header>
@@ -243,6 +276,35 @@
   .icon-btn.open {
     background: var(--fill-2);
     color: var(--text);
+  }
+  .app-tools {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin-right: 4px;
+  }
+  /* The Trash count sits on the can's shoulder, like a Dock badge. */
+  .trash {
+    position: relative;
+  }
+  .badge {
+    position: absolute;
+    top: -1px;
+    right: -3px;
+    min-width: 14px;
+    height: 14px;
+    padding: 0 4px;
+    border-radius: 7px;
+    background: var(--text-3);
+    color: var(--bg);
+    font-size: 9.5px;
+    font-weight: var(--fw-600);
+    line-height: 14px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    box-shadow: 0 0 0 1.5px var(--bg);
+    pointer-events: none;
   }
   .divider {
     flex: none;

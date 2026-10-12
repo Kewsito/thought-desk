@@ -92,14 +92,6 @@
     cards: `${cards.dueCount} card${cards.dueCount === 1 ? '' : 's'} to study today`,
   });
 
-  const themeIcon = $derived(prefs.theme === 'system' ? 'monitor' : prefs.theme === 'dark' ? 'moon' : 'sun');
-  const themeLabel = $derived(prefs.theme === 'system' ? 'System' : prefs.theme === 'dark' ? 'Dark' : 'Light');
-  const trashCount = $derived(
-    store.trash.length +
-      planner.assignments.filter((a) => a.deletedAt).length +
-      planner.events.filter((e) => e.deletedAt).length +
-      library.files.filter((f) => f.deletedAt).length,
-  );
 
   /** Open assignments per course. */
   const courseOpen = $derived.by(() => {
@@ -113,9 +105,6 @@
     if (c) store.openCourse(c.id);
   }
 
-  function cycleTheme() {
-    prefs.theme = prefs.theme === 'system' ? 'light' : prefs.theme === 'light' ? 'dark' : 'system';
-  }
 </script>
 
 <aside class="sidebar" class:resizing style:width="{prefs.sidebarWidth}px">
@@ -263,27 +252,6 @@
         ></div>
       {/if}
     </section>
-  </div>
-
-  <!-- Trash and Settings share one row shape: full width, with a trailing
-       accessory (the count, the appearance toggle) inside the row. -->
-  <div class="foot">
-    <div class="nav-row" class:active={ui.trashOpen}>
-      <button class="nav-main" onclick={() => (ui.trashOpen = true)}>
-        <span class="lead"><Icon name="trash" /></span>
-        <span class="label">Trash</span>
-      </button>
-      {#if trashCount}<span class="count">{trashCount}</span>{/if}
-    </div>
-    <div class="nav-row" class:active={ui.settingsOpen}>
-      <button class="nav-main" onclick={() => (ui.settingsOpen = true)}>
-        <span class="lead"><Icon name="settings" /></span>
-        <span class="label">Settings</span>
-      </button>
-      <button class="acc" onclick={cycleTheme} data-tip="Appearance: {themeLabel}" data-tip-key={shortcuts.label('theme')} aria-label="Appearance: {themeLabel}">
-        <Icon name={themeIcon} size={15} />
-      </button>
-    </div>
   </div>
 
   <div
@@ -457,7 +425,7 @@
     color: var(--text);
   }
 
-  /* Navigation and footer rows share the tree rows' metrics: a 30px row
+  /* Navigation rows share the tree rows' metrics: a 30px row
      inset 10px from the edges, a 20px icon slot, and trailing accessories
      that sit 4px from the right edge, like a tree row's actions. */
   .nav-row {
@@ -502,22 +470,6 @@
   .count.alert {
     color: var(--danger);
     font-weight: var(--fw-600);
-  }
-  .acc {
-    display: grid;
-    place-items: center;
-    width: var(--h-xs);
-    height: var(--h-xs);
-    margin-right: 4px;
-    border-radius: var(--r-xs);
-    color: var(--text-3);
-    transition:
-      background-color var(--dur-fast) var(--ease),
-      color var(--dur-fast) var(--ease);
-  }
-  .acc:hover {
-    background: var(--fill-2);
-    color: var(--text);
   }
   .views {
     flex: none;
@@ -588,15 +540,6 @@
   }
   .root-drop.over {
     box-shadow: inset 0 2px 0 var(--text);
-  }
-
-  .foot {
-    flex: none;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    padding: 8px 0;
-    box-shadow: inset 0 1px 0 var(--separator);
   }
 
   /* Resize grip: invisible until hovered, then a 2px rule. */
