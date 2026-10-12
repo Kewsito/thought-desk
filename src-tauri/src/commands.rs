@@ -312,10 +312,10 @@ pub fn set_capture_shortcut(app: AppHandle, enabled: bool, accelerator: String) 
     Ok(())
 }
 
-/// Memory in use by the app and its web view, right now.
+/// Has the web view drop its graphics caches now (after closing Settings).
 #[tauri::command]
-pub fn memory_usage(meter: State<crate::memory::MemoryMeter>) -> crate::memory::MemoryUsage {
-    meter.read()
+pub fn trim_memory(webview: tauri::WebviewWindow) {
+    crate::memory::trim(webview);
 }
 
 #[tauri::command(async)]

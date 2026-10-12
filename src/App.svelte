@@ -6,7 +6,6 @@
   import { cssToRgb } from './lib/color-math';
   import { sidebarSlide } from './lib/motion';
   import { shortcuts, toAccelerator, type ShortcutId } from './lib/shortcuts.svelte';
-  import { memory } from './lib/memory.svelte';
   import { prefs } from './lib/prefs.svelte';
   import { store } from './lib/store.svelte';
   import { planner } from './lib/planner.svelte';
@@ -79,11 +78,6 @@
       ui.error(e);
       prefs.globalCapture = false;
     });
-  });
-
-  // The sidebar's memory readout keeps readings coming while it's shown.
-  $effect(() => {
-    if (prefs.showMemory) return memory.watch();
   });
 
   /** What each app-wide shortcut does (the calendar's own are in its view). */

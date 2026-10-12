@@ -92,7 +92,8 @@ export const api = {
       headers: { 'x-name': encodeURIComponent(name), 'x-ext': ext },
     }),
   printPage: () => invoke<void>('print_page'),
-  memoryUsage: () => invoke<{ app: number; webview: number; processes: number; systemTotal: number }>('memory_usage'),
+  /** Frees graphics memory right away (after closing something heavy to draw). */
+  trimMemory: () => invoke<void>('trim_memory'),
   /** `accelerator` like "CmdOrCtrl+Shift+Space". */
   setCaptureShortcut: (enabled: boolean, accelerator: string) => invoke<void>('set_capture_shortcut', { enabled, accelerator }),
 

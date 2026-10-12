@@ -12,7 +12,6 @@
   import { dueState } from '../dates';
   import { colorVar } from '../colors';
   import { comboKeys, shortcuts, type ShortcutId } from '../shortcuts.svelte';
-  import { memory } from '../memory.svelte';
   import { Progressive, sliceKeeping } from '../progressive.svelte';
   import { ui } from '../ui.svelte';
 
@@ -269,15 +268,6 @@
   <!-- Trash and Settings share one row shape: full width, with a trailing
        accessory (the count, the appearance toggle) inside the row. -->
   <div class="foot">
-    {#if prefs.showMemory}
-      <div class="nav-row">
-        <button class="nav-main" onclick={() => (ui.settingsOpen = true)} data-tip="Memory Thought Desk is using (details in Settings)">
-          <span class="lead"><Icon name="activity" /></span>
-          <span class="label">Memory</span>
-        </button>
-        <span class="count mem">{memory.current ? `${Math.round(memory.current.total / 1048576)} MB` : '…'}</span>
-      </div>
-    {/if}
     <div class="nav-row" class:active={ui.trashOpen}>
       <button class="nav-main" onclick={() => (ui.trashOpen = true)}>
         <span class="lead"><Icon name="trash" /></span>
@@ -632,8 +622,5 @@
   .resizing .resizer::after {
     opacity: 1;
     transition-delay: 80ms;
-  }
-  .count.mem {
-    font-variant-numeric: tabular-nums;
   }
 </style>

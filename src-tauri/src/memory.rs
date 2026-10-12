@@ -63,6 +63,30 @@ fn on_focus_change<R: Runtime>(window: &Window<R>, focused: bool) {
     });
 }
 
+/// Bumped by every `trim`, so only the latest one restores the target.
+static TRIM_GEN: AtomicU64 = AtomicU64::new(0);
+/// Long enough for WebView2 to act on the low target and drop its caches.
+const TRIM_FOR: Duration = Duration::from_millis(1500);
+
+/// Drops graphics and decode caches right away, after closing something
+/// expensive to draw (Settings), instead of whenever Chromium gets to it.
+/// The target goes low briefly, then back to normal; nothing is paused.
+pub fn trim<R: Runtime>(webview: tauri::WebviewWindow<R>) {
+    // Minimized or idle-trimmed: the target is already low and owned there.
+    if LOW.load(Ordering::Relaxed) || IDLE_TRIMMED.load(Ordering::Relaxed) {
+        return;
+    }
+    let generation = TRIM_GEN.fetch_add(1, Ordering::Relaxed) + 1;
+    set_memory_target(&webview, true);
+    std::thread::spawn(move || {
+        std::thread::sleep(TRIM_FOR);
+        let superseded = TRIM_GEN.load(Ordering::Relaxed) != generation;
+        if !superseded && !LOW.load(Ordering::Relaxed) && !IDLE_TRIMMED.load(Ordering::Relaxed) {
+            set_memory_target(&webview, false);
+        }
+    });
+}
+
 /// Only the memory target: the page keeps running and stays visible.
 #[cfg(windows)]
 fn set_memory_target<R: Runtime>(webview: &tauri::WebviewWindow<R>, low: bool) {
@@ -122,117 +146,3 @@ fn set_low_memory<R: Runtime>(webview: &tauri::WebviewWindow<R>, low: bool) {
 
 #[cfg(not(windows))]
 fn set_low_memory<R: Runtime>(_webview: &tauri::WebviewWindow<R>, _low: bool) {}
-
-// ------------------------------------------------------------------ meter
-
-/// Memory that belongs to this process alone: the private working set, the
-/// figure Task Manager shows. Summing full working sets would count memory the
-/// web view processes share (DLLs, graphics buffers) once per process, which
-/// overstates the total several times over. Falls back to `fallback`.
-#[cfg(windows)]
-fn private_memory(pid: sysinfo::Pid, fallback: u64) -> u64 {
-    use windows::Win32::Foundation::CloseHandle;
-    use windows::Win32::System::ProcessStatus::{GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS, PROCESS_MEMORY_COUNTERS_EX2};
-    use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
-
-    unsafe {
-        let Ok(handle) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid.as_u32()) else {
-            return fallback;
-        };
-        let mut counters = PROCESS_MEMORY_COUNTERS_EX2 {
-            cb: std::mem::size_of::<PROCESS_MEMORY_COUNTERS_EX2>() as u32,
-            ..Default::default()
-        };
-        let ok = GetProcessMemoryInfo(handle, &mut counters as *mut _ as *mut PROCESS_MEMORY_COUNTERS, counters.cb).is_ok();
-        let _ = CloseHandle(handle);
-        if ok && counters.PrivateWorkingSetSize > 0 {
-            counters.PrivateWorkingSetSize as u64
-        } else {
-            fallback
-        }
-    }
-}
-
-#[cfg(not(windows))]
-fn private_memory(_pid: sysinfo::Pid, fallback: u64) -> u64 {
-    fallback
-}
-
-/// How much memory Thought Desk is using right now: this process (the Rust
-/// core) and the web view processes it started (on Windows, WebView2's
-/// browser, renderer and GPU processes), which hold most of it.
-#[derive(serde::Serialize, Clone, Copy, Debug, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct MemoryUsage {
-    /// Bytes in this process.
-    pub app: u64,
-    /// Bytes in the web view's processes, together.
-    pub webview: u64,
-    /// How many web view processes there are.
-    pub processes: usize,
-    /// The computer's installed memory, for scale.
-    pub system_total: u64,
-}
-
-/// Process list kept between readings, so each one only refreshes memory.
-pub struct MemoryMeter(std::sync::Mutex<sysinfo::System>);
-
-impl Default for MemoryMeter {
-    fn default() -> Self {
-        let mut sys = sysinfo::System::new();
-        sys.refresh_memory();
-        Self(std::sync::Mutex::new(sys))
-    }
-}
-
-impl MemoryMeter {
-    pub fn read(&self) -> MemoryUsage {
-        use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate};
-        use std::collections::HashMap;
-
-        let Ok(me) = sysinfo::get_current_pid() else { return MemoryUsage::default() };
-        let mut sys = self.0.lock().unwrap_or_else(|p| p.into_inner());
-        sys.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing().with_memory());
-
-        let mut children: HashMap<Pid, Vec<Pid>> = HashMap::new();
-        for (pid, process) in sys.processes() {
-            if let Some(parent) = process.parent() {
-                children.entry(parent).or_default().push(*pid);
-            }
-        }
-        // Everything started by this process, however deep.
-        let mut webview = 0;
-        let mut processes = 0;
-        let mut stack = children.get(&me).cloned().unwrap_or_default();
-        while let Some(pid) = stack.pop() {
-            if let Some(p) = sys.process(pid) {
-                webview += private_memory(pid, p.memory());
-                processes += 1;
-            }
-            if let Some(more) = children.get(&pid) {
-                stack.extend(more);
-            }
-        }
-        MemoryUsage {
-            app: sys.process(me).map(|p| private_memory(me, p.memory())).unwrap_or(0),
-            webview,
-            processes,
-            system_total: sys.total_memory(),
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn reads_this_process() {
-        let meter = MemoryMeter::default();
-        let usage = meter.read();
-        assert!(usage.app > 1_000_000, "a running process uses some memory: {usage:?}");
-        assert!(usage.system_total >= usage.app);
-        // Readings repeat without trouble.
-        assert!(meter.read().app > 0);
-    }
-}

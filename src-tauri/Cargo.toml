@@ -22,7 +22,6 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite = { version = "0.40", features = ["bundled"] }
 uuid = { version = "1", features = ["v4"] }
-sysinfo = { version = "0.36.1", default-features = false, features = ["system"] }
 
 # Small, fast release binary: the app is mostly I/O bound, so favour size.
 [profile.release]
@@ -37,5 +36,3 @@ strip = true
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.39.1"
 windows-core = "0.62.2"
-# Per-process private memory (what Task Manager shows) for the memory meter.
-windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_System_ProcessStatus", "Win32_System_Threading"] }

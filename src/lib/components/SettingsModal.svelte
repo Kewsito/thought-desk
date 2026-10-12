@@ -7,7 +7,6 @@
   import Switch from '../ui/Switch.svelte';
   import ColorWheel from '../ui/ColorWheel.svelte';
   import ShortcutsEditor from './ShortcutsEditor.svelte';
-  import MemoryPanel from './MemoryPanel.svelte';
   import { oklchHex, parseHex, rgbToOklch } from '../color-math';
   import { shortcuts } from '../shortcuts.svelte';
   import { api } from '../api';
@@ -23,6 +22,9 @@
 
   onMount(() => {
     api.dataInfo().then((d) => (info = d), ui.error);
+    // Settings is the most expensive screen to draw. Chromium keeps those
+    // graphics around for minutes; let it go as soon as Settings closes.
+    return () => void api.trimMemory().catch(() => {});
   });
 
   const themes: { value: Theme; label: string; icon: string }[] = [
@@ -393,8 +395,6 @@
       {/if}
     </div>
     <p class="group-note">Everything is stored on this computer: one SQLite file plus a files folder. Back up the folder above to keep your work safe.</p>
-
-    <MemoryPanel />
 
     <ShortcutsEditor />
 

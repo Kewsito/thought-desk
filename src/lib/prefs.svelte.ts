@@ -59,8 +59,6 @@ interface Stored {
   shortcuts: Partial<Record<ShortcutId, string | null>>;
   customTheme: CustomTheme;
   customAccent: CustomAccent;
-  /** Memory use in the sidebar. */
-  showMemory: boolean;
 }
 
 /** Monday in most of the world, Sunday where the locale says so. */
@@ -102,7 +100,6 @@ const defaults: Stored = {
   shortcuts: {},
   customTheme: { hue: 250, tint: 0.5 },
   customAccent: { hue: 265, chroma: 0.2, lightness: 0.58 },
-  showMemory: false,
 };
 
 function read(): Stored {
@@ -147,7 +144,6 @@ class Prefs {
   shortcuts = $state<Partial<Record<ShortcutId, string | null>>>(this.#initial.shortcuts);
   customTheme = $state<CustomTheme>(this.#initial.customTheme);
   customAccent = $state<CustomAccent>(this.#initial.customAccent);
-  showMemory = $state(this.#initial.showMemory);
 
   systemDark = $state(darkQuery.matches);
   resolvedTheme = $derived<'light' | 'dark'>(
@@ -183,7 +179,6 @@ class Prefs {
       shortcuts: $state.snapshot(this.shortcuts),
       customTheme: $state.snapshot(this.customTheme),
       customAccent: $state.snapshot(this.customAccent),
-      showMemory: this.showMemory,
     };
   }
 }

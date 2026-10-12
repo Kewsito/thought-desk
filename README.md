@@ -59,7 +59,6 @@ Tested against a workspace of 7,500 pages (a 2 MB book among them), 2,000 files,
 - **Custom title bar:** back/forward, breadcrumbs, save status, favorite, page menu, and Windows-style window controls. Drag anywhere on the bar; double-click maximizes.
 - **Settings:** light / dark / system theme, six color themes (Default, Paper, Slate, Sage, Rose, Dusk) plus **Custom**, made on a color wheel (pick a hue and how strongly it tints; light and dark versions are generated with readable text), accent color (Graphite, nine colors, or any color from a wheel, brightness slider or hex code), Default / Serif / Mono page fonts, small text, spell check, Quick Capture from anywhere, first day of the week, calendar import, reminders, courses.
 - **Your own keyboard shortcuts:** Settings → Keyboard Shortcuts lists every command; click one and press new keys. Clashes are caught (a shortcut moves from the command that had it; editor keys like Ctrl+B are kept), Backspace removes a shortcut, and each can be reset. Tooltips follow your choices, and the system-wide Quick Capture key re-registers with Windows.
-- **Memory meter:** Settings → Memory shows how much RAM Thought Desk is using right now (the app core plus its WebView2 processes, measured like Task Manager), a one-minute graph, the peak, and the share of your computer's memory. Turn on *Show in sidebar* to keep it in view.
 - Window size and position are remembered, a second launch focuses the running window, and changes autosave and are flushed on close/minimize.
 
 ## Keyboard
@@ -129,7 +128,7 @@ src-tauri/src/
   cards.rs               flashcards: decks, reviews (+ tests)
   files.rs               `tdfile://` protocol (byte ranges), stray-file cleanup
   stress.rs              heavy-workspace benchmark (`cargo test --release stress -- --ignored`)
-  memory.rs              WebView2 suspend/trim while minimized
+  memory.rs              WebView2 suspend/trim while minimized, idle, or after Settings
 ```
 
 ## License

@@ -46,7 +46,6 @@ fn main() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .manage(reminders::Reminders::default())
-        .manage(memory::MemoryMeter::default())
         .plugin(
             // Quick Capture from anywhere: bring the window up and ask the UI
             // to open the capture box. Registered on demand (Settings).
@@ -134,7 +133,7 @@ fn main() {
             commands::set_reminders,
             commands::export_document,
             commands::print_page,
-            commands::memory_usage,
+            commands::trim_memory,
             commands::list_cards,
             commands::list_decks,
             commands::save_review,

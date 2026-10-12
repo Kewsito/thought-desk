@@ -594,13 +594,8 @@ mockIPC((cmd, payload) => {
       case 'reset_reviews':
         planner.reviews = planner.reviews.filter((x) => x.pageId !== a.pageId);
         return null;
-      case 'memory_usage': {
-        // Plausible numbers for the preview: a small core and a web view
-        // that grows a little with what's open.
-        const heap = (performance as any).memory?.usedJSHeapSize ?? 20e6;
-        const wobble = Math.sin(Date.now() / 7000) * 3e6;
-        return { app: 31e6 + wobble / 3, webview: 92e6 + heap * 2 + wobble, processes: 4, systemTotal: 16 * 2 ** 30 };
-      }
+      case 'trim_memory':
+        return null;
       case 'print_page':
         window.print();
         return null;
