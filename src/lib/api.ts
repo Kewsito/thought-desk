@@ -91,7 +91,8 @@ export const api = {
     invoke<string>('export_document', bytes, {
       headers: { 'x-name': encodeURIComponent(name), 'x-ext': ext },
     }),
-  printPage: () => invoke<void>('print_page'),
+  /** Saves the open page as a PDF in Downloads; returns its path. */
+  exportPdf: (title: string) => invoke<string>('export_pdf', { title }),
   /** Frees graphics memory right away (after closing something heavy to draw). */
   trimMemory: () => invoke<void>('trim_memory'),
   /** `accelerator` like "CmdOrCtrl+Shift+Space". */

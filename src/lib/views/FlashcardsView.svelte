@@ -219,6 +219,12 @@
   .new {
     color: var(--c-blue);
   }
+  /* One width for every count, so the bars and buttons line up down the list. */
+  .deck .btn {
+    min-width: 88px;
+    justify-content: center;
+    font-variant-numeric: tabular-nums;
+  }
   .mastery {
     flex: none;
     width: 64px;

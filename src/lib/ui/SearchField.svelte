@@ -7,7 +7,15 @@
     placeholder = 'Filter',
     autofocus = false,
     width,
-  }: { value?: string; placeholder?: string; autofocus?: boolean; width?: number } = $props();
+    small = false,
+  }: {
+    value?: string;
+    placeholder?: string;
+    autofocus?: boolean;
+    width?: number;
+    /** 28px tall, to sit in a row of chips and small buttons. */
+    small?: boolean;
+  } = $props();
 
   let input: HTMLInputElement;
   onMount(() => {
@@ -15,7 +23,7 @@
   });
 </script>
 
-<label class="field search" style:width={width ? `${width}px` : undefined}>
+<label class="field search" class:small style:width={width ? `${width}px` : undefined}>
   <Icon name="search" size={15} stroke={2} />
   <input
     bind:this={input}
@@ -40,6 +48,11 @@
   .search {
     color: var(--text-3);
     padding-right: 6px;
+  }
+  .search.small {
+    height: var(--h-sm);
+    padding-left: 10px;
+    font-size: var(--fs-ui);
   }
   .search :global(input) {
     color: var(--text);

@@ -44,8 +44,9 @@ export async function exportWord(id: string) {
 }
 
 /**
- * Opens the print dialog for the page (choose "Save as PDF"). The page is
- * shown on its own, in light colours, and the PDF is named after it.
+ * Saves the page as a PDF in Downloads: the page on its own, in plain light
+ * colours (whatever the theme), with no print dialog and nothing stamped in
+ * the margins.
  */
 export async function exportPdf(id: string) {
   const page = store.byId.get(id);
@@ -58,30 +59,22 @@ export async function exportPdf(id: string) {
   }
   window.dispatchEvent(new Event('td:flush'));
   const root = document.documentElement;
-  const theme = root.dataset.theme;
-  const title = document.title;
+  const { theme, palette } = root.dataset;
+  const scheme = root.style.colorScheme;
   root.dataset.theme = 'light';
+  root.dataset.palette = 'default';
+  root.style.colorScheme = 'light';
   root.classList.add('printing');
-  document.title = page.title || 'Untitled';
-  const restore = () => {
-    root.dataset.theme = theme;
-    root.classList.remove('printing');
-    document.title = title;
-  };
   try {
-    await api.printPage().catch(() => window.print());
+    const path = await api.exportPdf(page.title || 'Untitled');
+    ui.toast(`Saved ${path.split(/[\\/]/).pop()} to Downloads`);
+  } catch (e) {
+    ui.error(e);
   } finally {
-    // The print dialog may return before printing finishes; "afterprint" is
-    // the reliable signal, with a timeout in case it never comes.
-    let done = false;
-    const finish = () => {
-      if (done) return;
-      done = true;
-      window.removeEventListener('afterprint', finish);
-      restore();
-    };
-    window.addEventListener('afterprint', finish);
-    setTimeout(finish, 60_000);
+    root.dataset.theme = theme;
+    root.dataset.palette = palette;
+    root.style.colorScheme = scheme;
+    root.classList.remove('printing');
   }
 }
 
@@ -125,7 +118,7 @@ export function pageMenuItems(id: string, opts: { words?: number; sidebar?: bool
     { separator: true },
     {
       label: 'Copy as Markdown',
-      icon: 'copy',
+      icon: 'clipboard',
       action: async () => {
         try {
           const { markdown } = await pageMarkdown(id);
@@ -136,7 +129,7 @@ export function pageMenuItems(id: string, opts: { words?: number; sidebar?: bool
         }
       },
     },
-    { label: 'Export as PDF…', icon: 'file-text', action: () => void exportPdf(id) },
+    { label: 'Export as PDF', icon: 'file-text', action: () => void exportPdf(id) },
     { label: 'Export as Word', icon: 'file', action: () => void exportWord(id) },
     {
       label: 'Export as Markdown',

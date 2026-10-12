@@ -596,9 +596,9 @@ mockIPC((cmd, payload) => {
         return null;
       case 'trim_memory':
         return null;
-      case 'print_page':
+      case 'export_pdf':
         window.print();
-        return null;
+        return `Downloads/${a.title}.pdf`;
       case 'set_reminders':
         console.info('[dev] reminders', a.list);
         return null;

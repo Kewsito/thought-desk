@@ -380,13 +380,13 @@ pub fn export_document(app: AppHandle, request: tauri::ipc::Request<'_>) -> Resu
     Ok(path.to_string_lossy().into_owned())
 }
 
-/// Opens the system print dialog for the window (with Save as PDF).
-#[tauri::command]
-pub fn print_page(app: AppHandle) -> Result<()> {
-    match app.get_webview_window("main") {
-        Some(w) => w.print().map_err(|e| Error(e.to_string())),
-        None => Err(Error("No window to print".into())),
-    }
+/// Saves the open page (already in its print styles) as a PDF in Downloads.
+#[tauri::command(async)]
+pub fn export_pdf(app: AppHandle, title: String) -> Result<String> {
+    let window = app.get_webview_window("main").ok_or_else(|| Error("No window to print".into()))?;
+    let path = unique_path(&app.path().download_dir()?, &safe_file_name(&title), "pdf");
+    crate::pdf::print_to_pdf(&window, &path)?;
+    Ok(path.to_string_lossy().into_owned())
 }
 
 // ---------------------------------------------------------------- flashcards

@@ -160,7 +160,7 @@
     </div>
     <span class="spacer"></span>
     <button class="btn small sort" onclick={sortMenu}><Icon name="arrow-down" size={13} stroke={2} />{sorts[sort]}</button>
-    <SearchField bind:value={query} placeholder="Search files" width={200} />
+    <SearchField bind:value={query} placeholder="Search files" width={200} small />
   </div>
 
   {#if shown.length && prefs.filesLayout === 'grid'}

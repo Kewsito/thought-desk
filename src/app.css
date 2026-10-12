@@ -1546,6 +1546,14 @@ input[type='time']::-webkit-calendar-picker-indicator {
   color: var(--text-4);
   pointer-events: none;
 }
+/* A short hint in list items, and none in table cells (too narrow). */
+.prose li > p.is-empty::before,
+.prose li > div > p.is-empty::before {
+  content: 'List';
+}
+.prose :is(td, th) p.is-empty::before {
+  content: none;
+}
 
 /* A whole block selected (via the handle or arrow keys). */
 .prose .ProseMirror-selectednode:not(img):not([data-resize-container]):not(hr) {
@@ -1667,6 +1675,13 @@ input[type='time']::-webkit-calendar-picker-indicator {
   html.printing .page {
     max-width: none !important;
     padding: 0 !important;
+  }
+  /* Hints like "Write something…" and an empty title's "Untitled". */
+  html.printing .prose .is-empty::before {
+    content: none !important;
+  }
+  html.printing ::placeholder {
+    color: transparent !important;
   }
   html.printing .page .head {
     padding-top: 0 !important;

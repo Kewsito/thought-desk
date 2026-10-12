@@ -132,15 +132,18 @@ export function buildExtensions(handle: BlockHandleOptions): AnyExtension[] {
     Placeholder.configure({
       includeChildren: true,
       showOnlyCurrent: true,
-      placeholder: ({ node, editor, pos }) => {
+      // Decided from the node alone: this runs while the new document is
+      // being drawn, when looking positions up in editor.state (still the old
+      // one) can throw. Paragraphs in lists and tables are handled in app.css.
+      placeholder: ({ node }) => {
+        // Only lines of text get a hint. Containers count as "empty" too
+        // (a new table, an empty quote), and would show it over their cells.
+        if (!node.isTextblock) return '';
         if (node.type.name === 'heading') return `Heading ${node.attrs.level}`;
         if (node.type.name === 'detailsSummary') return 'Toggle';
         if (node.type.name === 'codeBlock') return '';
         if (node.type.name === 'flashcardFront') return 'Term or question';
         if (node.type.name === 'flashcardBack') return 'Definition or answer';
-        const parent = editor.state.doc.resolve(pos).parent;
-        if (['listItem', 'taskItem'].includes(parent.type.name)) return 'List';
-        if (parent.type.name === 'tableCell' || parent.type.name === 'tableHeader') return '';
         return 'Write something, or type / for commands';
       },
     }),

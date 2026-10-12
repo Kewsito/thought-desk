@@ -59,7 +59,7 @@
             {/if}
           {/each}
         </div>
-        <SearchField bind:value={filter} placeholder="Filter" width={180} />
+        <SearchField bind:value={filter} placeholder="Filter" width={180} small />
       </div>
     {/if}
 

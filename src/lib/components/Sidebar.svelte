@@ -540,6 +540,8 @@
     align-items: center;
     gap: 8px;
     flex: 1;
+    /* Full width like every other row (it isn't always in a flex row). */
+    width: calc(100% - 16px);
     min-width: 0;
     height: var(--h-row);
     margin: 0 8px;

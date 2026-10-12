@@ -8,6 +8,7 @@ mod files;
 mod library;
 mod memory;
 mod organize;
+mod pdf;
 mod planner;
 mod reminders;
 #[cfg(test)]
@@ -132,7 +133,7 @@ fn main() {
             commands::set_occurrence_page,
             commands::set_reminders,
             commands::export_document,
-            commands::print_page,
+            commands::export_pdf,
             commands::trim_memory,
             commands::list_cards,
             commands::list_decks,
