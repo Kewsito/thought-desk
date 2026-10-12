@@ -9,6 +9,7 @@
   import { pageMenuItems } from '../page-actions';
   import { planner } from '../planner.svelte';
   import { cards } from '../cards.svelte';
+  import { shortcuts } from '../shortcuts.svelte';
 
   let { words = 0, scrolled = false }: { words?: number; scrolled?: boolean } = $props();
 
@@ -63,14 +64,14 @@
 <header class="titlebar" class:scrolled data-tauri-drag-region>
   <div class="nav">
     {#if !prefs.sidebarOpen}
-      <button class="icon-btn" onclick={() => (prefs.sidebarOpen = true)} data-tip="Show sidebar" data-tip-key="Ctrl+\">
+      <button class="icon-btn" onclick={() => (prefs.sidebarOpen = true)} data-tip="Show sidebar" data-tip-key={shortcuts.label('sidebar')}>
         <Icon name="sidebar-left" />
       </button>
     {/if}
-    <button class="icon-btn" disabled={!store.canGoBack} onclick={() => store.back()} data-tip="Back" data-tip-key="Alt+←">
+    <button class="icon-btn" disabled={!store.canGoBack} onclick={() => store.back()} data-tip="Back" data-tip-key={shortcuts.label('back')}>
       <Icon name="arrow-left" />
     </button>
-    <button class="icon-btn" disabled={!store.canGoForward} onclick={() => store.forward()} data-tip="Forward" data-tip-key="Alt+→">
+    <button class="icon-btn" disabled={!store.canGoForward} onclick={() => store.forward()} data-tip="Forward" data-tip-key={shortcuts.label('forward')}>
       <Icon name="arrow-right" />
     </button>
   </div>

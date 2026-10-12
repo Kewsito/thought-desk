@@ -11,6 +11,8 @@
   import { clock } from '../clock.svelte';
   import { dueState } from '../dates';
   import { colorVar } from '../colors';
+  import { comboKeys, shortcuts, type ShortcutId } from '../shortcuts.svelte';
+  import { memory } from '../memory.svelte';
   import { ui } from '../ui.svelte';
 
   const MIN = 208;
@@ -65,13 +67,14 @@
     return d ? d.allDay.length + d.timed.length : 0;
   });
 
-  const nav: { view: AppView; label: string; icon: string; key: string }[] = [
-    { view: 'home', label: 'Home', icon: 'home', key: 'Ctrl+1' },
-    { view: 'assignments', label: 'Assignments', icon: 'assignment', key: 'Ctrl+2' },
-    { view: 'calendar', label: 'Calendar', icon: 'calendar', key: 'Ctrl+3' },
-    { view: 'files', label: 'Files', icon: 'files', key: 'Ctrl+4' },
-    { view: 'cards', label: 'Flashcards', icon: 'cards', key: 'Ctrl+5' },
+  const nav: { view: AppView; label: string; icon: string; key: ShortcutId }[] = [
+    { view: 'home', label: 'Home', icon: 'home', key: 'goHome' },
+    { view: 'assignments', label: 'Assignments', icon: 'assignment', key: 'goAssignments' },
+    { view: 'calendar', label: 'Calendar', icon: 'calendar', key: 'goCalendar' },
+    { view: 'files', label: 'Files', icon: 'files', key: 'goFiles' },
+    { view: 'cards', label: 'Flashcards', icon: 'cards', key: 'goCards' },
   ];
+  const searchKeys = $derived(shortcuts.combos('search')[0] ? comboKeys(shortcuts.combos('search')[0]).join(' ') : '');
   const counts = $derived<Record<string, number>>({
     assignments: planner.dueSoon.length,
     calendar: todayEvents,
@@ -122,10 +125,10 @@
       <span data-tauri-drag-region>Thought Desk</span>
     </div>
     <div class="head-actions">
-      <button class="icon-btn collapse" onclick={() => (prefs.sidebarOpen = false)} data-tip="Hide sidebar" data-tip-key="Ctrl+\">
+      <button class="icon-btn collapse" onclick={() => (prefs.sidebarOpen = false)} data-tip="Hide sidebar" data-tip-key={shortcuts.label('sidebar')}>
         <Icon name="sidebar-left" />
       </button>
-      <button class="icon-btn" onclick={() => void store.create(null)} data-tip="New page" data-tip-key="Ctrl+N">
+      <button class="icon-btn" onclick={() => void store.create(null)} data-tip="New page" data-tip-key={shortcuts.label('newPage')}>
         <Icon name="compose" />
       </button>
     </div>
@@ -134,13 +137,13 @@
   <button class="search" onclick={() => (ui.searchOpen = true)}>
     <span class="lead search-icon"><Icon name="search" size={15} stroke={2} /></span>
     <span>Search</span>
-    <kbd>Ctrl K</kbd>
+    {#if searchKeys}<kbd>{searchKeys}</kbd>{/if}
   </button>
 
   <nav class="views" aria-label="Views">
     {#each nav as n (n.view)}
       <div class="nav-row" class:active={store.view === n.view}>
-        <button class="nav-main" onclick={() => store.go(n.view)} aria-current={store.view === n.view ? 'page' : undefined} data-tip={n.label} data-tip-key={n.key}>
+        <button class="nav-main" onclick={() => store.go(n.view)} aria-current={store.view === n.view ? 'page' : undefined} data-tip={n.label} data-tip-key={shortcuts.label(n.key)}>
           <span class="lead tinted"><Icon name={n.icon} /></span>
           <span class="label">{n.label}</span>
         </button>
@@ -260,6 +263,15 @@
   <!-- Trash and Settings share one row shape: full width, with a trailing
        accessory (the count, the appearance toggle) inside the row. -->
   <div class="foot">
+    {#if prefs.showMemory}
+      <div class="nav-row">
+        <button class="nav-main" onclick={() => (ui.settingsOpen = true)} data-tip="Memory Thought Desk is using (details in Settings)">
+          <span class="lead"><Icon name="activity" /></span>
+          <span class="label">Memory</span>
+        </button>
+        <span class="count mem">{memory.current ? `${Math.round(memory.current.total / 1048576)} MB` : '…'}</span>
+      </div>
+    {/if}
     <div class="nav-row" class:active={ui.trashOpen}>
       <button class="nav-main" onclick={() => (ui.trashOpen = true)}>
         <span class="lead"><Icon name="trash" /></span>
@@ -272,7 +284,7 @@
         <span class="lead"><Icon name="settings" /></span>
         <span class="label">Settings</span>
       </button>
-      <button class="acc" onclick={cycleTheme} data-tip="Appearance: {themeLabel}" data-tip-key="Ctrl+Shift+L" aria-label="Appearance: {themeLabel}">
+      <button class="acc" onclick={cycleTheme} data-tip="Appearance: {themeLabel}" data-tip-key={shortcuts.label('theme')} aria-label="Appearance: {themeLabel}">
         <Icon name={themeIcon} size={15} />
       </button>
     </div>
@@ -614,5 +626,8 @@
   .resizing .resizer::after {
     opacity: 1;
     transition-delay: 80ms;
+  }
+  .count.mem {
+    font-variant-numeric: tabular-nums;
   }
 </style>

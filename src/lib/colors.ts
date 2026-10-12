@@ -20,7 +20,8 @@ export const ACCENTS = [
   ...PALETTE.filter((c) => c.key !== 'gray'),
 ] as const;
 
-export type Accent = (typeof ACCENTS)[number]['key'];
+/** A preset accent, or "custom" (made on the colour wheel). */
+export type Accent = (typeof ACCENTS)[number]['key'] | 'custom';
 
 /** CSS colour for a palette key; unknown or empty keys fall back to gray. */
 export function colorVar(key: string | null | undefined): string {
@@ -44,4 +45,5 @@ export const PALETTES = [
   { key: 'dusk', label: 'Dusk', light: ['#f9f8fd', '#efedf9', '#211e34'], dark: ['#12101c', '#171424', '#ecebf8'] },
 ] as const;
 
-export type Palette = (typeof PALETTES)[number]['key'];
+/** A preset theme, or "custom" (made on the colour wheel). */
+export type Palette = (typeof PALETTES)[number]['key'] | 'custom';

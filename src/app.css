@@ -362,6 +362,36 @@
   --separator-strong: #3d3759;
 }
 
+/* A theme made on the colour wheel: every surface and text colour shares one
+   hue (--th), tinted by --tc (0 = neutral gray, 1 = strong). Lightness steps
+   match the preset themes, so text keeps its contrast whatever the colour. */
+:root[data-palette='custom'] {
+  --bg: oklch(0.982 calc(0.028 * var(--tc)) var(--th));
+  --bg-sidebar: oklch(0.952 calc(0.042 * var(--tc)) var(--th));
+  --bg-elevated: oklch(0.993 calc(0.014 * var(--tc)) var(--th));
+  --bg-grouped: oklch(0.957 calc(0.036 * var(--tc)) var(--th));
+  --text: oklch(0.25 calc(0.045 * var(--tc)) var(--th));
+  --text-2: oklch(0.5 calc(0.05 * var(--tc)) var(--th));
+  --text-3: oklch(0.69 calc(0.045 * var(--tc)) var(--th));
+  --text-4: oklch(0.83 calc(0.035 * var(--tc)) var(--th));
+  --text-sidebar: oklch(0.31 calc(0.045 * var(--tc)) var(--th));
+  --separator: oklch(0.915 calc(0.03 * var(--tc)) var(--th));
+  --separator-strong: oklch(0.855 calc(0.035 * var(--tc)) var(--th));
+}
+:root[data-palette='custom'][data-theme='dark'] {
+  --bg: oklch(0.17 calc(0.028 * var(--tc)) var(--th));
+  --bg-sidebar: oklch(0.2 calc(0.032 * var(--tc)) var(--th));
+  --bg-elevated: oklch(0.26 calc(0.036 * var(--tc)) var(--th));
+  --bg-grouped: oklch(0.22 calc(0.032 * var(--tc)) var(--th));
+  --text: oklch(0.95 calc(0.018 * var(--tc)) var(--th));
+  --text-2: oklch(0.76 calc(0.034 * var(--tc)) var(--th));
+  --text-3: oklch(0.57 calc(0.038 * var(--tc)) var(--th));
+  --text-4: oklch(0.4 calc(0.034 * var(--tc)) var(--th));
+  --text-sidebar: oklch(0.91 calc(0.024 * var(--tc)) var(--th));
+  --separator: oklch(0.26 calc(0.032 * var(--tc)) var(--th));
+  --separator-strong: oklch(0.35 calc(0.036 * var(--tc)) var(--th));
+}
+
 /* Accent colours. Graphite (no attribute) is the original black and white;
    every other accent tints controls, selection, focus rings and icons. The
    palette colours already switch with the theme, so one rule each is enough. */
@@ -784,6 +814,42 @@ kbd {
 .group .field:focus {
   box-shadow: 0 0 0 1.5px var(--focus);
 }
+/* Sliders: a thin track (its colour can be set with --track) and a raised knob. */
+.range {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 20px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.range::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--track, var(--fill-3));
+  box-shadow: inset 0 0 0 0.5px var(--hairline);
+}
+.range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow:
+    0 0 0 0.5px rgba(0, 0, 0, 0.2),
+    0 1px 4px rgba(0, 0, 0, 0.25);
+}
+.range:focus-visible {
+  outline: none;
+}
+.range:focus-visible::-webkit-slider-thumb {
+  box-shadow:
+    0 0 0 3px var(--focus),
+    0 1px 4px rgba(0, 0, 0, 0.25);
+}
+
 /* Number fields are typed into, not nudged: no spinner arrows. */
 .field input[type='number'] {
   appearance: textfield;

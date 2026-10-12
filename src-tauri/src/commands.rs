@@ -284,20 +284,33 @@ pub fn set_todo(db: State<Db>, page_id: String, index: usize, key: String, check
     db.set_todo(&page_id, index, &key, checked)
 }
 
-/// Turns the system-wide Quick Capture shortcut (Ctrl+Shift+Space) on or off.
+/// Sets the system-wide Quick Capture shortcut ("CmdOrCtrl+Shift+Space"),
+/// or turns it off.
 #[tauri::command]
-pub fn set_capture_shortcut(app: AppHandle, enabled: bool) -> Result<()> {
-    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+pub fn set_capture_shortcut(app: AppHandle, enabled: bool, accelerator: String) -> Result<()> {
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
     let gs = app.global_shortcut();
-    let shortcut = crate::capture_shortcut();
-    let registered = gs.is_registered(shortcut);
-    if enabled && !registered {
-        gs.register(shortcut)
-            .map_err(|_| Error("Ctrl+Shift+Space is already used by another app".into()))?;
-    } else if !enabled && registered {
-        gs.unregister(shortcut).map_err(|e| Error(e.to_string()))?;
+    let shortcut: Option<Shortcut> = if enabled {
+        Some(accelerator.parse().map_err(|_| Error(format!("“{accelerator}” isn't a shortcut Windows can use")))?)
+    } else {
+        None
+    };
+    if let Some(s) = shortcut {
+        if gs.is_registered(s) {
+            return Ok(());
+        }
+    }
+    gs.unregister_all().map_err(|e| Error(e.to_string()))?;
+    if let Some(s) = shortcut {
+        gs.register(s).map_err(|_| Error("That shortcut is already used by another app".into()))?;
     }
     Ok(())
+}
+
+/// Memory in use by the app and its web view, right now.
+#[tauri::command]
+pub fn memory_usage(meter: State<crate::memory::MemoryMeter>) -> crate::memory::MemoryUsage {
+    meter.read()
 }
 
 #[tauri::command]

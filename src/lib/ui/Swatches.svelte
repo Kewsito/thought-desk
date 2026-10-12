@@ -8,6 +8,7 @@
     keys,
     auto,
     label = 'Color',
+    custom,
   }: {
     value: string;
     onchange: (key: string) => void;
@@ -16,6 +17,8 @@
     /** Offer an "automatic" swatch (e.g. "Use course color") with this label. */
     auto?: string;
     label?: string;
+    /** Offer a "Custom" swatch (key "custom") showing this colour. */
+    custom?: string;
   } = $props();
 
   const list = $derived(keys ?? PALETTE);
@@ -39,6 +42,18 @@
       onclick={() => onchange(c.key)}
     ></button>
   {/each}
+  {#if custom}
+    <button
+      class="sw custom round"
+      class:on={value === 'custom'}
+      style:--sw={custom}
+      role="radio"
+      aria-checked={value === 'custom'}
+      aria-label="Custom"
+      data-tip="Custom color"
+      onclick={() => onchange('custom')}
+    ><span class="dot round"></span></button>
+  {/if}
 </div>
 
 <style>
@@ -77,6 +92,25 @@
     --sw: var(--fill-2);
     color: var(--text-2);
     box-shadow: none;
+  }
+  /* A rainbow ring around the custom colour. */
+  .custom {
+    background: conic-gradient(
+      oklch(0.72 0.17 0),
+      oklch(0.72 0.17 60),
+      oklch(0.72 0.17 120),
+      oklch(0.72 0.17 180),
+      oklch(0.72 0.17 240),
+      oklch(0.72 0.17 300),
+      oklch(0.72 0.17 360)
+    );
+  }
+  .custom .dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--sw);
+    box-shadow: 0 0 0 2px var(--bg-grouped);
   }
   .auto.on::after {
     box-shadow: 0 0 0 2px var(--text-3);

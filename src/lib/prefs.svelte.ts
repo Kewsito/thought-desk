@@ -1,6 +1,23 @@
 /** UI preferences, persisted in localStorage (they are per-device anyway). */
 
 import { ACCENTS, PALETTES, type Accent, type Palette } from './colors';
+import type { ShortcutId } from './shortcuts.svelte';
+import { oklchHex, parseHex, textOn } from './color-math';
+
+/** A colour theme made on the wheel: a hue and how strongly it tints. */
+export interface CustomTheme {
+  /** 0–360 (OKLCH hue). */
+  hue: number;
+  /** 0 (neutral gray) to 1 (strongly tinted). */
+  tint: number;
+}
+
+/** An accent made on the wheel (OKLCH: lightness 0–1, chroma 0–0.37). */
+export interface CustomAccent {
+  hue: number;
+  chroma: number;
+  lightness: number;
+}
 
 export type Theme = 'system' | 'light' | 'dark';
 export type Font = 'sans' | 'serif' | 'mono';
@@ -38,6 +55,12 @@ interface Stored {
   inboxId: string | null;
   remindAssignments: RemindAssignments;
   remindEvents: RemindEvents;
+  /** The user's own shortcuts; null turns one off. Missing: the default. */
+  shortcuts: Partial<Record<ShortcutId, string | null>>;
+  customTheme: CustomTheme;
+  customAccent: CustomAccent;
+  /** Memory use in the sidebar. */
+  showMemory: boolean;
 }
 
 /** Monday in most of the world, Sunday where the locale says so. */
@@ -76,6 +99,10 @@ const defaults: Stored = {
   inboxId: null,
   remindAssignments: 'evening',
   remindEvents: 10,
+  shortcuts: {},
+  customTheme: { hue: 250, tint: 0.5 },
+  customAccent: { hue: 265, chroma: 0.2, lightness: 0.58 },
+  showMemory: false,
 };
 
 function read(): Stored {
@@ -83,8 +110,8 @@ function read(): Stored {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const stored = { ...defaults, ...JSON.parse(raw) } as Stored;
-      if (!ACCENTS.some((a) => a.key === stored.accent)) stored.accent = 'graphite';
-      if (!PALETTES.some((p) => p.key === stored.palette)) stored.palette = 'default';
+      if (!ACCENTS.some((a) => a.key === stored.accent) && stored.accent !== 'custom') stored.accent = 'graphite';
+      if (!PALETTES.some((p) => p.key === stored.palette) && stored.palette !== 'custom') stored.palette = 'default';
       return stored;
     }
   } catch {
@@ -117,6 +144,10 @@ class Prefs {
   inboxId = $state<string | null>(this.#initial.inboxId);
   remindAssignments = $state<RemindAssignments>(this.#initial.remindAssignments);
   remindEvents = $state<RemindEvents>(this.#initial.remindEvents);
+  shortcuts = $state<Partial<Record<ShortcutId, string | null>>>(this.#initial.shortcuts);
+  customTheme = $state<CustomTheme>(this.#initial.customTheme);
+  customAccent = $state<CustomAccent>(this.#initial.customAccent);
+  showMemory = $state(this.#initial.showMemory);
 
   systemDark = $state(darkQuery.matches);
   resolvedTheme = $derived<'light' | 'dark'>(
@@ -149,6 +180,10 @@ class Prefs {
       inboxId: this.inboxId,
       remindAssignments: this.remindAssignments,
       remindEvents: this.remindEvents,
+      shortcuts: $state.snapshot(this.shortcuts),
+      customTheme: $state.snapshot(this.customTheme),
+      customAccent: $state.snapshot(this.customAccent),
+      showMemory: this.showMemory,
     };
   }
 }
@@ -169,6 +204,31 @@ $effect.root(() => {
     root.dataset.font = prefs.font;
     root.classList.toggle('small-text', prefs.smallText);
     root.style.colorScheme = prefs.resolvedTheme;
+  });
+  // A theme made on the colour wheel: its hue and tint feed app.css.
+  $effect(() => {
+    const style = document.documentElement.style;
+    if (prefs.palette === 'custom') {
+      style.setProperty('--th', prefs.customTheme.hue.toFixed(1));
+      style.setProperty('--tc', prefs.customTheme.tint.toFixed(3));
+    } else {
+      style.removeProperty('--th');
+      style.removeProperty('--tc');
+    }
+  });
+  // An accent made on the colour wheel, with marks that stay legible on it.
+  $effect(() => {
+    const style = document.documentElement.style;
+    if (prefs.accent === 'custom') {
+      const { hue, chroma, lightness } = prefs.customAccent;
+      const hex = oklchHex(lightness, chroma, hue);
+      const light = textOn(parseHex(hex)!) === 'light';
+      style.setProperty('--accent', hex);
+      style.setProperty('--on-accent', light ? '#ffffff' : '#1d1d1f');
+      style.setProperty('--check', light ? 'var(--check-white)' : 'var(--check-black)');
+    } else {
+      for (const p of ['--accent', '--on-accent', '--check']) style.removeProperty(p);
+    }
   });
   // Persist (debounced) whenever anything changes.
   $effect(() => {

@@ -5,6 +5,11 @@
   import Segmented from '../ui/Segmented.svelte';
   import Swatches from '../ui/Swatches.svelte';
   import Switch from '../ui/Switch.svelte';
+  import ColorWheel from '../ui/ColorWheel.svelte';
+  import ShortcutsEditor from './ShortcutsEditor.svelte';
+  import MemoryPanel from './MemoryPanel.svelte';
+  import { oklchHex, parseHex, rgbToOklch } from '../color-math';
+  import { shortcuts } from '../shortcuts.svelte';
   import { api } from '../api';
   import { ACCENTS, PALETTE, PALETTES, colorVar, nextColor, type Accent } from '../colors';
   import { planner } from '../planner.svelte';
@@ -46,25 +51,45 @@
     { value: 15, label: '15 min' },
     { value: 30, label: '30 min' },
   ];
-  const shortcuts: { label: string; keys: string[][] }[] = [
-    { label: 'Search everything', keys: [['Ctrl', 'K']] },
-    { label: 'New page', keys: [['Ctrl', 'N']] },
-    { label: 'Quick Capture', keys: [['Ctrl', 'Shift', 'Space']] },
-    { label: 'Home, Assignments, Calendar, Files, Flashcards', keys: [['Ctrl', '1'], ['Ctrl', '2'], ['Ctrl', '3'], ['Ctrl', '4'], ['Ctrl', '5']] },
-    { label: 'Flashcard: show answer, then rate', keys: [['Space'], ['1'], ['2'], ['3'], ['4']] },
-    { label: 'Calendar: previous or next', keys: [['←'], ['→']] },
-    { label: 'Calendar: today', keys: [['T']] },
-    { label: 'Toggle sidebar', keys: [['Ctrl', '\\']] },
-    { label: 'Back and forward', keys: [['Alt', '←'], ['Alt', '→']] },
-    { label: 'Light or dark', keys: [['Ctrl', 'Shift', 'L']] },
-    { label: 'Insert a block', keys: [['/']] },
-    { label: 'Link a page, assignment or file', keys: [['@']] },
-    { label: 'Add a link', keys: [['Ctrl', 'K']] },
-    { label: 'Duplicate block', keys: [['Ctrl', 'D']] },
-    { label: 'Indent list item', keys: [['Tab'], ['Shift', 'Tab']] },
-  ];
 
-  const accentLabel = $derived(ACCENTS.find((a) => a.key === prefs.accent)?.label ?? 'Graphite');
+  /** The wheel's rim is this much chroma (as vivid as sRGB gets for most hues). */
+  const MAX_CHROMA = 0.3;
+  const customAccentHex = $derived(oklchHex(prefs.customAccent.lightness, prefs.customAccent.chroma, prefs.customAccent.hue));
+  const accentLabel = $derived(
+    prefs.accent === 'custom' ? `Custom · ${customAccentHex.toUpperCase()}` : (ACCENTS.find((a) => a.key === prefs.accent)?.label ?? 'Graphite'),
+  );
+  let hexDraft = $state('');
+  $effect(() => {
+    hexDraft = customAccentHex.toUpperCase();
+  });
+
+  function setAccentHex(raw: string) {
+    const rgb = parseHex(raw);
+    if (!rgb) {
+      hexDraft = customAccentHex.toUpperCase();
+      return;
+    }
+    const { l, c, h } = rgbToOklch(rgb);
+    prefs.customAccent = { hue: c < 0.01 ? prefs.customAccent.hue : h, chroma: Math.min(MAX_CHROMA, c), lightness: l };
+  }
+
+  /** The custom theme's sidebar, page and text, for its preview tile and the wheel's knob. */
+  const customTheme = $derived.by(() => {
+    const { hue: h, tint: t } = prefs.customTheme;
+    return prefs.resolvedTheme === 'dark'
+      ? { bg: oklchHex(0.17, 0.028 * t, h), side: oklchHex(0.2, 0.032 * t, h), ink: oklchHex(0.95, 0.018 * t, h), knob: oklchHex(0.5, 0.12 * t, h) }
+      : { bg: oklchHex(0.982, 0.028 * t, h), side: oklchHex(0.952, 0.042 * t, h), ink: oklchHex(0.25, 0.045 * t, h), knob: oklchHex(0.8, 0.12 * t, h) };
+  });
+
+  /** Starting points for a custom theme. */
+  const themeIdeas = [
+    { label: 'Ocean', hue: 235, tint: 0.7 },
+    { label: 'Forest', hue: 150, tint: 0.6 },
+    { label: 'Sand', hue: 75, tint: 0.65 },
+    { label: 'Blush', hue: 15, tint: 0.55 },
+    { label: 'Lavender', hue: 295, tint: 0.65 },
+    { label: 'Mint', hue: 175, tint: 0.5 },
+  ];
 
   async function copyPath() {
     if (!info) return;
@@ -136,15 +161,111 @@
               <span class="pname">{p.label}</span>
             </button>
           {/each}
+          <button class="palette" class:on={prefs.palette === 'custom'} role="radio" aria-checked={prefs.palette === 'custom'} onclick={() => (prefs.palette = 'custom')}>
+            <span class="mini" style:--bg={customTheme.bg} style:--side={customTheme.side} style:--ink={customTheme.ink}>
+              <span class="mini-side"><i></i><i></i><i></i></span>
+              <span class="mini-page"><b></b><i></i><i></i><i class="short"></i></span>
+              <span class="mini-wheel round"></span>
+            </span>
+            <span class="pname">Custom</span>
+          </button>
         </div>
+        {#if prefs.palette === 'custom'}
+          <div class="picker">
+            <ColorWheel
+              kind="theme"
+              label="Theme color"
+              hue={prefs.customTheme.hue}
+              amount={prefs.customTheme.tint}
+              knob={customTheme.knob}
+              onchange={(hue, tint) => (prefs.customTheme = { hue, tint })}
+            />
+            <div class="picker-side">
+              <div class="picker-text">
+                <strong>Your own theme</strong>
+                <span>Turn the wheel to choose a color, and move out toward the edge for a stronger tint. Light and dark versions are made to match, with text kept easy to read.</span>
+              </div>
+              <label class="slider">
+                <span>Tint</span>
+                <input
+                  class="range"
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={prefs.customTheme.tint}
+                  style:--track="linear-gradient(to right, {oklchHex(0.9, 0, 0)}, {oklchHex(0.82, 0.12, prefs.customTheme.hue)})"
+                  oninput={(e) => (prefs.customTheme = { ...prefs.customTheme, tint: Number(e.currentTarget.value) })}
+                />
+              </label>
+              <div class="ideas">
+                {#each themeIdeas as idea (idea.label)}
+                  <button
+                    class="chip idea"
+                    style:--c={oklchHex(0.8, 0.1, idea.hue)}
+                    onclick={() => (prefs.customTheme = { hue: idea.hue, tint: idea.tint })}
+                  ><span class="dot"></span>{idea.label}</button>
+                {/each}
+              </div>
+            </div>
+          </div>
+        {/if}
       </div>
       <div class="group-row">
         <div class="row-label">
           Accent color
           <small>{accentLabel}</small>
         </div>
-        <Swatches keys={[...ACCENTS]} value={prefs.accent} onchange={(k) => (prefs.accent = k as Accent)} label="Accent color" />
+        <Swatches keys={[...ACCENTS]} value={prefs.accent} onchange={(k) => (prefs.accent = k as Accent)} label="Accent color" custom={customAccentHex} />
       </div>
+      {#if prefs.accent === 'custom'}
+        <div class="group-row stack">
+          <div class="picker">
+            <ColorWheel
+              kind="accent"
+              label="Accent color"
+              hue={prefs.customAccent.hue}
+              amount={Math.min(1, prefs.customAccent.chroma / MAX_CHROMA)}
+              knob={customAccentHex}
+              onchange={(hue, amount) => (prefs.customAccent = { ...prefs.customAccent, hue, chroma: amount * MAX_CHROMA })}
+            />
+            <div class="picker-side">
+              <label class="slider">
+                <span>Brightness</span>
+                <input
+                  class="range"
+                  type="range"
+                  min="0.35"
+                  max="0.9"
+                  step="0.005"
+                  value={prefs.customAccent.lightness}
+                  style:--track="linear-gradient(to right, {oklchHex(0.35, prefs.customAccent.chroma, prefs.customAccent.hue)}, {oklchHex(0.62, prefs.customAccent.chroma, prefs.customAccent.hue)}, {oklchHex(0.9, prefs.customAccent.chroma, prefs.customAccent.hue)})"
+                  oninput={(e) => (prefs.customAccent = { ...prefs.customAccent, lightness: Number(e.currentTarget.value) })}
+                />
+              </label>
+              <div class="hex-row">
+                <label class="field hex">
+                  <span class="swatch-dot round" style:background={customAccentHex}></span>
+                  <input
+                    value={hexDraft}
+                    spellcheck="false"
+                    aria-label="Hex color"
+                    maxlength="7"
+                    oninput={(e) => (hexDraft = e.currentTarget.value)}
+                    onchange={(e) => setAccentHex(e.currentTarget.value)}
+                    onkeydown={(e) => e.key === 'Enter' && setAccentHex(e.currentTarget.value)}
+                  />
+                </label>
+                <div class="accent-preview" aria-hidden="true">
+                  <span class="pv-btn">Button</span>
+                  <span class="pv-check round"></span>
+                  <span class="pv-sel">selected</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      {/if}
       <div class="group-row tall">
         <div class="row-label">
           Page font
@@ -184,7 +305,7 @@
       <div class="group-row">
         <div class="row-label">
           Capture from anywhere
-          <small>Ctrl+Shift+Space opens Quick Capture even when Thought Desk is in the background</small>
+          <small>{shortcuts.label('capture') || 'Its shortcut'} opens Quick Capture even when Thought Desk is in the background</small>
         </div>
         <Switch on={prefs.globalCapture} label="Capture from anywhere" onchange={() => (prefs.globalCapture = !prefs.globalCapture)} />
       </div>
@@ -273,20 +394,9 @@
     </div>
     <p class="group-note">Everything is stored on this computer: one SQLite file plus a files folder. Back up the folder above to keep your work safe.</p>
 
-    <h3 class="group-title">Keyboard</h3>
-    <div class="group">
-      {#each shortcuts as s}
-        <div class="group-row compact">
-          <div class="row-label">{s.label}</div>
-          <div class="keys">
-            {#each s.keys as combo, i}
-              {#if i > 0}<span class="or">{s.keys.length > 2 ? '·' : 'or'}</span>{/if}
-              <span class="combo">{#each combo as k}<kbd>{k}</kbd>{/each}</span>
-            {/each}
-          </div>
-        </div>
-      {/each}
-    </div>
+    <MemoryPanel />
+
+    <ShortcutsEditor />
 
     <p class="about">Thought Desk {info?.version ?? ''}</p>
   </div>
@@ -364,6 +474,127 @@
   .pname {
     font-size: var(--fs-footnote);
     font-weight: var(--fw-500);
+  }
+
+  /* The custom tile shows a little wheel in its corner. */
+  .palettes {
+    grid-template-columns: repeat(7, 1fr);
+  }
+  .mini-wheel {
+    position: absolute;
+    right: 4px;
+    bottom: 4px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: conic-gradient(
+      oklch(0.75 0.15 0),
+      oklch(0.75 0.15 90),
+      oklch(0.75 0.15 180),
+      oklch(0.75 0.15 270),
+      oklch(0.75 0.15 360)
+    );
+    box-shadow: 0 0 0 1.5px var(--bg);
+  }
+
+  /* Colour wheel rows */
+  .picker {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding: 8px 0 4px;
+  }
+  .picker-side {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .picker-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .picker-text strong {
+    font-size: var(--fs-body-ui);
+    font-weight: var(--fw-600);
+  }
+  .picker-text span {
+    font-size: var(--fs-footnote);
+    line-height: 16px;
+    color: var(--text-2);
+  }
+  .slider {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .slider > span {
+    font-size: var(--fs-footnote);
+    font-weight: var(--fw-500);
+    color: var(--text-2);
+  }
+  .ideas {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .idea {
+    gap: 6px;
+    height: var(--h-xs);
+    padding: 0 10px 0 8px;
+    font-size: var(--fs-footnote);
+    background: var(--raised);
+    box-shadow: 0 0 0 0.5px var(--hairline);
+  }
+  .idea .dot {
+    --dot: var(--c);
+  }
+  .hex-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .field.hex {
+    width: 128px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-ui);
+  }
+  .swatch-dot {
+    flex: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.2);
+  }
+  .accent-preview {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .pv-btn {
+    display: inline-grid;
+    place-items: center;
+    height: var(--h-sm);
+    padding: 0 12px;
+    border-radius: var(--r-sm);
+    background: var(--accent);
+    color: var(--on-accent);
+    font-size: var(--fs-ui);
+    font-weight: var(--fw-600);
+  }
+  .pv-check {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--accent) var(--check) center / 72% no-repeat;
+  }
+  .pv-sel {
+    padding: 1px 3px;
+    border-radius: 3px;
+    background: var(--selection);
+    font-size: var(--fs-ui);
   }
 
   /* Font picker */
@@ -495,29 +726,6 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     user-select: text;
-  }
-
-  /* Keyboard */
-  .keys {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex: none;
-  }
-  .combo {
-    display: flex;
-    gap: 4px;
-  }
-  .combo kbd {
-    min-width: 20px;
-    justify-content: center;
-    background: var(--raised);
-    box-shadow: 0 0 0 0.5px var(--hairline), 0 1px 0 var(--hairline);
-    color: var(--text-2);
-  }
-  .or {
-    font-size: var(--fs-caption);
-    color: var(--text-3);
   }
 
   .about {

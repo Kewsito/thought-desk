@@ -3,6 +3,9 @@
   import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
   import { onMount } from 'svelte';
   import { api } from './lib/api';
+  import { cssToRgb } from './lib/color-math';
+  import { shortcuts, toAccelerator, type ShortcutId } from './lib/shortcuts.svelte';
+  import { memory } from './lib/memory.svelte';
   import { prefs } from './lib/prefs.svelte';
   import { store } from './lib/store.svelte';
   import { planner } from './lib/planner.svelte';
@@ -54,25 +57,53 @@
   $effect(() => {
     const dark = prefs.resolvedTheme === 'dark';
     void prefs.palette;
+    void prefs.customTheme.hue;
+    void prefs.customTheme.tint;
     void win.setTheme(dark ? 'dark' : 'light').catch(() => {});
-    // Read the theme's background once the new attributes are applied.
+    // Read the theme's background once the new attributes are applied (the
+    // body's resolved colour, which works for hex and oklch() themes alike).
     requestAnimationFrame(() => {
-      const hex = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
-      const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
-      const rgb = m ? [1, 2, 3].map((i) => parseInt(m[i], 16)) : dark ? [0, 0, 0] : [255, 255, 255];
-      void webviewWin.setBackgroundColor([rgb[0], rgb[1], rgb[2], 255]).catch(() => {});
+      const rgb = cssToRgb(getComputedStyle(document.body).backgroundColor) ?? (dark ? [0, 0, 0] : [1, 1, 1]);
+      const [r, g, b] = rgb.map((v) => Math.round(v * 255));
+      void webviewWin.setBackgroundColor([r, g, b, 255]).catch(() => {});
     });
   });
 
-  // The system-wide Quick Capture shortcut follows its setting.
+  // The system-wide Quick Capture shortcut follows its setting and its keys.
   $effect(() => {
-    const on = prefs.globalCapture;
-    api.setCaptureShortcut(on).catch((e) => {
+    const combo = shortcuts.combos('capture')[0];
+    const on = prefs.globalCapture && !!combo;
+    api.setCaptureShortcut(on, combo ? toAccelerator(combo) : '').catch((e) => {
       if (!on) return;
       ui.error(e);
       prefs.globalCapture = false;
     });
   });
+
+  // The sidebar's memory readout keeps readings coming while it's shown.
+  $effect(() => {
+    if (prefs.showMemory) return memory.watch();
+  });
+
+  /** What each app-wide shortcut does (the calendar's own are in its view). */
+  const ACTIONS: Partial<Record<ShortcutId, () => void>> = {
+    search: () => (ui.searchOpen = !ui.searchOpen),
+    newPage: () => void store.create(null),
+    capture: () => {
+      if (!ui.capture) ui.capture = { text: '' };
+    },
+    sidebar: () => (prefs.sidebarOpen = !prefs.sidebarOpen),
+    theme: () => prefs.toggleTheme(),
+    settings: () => (ui.settingsOpen = true),
+    back: () => store.back(),
+    forward: () => store.forward(),
+    goHome: () => store.go('home'),
+    goAssignments: () => store.go('assignments'),
+    goCalendar: () => store.go('calendar'),
+    goFiles: () => store.go('files'),
+    goCards: () => store.go('cards'),
+  };
+  const ACTION_IDS = Object.keys(ACTIONS) as ShortcutId[];
 
   // Each view starts at the top.
   $effect(() => {
@@ -157,34 +188,12 @@
     const mod = e.ctrlKey || e.metaKey;
     const key = e.key.toLowerCase();
 
-    if (mod && !e.shiftKey && (key === 'k' || key === 'p')) {
+    // Shortcuts (Settings → Keyboard). Quick Capture's is also caught
+    // system-wide when that's on; inside the app it always works.
+    const action = shortcuts.match(e, ACTION_IDS);
+    if (action) {
       e.preventDefault();
-      ui.searchOpen = !ui.searchOpen;
-    } else if (mod && !e.shiftKey && key === 'n') {
-      e.preventDefault();
-      void store.create(null);
-    } else if (mod && key === '\\') {
-      e.preventDefault();
-      prefs.sidebarOpen = !prefs.sidebarOpen;
-    } else if (mod && e.shiftKey && key === 'l') {
-      e.preventDefault();
-      prefs.toggleTheme();
-    } else if (mod && key === ',') {
-      e.preventDefault();
-      ui.settingsOpen = true;
-    } else if (mod && !e.shiftKey && !e.altKey && ['1', '2', '3', '4', '5'].includes(e.key)) {
-      e.preventDefault();
-      store.go((['home', 'assignments', 'calendar', 'files', 'cards'] as const)[Number(e.key) - 1]);
-    } else if (mod && e.shiftKey && e.code === 'Space') {
-      // Also caught system-wide when that's on; inside the app it always works.
-      e.preventDefault();
-      if (!ui.capture) ui.capture = { text: '' };
-    } else if (e.altKey && e.key === 'ArrowLeft') {
-      e.preventDefault();
-      store.back();
-    } else if (e.altKey && e.key === 'ArrowRight') {
-      e.preventDefault();
-      store.forward();
+      ACTIONS[action]!();
     } else if (mod && key === 's') {
       // Everything autosaves; just flush now instead of "Save page as…".
       e.preventDefault();

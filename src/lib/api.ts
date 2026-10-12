@@ -90,7 +90,9 @@ export const api = {
       headers: { 'x-name': encodeURIComponent(name), 'x-ext': ext },
     }),
   printPage: () => invoke<void>('print_page'),
-  setCaptureShortcut: (enabled: boolean) => invoke<void>('set_capture_shortcut', { enabled }),
+  memoryUsage: () => invoke<{ app: number; webview: number; processes: number; systemTotal: number }>('memory_usage'),
+  /** `accelerator` like "CmdOrCtrl+Shift+Space". */
+  setCaptureShortcut: (enabled: boolean, accelerator: string) => invoke<void>('set_capture_shortcut', { enabled, accelerator }),
 
   trashItem: (table: TrashTable, id: string) => invoke<number>('trash_item', { table, id }),
   restoreItem: (table: TrashTable, id: string) => invoke<void>('restore_item', { table, id }),

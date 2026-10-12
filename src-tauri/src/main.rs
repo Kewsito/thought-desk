@@ -13,7 +13,7 @@ mod reminders;
 
 use std::path::PathBuf;
 use tauri::{Emitter, Manager};
-use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
+use tauri_plugin_global_shortcut::ShortcutState;
 use tauri_plugin_window_state::StateFlags;
 
 /// THOUGHTDESK_DATA_DIR points the app at another notes folder (portable
@@ -22,11 +22,6 @@ fn custom_data_dir() -> Option<PathBuf> {
     std::env::var_os("THOUGHTDESK_DATA_DIR")
         .filter(|d| !d.is_empty())
         .map(PathBuf::from)
-}
-
-/// The system-wide Quick Capture shortcut.
-pub fn capture_shortcut() -> Shortcut {
-    Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::Space)
 }
 
 fn main() {
@@ -49,12 +44,14 @@ fn main() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .manage(reminders::Reminders::default())
+        .manage(memory::MemoryMeter::default())
         .plugin(
             // Quick Capture from anywhere: bring the window up and ask the UI
             // to open the capture box. Registered on demand (Settings).
             tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(|app, shortcut, event| {
-                    if event.state() != ShortcutState::Pressed || *shortcut != capture_shortcut() {
+                // Quick Capture is the only shortcut registered.
+                .with_handler(|app, _shortcut, event| {
+                    if event.state() != ShortcutState::Pressed {
                         return;
                     }
                     if let Some(window) = app.get_webview_window("main") {
@@ -135,6 +132,7 @@ fn main() {
             commands::set_reminders,
             commands::export_document,
             commands::print_page,
+            commands::memory_usage,
             commands::list_cards,
             commands::save_review,
             commands::reset_reviews,

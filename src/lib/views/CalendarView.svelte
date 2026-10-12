@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { shortcuts } from '../shortcuts.svelte';
   import { importCalendar } from '../ics-import.svelte';
   import Icon from '../components/Icon.svelte';
   import AssignmentRow from '../ui/AssignmentRow.svelte';
@@ -119,14 +120,16 @@
   }
 
   function onKey(e: KeyboardEvent) {
-    if (e.defaultPrevented || ui.anyModalOpen || ui.menu || e.ctrlKey || e.metaKey || e.altKey) return;
-    const t = e.target as HTMLElement;
-    if (t.closest('input, textarea, select, [contenteditable]')) return;
-    if (e.key === 'ArrowLeft') step(-1);
-    else if (e.key === 'ArrowRight') step(1);
-    else if (e.key.toLowerCase() === 't') today();
-    else return;
+    if (e.defaultPrevented || ui.anyModalOpen || ui.menu) return;
+    const id = shortcuts.match(e, ['calendarPrev', 'calendarNext', 'calendarToday']);
+    if (!id) return;
+    // A plain key belongs to whatever is being typed in.
+    const plain = !e.ctrlKey && !e.metaKey && !e.altKey;
+    if (plain && (e.target as HTMLElement).closest('input, textarea, select, [contenteditable]')) return;
     e.preventDefault();
+    if (id === 'calendarPrev') step(-1);
+    else if (id === 'calendarNext') step(1);
+    else today();
   }
 
   const selectedDate = $derived(parseDate(calendar.selected));
@@ -143,11 +146,11 @@
     <div class="view-actions">
       <Segmented options={modes} value={prefs.calendarMode} onchange={(v) => (prefs.calendarMode = v)} label="Calendar view" />
       <div class="nav">
-        <button class="icon-btn" onclick={() => step(-1)} data-tip={prefs.calendarMode === 'month' ? 'Previous month' : 'Previous week'} data-tip-key="←">
+        <button class="icon-btn" onclick={() => step(-1)} data-tip={prefs.calendarMode === 'month' ? 'Previous month' : 'Previous week'} data-tip-key={shortcuts.label('calendarPrev')}>
           <Icon name="chevron-left" />
         </button>
-        <button class="btn small today-btn" onclick={today} data-tip-key="T" data-tip="Go to today">Today</button>
-        <button class="icon-btn" onclick={() => step(1)} data-tip={prefs.calendarMode === 'month' ? 'Next month' : 'Next week'} data-tip-key="→">
+        <button class="btn small today-btn" onclick={today} data-tip-key={shortcuts.label('calendarToday')} data-tip="Go to today">Today</button>
+        <button class="icon-btn" onclick={() => step(1)} data-tip={prefs.calendarMode === 'month' ? 'Next month' : 'Next week'} data-tip-key={shortcuts.label('calendarNext')}>
           <Icon name="chevron-right" />
         </button>
       </div>
