@@ -40,6 +40,8 @@ class Store {
   saving = $state(false);
   #history = $state<Entry[]>([]);
   #historyIndex = $state(-1);
+  /** How the current view was reached, so it can animate in from that side. */
+  navDirection = $state<'push' | 'back' | 'forward'>('push');
 
   byId = $derived(new Map(this.pages.map((p) => [p.id, p])));
 
@@ -188,6 +190,7 @@ class Store {
   }
 
   #push(entry: Entry) {
+    this.navDirection = 'push';
     const next = this.#history.slice(0, this.#historyIndex + 1);
     next.push(entry);
     if (next.length > 100) next.shift();
@@ -204,6 +207,7 @@ class Store {
   }
 
   #step(dir: 1 | -1) {
+    this.navDirection = dir < 0 ? 'back' : 'forward';
     let i = this.#historyIndex + dir;
     while (i >= 0 && i < this.#history.length) {
       const entry = this.#history[i];

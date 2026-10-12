@@ -256,7 +256,7 @@
   {/if}
   <main class="main">
     <TitleBar {words} {scrolled} />
-    <div class="scroller" bind:this={scroller} onscroll={() => (scrolled = (scroller?.scrollTop ?? 0) > 2)}>
+    <div class="scroller" data-nav={store.navDirection} bind:this={scroller} onscroll={() => (scrolled = (scroller?.scrollTop ?? 0) > 2)}>
       {#if store.view === 'home'}
         {#if planner.loaded && library.loaded}<HomeView />{/if}
       {:else if store.view === 'tag' && store.tag}
@@ -335,6 +335,42 @@
     display: flex;
     height: 100vh;
     overflow: hidden;
+  }
+  /* A page or view arriving: it fades in and settles, rising for a new
+     place, or drifting in from the side it came from on Back and Forward.
+     "backwards" fill only: no transform lingers once it has arrived (which
+     would misplace fixed-position menus inside it). */
+  .scroller > :global(*) {
+    animation: route-in 280ms var(--ease-out) backwards;
+  }
+  .scroller[data-nav='back'] > :global(*) {
+    animation-name: route-back;
+  }
+  .scroller[data-nav='forward'] > :global(*) {
+    animation-name: route-forward;
+  }
+  @keyframes route-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+  }
+  @keyframes route-back {
+    from {
+      opacity: 0;
+      transform: translateX(-12px);
+    }
+  }
+  @keyframes route-forward {
+    from {
+      opacity: 0;
+      transform: translateX(12px);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .scroller > :global(*) {
+      animation: none;
+    }
   }
   /* While sliding (only then), the slot clips the panel and the panel
      rides the edge; at rest the resize handle may reach past it. */

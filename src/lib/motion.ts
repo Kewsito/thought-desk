@@ -31,6 +31,18 @@ export function sheet(_node: Element, { duration = 300 } = {}) {
 const cubicOut = (t: number) => 1 - (1 - t) ** 3;
 
 /**
+ * Closing a sheet or dialog: it sinks a little and shrinks as it fades,
+ * gently at first and then away (cubic-out on a reversed clock).
+ */
+export function sheetOut(_node: Element, { duration = 180 } = {}) {
+  return {
+    duration: reduced() ? 0 : duration,
+    easing: cubicOut,
+    css: (t: number, u: number) => `opacity: ${t}; transform: translateY(${u * 6}px) scale(${1 - u * 0.04});`,
+  };
+}
+
+/**
  * The sidebar sliding in or out: its slot widens or narrows (so the page
  * beside it glides over), while the panel itself moves with the edge
  * instead of squashing, and fades a touch at the far end.

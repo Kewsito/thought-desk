@@ -2,7 +2,7 @@
   import { onMount, tick } from 'svelte';
   import Icon from './Icon.svelte';
   import Swatches from '../ui/Swatches.svelte';
-  import { fadeOut, sheet } from '../motion';
+  import { fadeOut, sheet, sheetOut } from '../motion';
   import { ui, type ConfirmState } from '../ui.svelte';
 
   let { dialog: request }: { dialog: ConfirmState } = $props();
@@ -45,7 +45,7 @@
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-<div class="backdrop" onmousedown={(e) => e.target === e.currentTarget && done(false)} out:fadeOut|global={{ duration: 140 }}>
+<div class="backdrop" onmousedown={(e) => e.target === e.currentTarget && done(false)} out:fadeOut|global={{ duration: 200 }}>
   <div
     class="dialog"
     class:prompt={!!dialog.input}
@@ -53,7 +53,8 @@
     aria-modal="true"
     aria-labelledby="confirm-title"
     aria-describedby="confirm-message"
-    in:sheet|global={{ duration: 280 }}
+    in:sheet|global={{ duration: 300 }}
+    out:sheetOut|global={{ duration: 160 }}
   >
     <div class="badge" class:danger={dialog.danger}>
       <Icon name={dialog.icon ?? (dialog.danger ? 'trash' : 'info')} size={22} />

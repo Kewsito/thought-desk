@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
-  import { fadeOut, sheet } from '../motion';
+  import { fadeOut, sheet, sheetOut } from '../motion';
 
   let {
     onclose,
@@ -27,7 +27,7 @@
   class="backdrop"
   class:light={glass}
   onmousedown={(e) => e.target === e.currentTarget && onclose()}
-  out:fadeOut|global={{ duration: 140 }}
+  out:fadeOut|global={{ duration: 200 }}
 >
   <div
     class="modal"
@@ -37,8 +37,8 @@
     role="dialog"
     aria-modal="true"
     aria-label={label}
-    in:sheet|global
-    out:fadeOut|global={{ duration: 120 }}
+    in:sheet|global={{ duration: 340 }}
+    out:sheetOut|global={{ duration: 180 }}
   >
     {@render children()}
   </div>
