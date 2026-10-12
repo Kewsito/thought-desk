@@ -1,10 +1,25 @@
-import { Extension } from '@tiptap/core';
+import { Extension, type Editor, type Range } from '@tiptap/core';
 import { PluginKey } from '@tiptap/pm/state';
 import Suggestion from '@tiptap/suggestion';
+import { clock } from '../clock.svelte';
+import { formatDate, formatDue } from '../dates';
+import { KINDS, fileKind, library } from '../library.svelte';
+import { planner } from '../planner.svelte';
 import { store } from '../store.svelte';
+import type { MentionKind } from './page-link';
 import { rank, suggestionRenderer, type MenuEntry } from './suggestion.svelte';
 
-/** "@" opens a page picker that inserts an inline link to the chosen page. */
+function insertMention(editor: Editor, range: Range | null, id: string, kind: MentionKind) {
+  const content = [{ type: 'mention', attrs: { id, kind } }, { type: 'text', text: ' ' }];
+  const chain = editor.chain().focus();
+  if (range) chain.insertContentAt(range, content).run();
+  else chain.insertContent(content).run();
+}
+
+/**
+ * "@" links to anything in the workspace: pages, assignments, events and
+ * files. With no query it offers recent pages and what's due next.
+ */
 export const MentionSuggest = Extension.create({
   name: 'mentionSuggest',
   addProseMirrorPlugins() {
@@ -16,8 +31,9 @@ export const MentionSuggest = Extension.create({
         allowSpaces: true,
         allow: ({ state, range }) => !state.doc.resolve(range.from).parent.type.spec.code,
         items: ({ query }) => {
-          const pages = store.pages
-            .filter((p) => !p.deletedAt)
+          const q = query.trim();
+          const pages: MenuEntry[] = store.pages
+            .filter((p) => !p.deletedAt && p.id !== store.currentId)
             .sort((a, b) => b.updatedAt - a.updatedAt)
             .map((p) => {
               const path = store.ancestors(p.id).map((a) => a.title || 'Untitled');
@@ -27,41 +43,80 @@ export const MentionSuggest = Extension.create({
                 description: path.length ? path.join(' / ') : undefined,
                 emoji: p.icon || undefined,
                 icon: p.icon ? undefined : 'page',
-                group: query ? undefined : 'Recent pages',
+                group: 'Pages',
+                run: (editor, range) => insertMention(editor, range, p.id, 'page'),
+              };
+            });
+          const assignments: MenuEntry[] = planner.live
+            .filter((a) => (q ? true : a.status !== 'done'))
+            .map((a) => ({
+              id: `a:${a.id}`,
+              title: a.title || 'Untitled',
+              description: [a.courseId ? planner.courseById.get(a.courseId)?.name : null, formatDue(a.dueDate, a.dueTime, clock.today)]
+                .filter(Boolean)
+                .join(' · '),
+              icon: 'assignment',
+              keywords: a.courseId ? planner.courseById.get(a.courseId)?.name : undefined,
+              group: 'Assignments',
+              run: (editor, range) => insertMention(editor, range, a.id, 'assignment'),
+            }));
+          const events: MenuEntry[] = planner.liveEvents
+            .filter((e) => (q ? true : e.endDate >= clock.today))
+            .sort((a, b) => a.startDate.localeCompare(b.startDate))
+            .map((e) => ({
+              id: `e:${e.id}`,
+              title: e.title || 'Untitled',
+              description: formatDate(e.startDate) + (e.repeat !== 'none' ? ' · repeats' : ''),
+              icon: 'calendar',
+              group: 'Events',
+              run: (editor, range) => insertMention(editor, range, e.id, 'event'),
+            }));
+          const files: MenuEntry[] = library.live.map((f) => ({
+            id: `f:${f.id}`,
+            title: f.name,
+            description: KINDS[fileKind(f)].label,
+            icon: KINDS[fileKind(f)].icon,
+            group: 'Files',
+            run: (editor, range) => insertMention(editor, range, f.id, 'file'),
+          }));
+
+          const results: MenuEntry[] = q
+            ? [...rank(pages, q, 5), ...rank(assignments, q, 4), ...rank(events, q, 3), ...rank(files, q, 3)]
+            : [...pages.slice(0, 5), ...assignments.slice(0, 3), ...events.slice(0, 2), ...files.slice(0, 2)];
+          if (q) {
+            results.push(
+              {
+                id: '__page__',
+                title: `New page “${q}”`,
+                description: 'Create it inside this page',
+                icon: 'page-plus',
+                group: 'Create',
                 run: (editor, range) => {
-                  editor
-                    .chain()
-                    .focus()
-                    .insertContentAt(range, [{ type: 'mention', attrs: { id: p.id } }, { type: 'text', text: ' ' }])
-                    .run();
+                  editor.chain().focus().deleteRange(range).run();
+                  void store.create(store.currentId, { open: false, title: q }).then((meta) => {
+                    if (meta && !editor.isDestroyed) insertMention(editor, null, meta.id, 'page');
+                  });
                 },
-              } satisfies MenuEntry as MenuEntry;
-            });
-          const results: MenuEntry[] = rank(pages, query, 8);
-          const title = query.trim();
-          if (title) {
-            results.push({
-              id: '__create__',
-              title: `New page “${title}”`,
-              description: 'Create it inside this page',
-              icon: 'page-plus',
-              run: (editor, range) => {
-                editor.chain().focus().deleteRange(range).run();
-                void store.create(store.currentId, { open: false, title }).then((meta) => {
-                  if (!meta || editor.isDestroyed) return;
-                  editor
-                    .chain()
-                    .focus()
-                    .insertContent([{ type: 'mention', attrs: { id: meta.id } }, { type: 'text', text: ' ' }])
-                    .run();
-                });
               },
-            });
+              {
+                id: '__assignment__',
+                title: `New assignment “${q}”`,
+                description: 'Add it to Assignments',
+                icon: 'assignment',
+                group: 'Create',
+                run: (editor, range) => {
+                  editor.chain().focus().deleteRange(range).run();
+                  void planner.addAssignment({ title: q }).then((a) => {
+                    if (a && !editor.isDestroyed) insertMention(editor, null, a.id, 'assignment');
+                  });
+                },
+              },
+            );
           }
           return results;
         },
         command: ({ editor, range, props }) => props.run(editor, range),
-        render: suggestionRenderer('No pages found'),
+        render: suggestionRenderer('Nothing found'),
       }),
     ];
   },

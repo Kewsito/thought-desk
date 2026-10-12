@@ -15,6 +15,7 @@ import { SlashCommand } from './slash';
 import { MentionSuggest } from './mention';
 import { BlockHandle, type BlockHandleOptions } from './block-handle';
 import { ImageDrop } from './images';
+import { FileBlock } from './file-block';
 import { ui } from '../ui.svelte';
 
 /** Editor-wide shortcuts that don't belong to a single node type. */
@@ -141,6 +142,7 @@ export function buildExtensions(handle: BlockHandleOptions): AnyExtension[] {
     Callout,
     PageLink,
     Mention,
+    FileBlock,
     SlashCommand,
     MentionSuggest,
     ImageDrop,

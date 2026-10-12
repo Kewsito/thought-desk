@@ -1,12 +1,32 @@
 import { Extension, type Editor, type Range } from '@tiptap/core';
 import { PluginKey } from '@tiptap/pm/state';
 import Suggestion from '@tiptap/suggestion';
+import { clock } from '../clock.svelte';
+import { planner } from '../planner.svelte';
 import { store } from '../store.svelte';
 import { ui } from '../ui.svelte';
-import { insertImage, pickImageFile } from './images';
+import { insertFiles, insertImage, pickImageFile } from './images';
 import { rank, suggestionRenderer, type MenuEntry } from './suggestion.svelte';
 
 const clear = (editor: Editor, range: Range) => editor.chain().focus().deleteRange(range);
+
+/** The caret's position on screen, for anchoring popovers. */
+function caretRect(editor: Editor): DOMRect {
+  const c = editor.view.coordsAtPos(editor.state.selection.from);
+  return new DOMRect(c.left, c.top, 0, c.bottom - c.top);
+}
+
+/** Inserts an inline link to a just-created assignment or event. */
+function linkCreated(editor: Editor, kind: 'assignment' | 'event') {
+  return (id: string) => {
+    if (editor.isDestroyed) return;
+    editor
+      .chain()
+      .focus()
+      .insertContent([{ type: 'mention', attrs: { id, kind } }, { type: 'text', text: ' ' }])
+      .run();
+  };
+}
 
 export const SLASH_ITEMS: MenuEntry[] = [
   {
@@ -149,6 +169,46 @@ export const SLASH_ITEMS: MenuEntry[] = [
     },
   },
   {
+    id: 'file',
+    group: 'Media',
+    title: 'File',
+    description: 'Attach a file from your library',
+    icon: 'paperclip',
+    keywords: 'attachment upload pdf document library',
+    run: (e, r) => {
+      clear(e, r).run();
+      ui.pickFile(caretRect(e), (files) => insertFiles(e, files));
+    },
+  },
+  {
+    id: 'assignment',
+    group: 'Planner',
+    title: 'Assignment',
+    description: 'Add one and link it here',
+    icon: 'assignment',
+    keywords: 'homework task due deadline todo course',
+    run: (e, r) => {
+      clear(e, r).run();
+      ui.assignmentSheet = { id: null, draft: {}, onCreated: linkCreated(e, 'assignment') };
+    },
+  },
+  {
+    id: 'event',
+    group: 'Planner',
+    title: 'Event',
+    description: 'Add to your calendar and link it here',
+    icon: 'calendar',
+    keywords: 'meeting lecture class exam schedule calendar',
+    run: (e, r) => {
+      clear(e, r).run();
+      ui.eventSheet = {
+        id: null,
+        draft: { startDate: clock.today, endDate: clock.today },
+        onCreated: linkCreated(e, 'event'),
+      };
+    },
+  },
+  {
     id: 'page',
     group: 'Pages',
     title: 'Page',
@@ -169,8 +229,8 @@ export const SLASH_ITEMS: MenuEntry[] = [
   {
     id: 'link',
     group: 'Pages',
-    title: 'Link to Page',
-    description: 'Mention another page',
+    title: 'Link',
+    description: 'Mention a page, assignment or file',
     icon: 'at',
     hint: '@',
     keywords: 'mention reference wiki',

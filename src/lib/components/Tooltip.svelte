@@ -102,10 +102,10 @@
     height: 24px;
     padding: 0 9px;
     border-radius: 7px;
-    background: color-mix(in srgb, var(--accent) 90%, transparent);
+    background: color-mix(in srgb, var(--ink) 90%, transparent);
     -webkit-backdrop-filter: blur(16px);
     backdrop-filter: blur(16px);
-    color: var(--on-accent);
+    color: var(--on-ink);
     font-size: var(--fs-footnote);
     font-weight: var(--fw-500);
     white-space: nowrap;

@@ -1,6 +1,6 @@
 # Thought Desk
 
-A fast, local-first notes workspace in the spirit of Notion: nested pages, a block editor, full-text search. It has a custom title bar, a vertical sidebar and a strict black-and-white look. Built with **Rust + Tauri 2 + TypeScript** (Svelte 5 components).
+A fast, local-first notes workspace in the spirit of Notion: nested pages, a block editor, full-text search, plus assignments, a calendar and a file library that all link together. It has a custom title bar, a vertical sidebar and a black-and-white look with optional accent colors. Built with **Rust + Tauri 2 + TypeScript** (Svelte 5 components).
 
 ## Why it's light
 
@@ -26,11 +26,15 @@ A fast, local-first notes workspace in the spirit of Notion: nested pages, a blo
 - **Formatting bubble** on selection: bold, italic, underline, strike, code, highlight, links, and turn into.
 - **Pages:** nested pages, sub-page blocks (`/page`), and inline page links (`@`) that stay in sync when pages are renamed.
 - **Sidebar:** drag pages to reorder or nest, favorites, collapsible sections, resizable width (double-click the edge to reset).
-- **Search:** `Ctrl+K` over titles and contents (SQLite FTS5 with prefix matching and a substring fallback).
-- **Trash:** soft delete with *Undo*, restore (with sub-pages), permanent delete, empty trash.
+- **Assignments:** due dates (with optional times), courses with colors, status (to do / in progress / done), priority, notes, attachments and a linked notes page. Grouped as Overdue, Today, Tomorrow, This Week, Later; quick add, course filters and search.
+- **Calendar:** month view with a day agenda (due assignments, events, pages written that day) and a week view with a time grid. Events can be all-day or timed, span days, repeat daily/weekly/monthly, carry a course, color and location, and link a notes page. Drag events and assignments to reschedule.
+- **Files:** one library for everything you add: imports, drops, attachments and images in pages. Grid or list, filters by type and an *Unused* filter, previews for images, PDFs, audio, video and text, *Open in default app*, *Show in folder*, *Save a copy*, and where each file is used.
+- **One workspace:** `@` links a page to pages, assignments, events or files (assignment chips show a live check and due date); `/assignment`, `/event` and `/file` create or insert them from a page; a notes page links back to its assignment; due assignments show in the calendar; files dropped anywhere land in the library.
+- **Search:** `Ctrl+K` over pages (SQLite FTS5 with prefix matching and a substring fallback), assignments, events and files, with quick *Go to* and *Create* actions.
+- **Trash:** one trash for pages, assignments, events and files: soft delete with *Undo*, restore (pages with their sub-pages), permanent delete, empty trash.
 - **Custom title bar:** back/forward, breadcrumbs, save status, favorite, page menu, and Windows-style window controls. Drag anywhere on the bar; double-click maximizes.
 - **Export:** copy as Markdown, or export a `.md` file to Downloads.
-- **Settings:** light / dark / system theme, Default / Serif / Mono page fonts, small text, spell check.
+- **Settings:** light / dark / system theme, accent color (Graphite plus nine colors), Default / Serif / Mono page fonts, small text, spell check, first day of the week, courses.
 - Window size and position are remembered, a second launch focuses the running window, and changes autosave and are flushed on close/minimize.
 
 ## Keyboard
@@ -39,6 +43,8 @@ A fast, local-first notes workspace in the spirit of Notion: nested pages, a blo
 |---|---|
 | `Ctrl+K` / `Ctrl+P` | Search (with text selected in the editor, `Ctrl+K` adds a link) |
 | `Ctrl+N` | New page |
+| `Ctrl+1` / `Ctrl+2` / `Ctrl+3` | Assignments / Calendar / Files |
+| `←` / `→`, `T` | Calendar: previous or next month or week, today |
 | `Ctrl+\` | Toggle sidebar |
 | `Alt+←` / `Alt+→`, mouse back/forward | Navigate history |
 | `Ctrl+Shift+L` | Toggle dark mode |
@@ -66,7 +72,7 @@ cd src-tauri && cargo test   # storage tests
 
 ## Data
 
-Everything lives in one SQLite database (`thoughtdesk.db`, WAL mode) plus a `files/` folder for images. On Windows that's `%APPDATA%\app.thoughtdesk.desktop\`, and **Settings → Storage** shows the exact path. Back up that folder to back up your notes.
+Everything lives in one SQLite database (`thoughtdesk.db`, WAL mode) plus a `files/` folder for the file library (stored under random names; the database keeps their real names). On Windows that's `%APPDATA%\app.thoughtdesk.desktop\`, and **Settings → Storage** shows the exact path. Back up that folder to back up your notes.
 
 Set `THOUGHTDESK_DATA_DIR` to use a different folder, e.g. a portable copy on a USB drive.
 
@@ -75,14 +81,21 @@ Set `THOUGHTDESK_DATA_DIR` to use a different folder, e.g. a portable copy on a 
 ```
 src/                     TypeScript + Svelte UI
   App.svelte             shell, global shortcuts, window show/close handling
-  lib/store.svelte.ts    page tree state, navigation history, debounced saving
-  lib/editor/            TipTap editor: slash menu, @-links, block handle, callouts…
+  lib/store.svelte.ts    page tree state, navigation history (pages and views), debounced saving
+  lib/planner.svelte.ts  courses, assignments and events
+  lib/library.svelte.ts  the file library
+  lib/editor/            TipTap editor: slash menu, @-links, block handle, callouts, file blocks…
+  lib/views/             Assignments, Calendar (month and week) and Files
+  lib/sheets/            assignment and event editors, file preview
   lib/components/        sidebar, title bar, search, settings, trash, menus
+  lib/ui/                shared controls: segmented control, switch, swatches, rows…
   dev-mock.ts            fake backend for `npm run dev` (dev only, not bundled)
 src-tauri/src/
-  db.rs                  SQLite schema, tree operations, trash, FTS search (+ tests)
+  db.rs                  SQLite schema and migrations, page tree, trash, FTS search (+ tests)
+  planner.rs             courses, assignments, events (+ tests)
+  library.rs             file library: import, rename, usage (+ tests)
   commands.rs            Tauri commands
-  files.rs               image storage, `tdfile://` protocol, unused-file cleanup
+  files.rs               `tdfile://` protocol, stray-file cleanup
   memory.rs              WebView2 suspend/trim while minimized
 ```
 

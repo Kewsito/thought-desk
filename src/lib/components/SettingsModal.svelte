@@ -2,8 +2,13 @@
   import { onMount } from 'svelte';
   import Icon from './Icon.svelte';
   import Modal from './Modal.svelte';
+  import Segmented from '../ui/Segmented.svelte';
+  import Swatches from '../ui/Swatches.svelte';
+  import Switch from '../ui/Switch.svelte';
   import { api } from '../api';
-  import { prefs, type Font, type Theme } from '../prefs.svelte';
+  import { ACCENTS, PALETTE, colorVar, nextColor, type Accent } from '../colors';
+  import { planner } from '../planner.svelte';
+  import { prefs, type Font, type Theme, type WeekStart } from '../prefs.svelte';
   import { ui } from '../ui.svelte';
   import { formatBytes } from '../time';
   import type { DataInfo } from '../types';
@@ -24,18 +29,27 @@
     { value: 'serif', label: 'Serif' },
     { value: 'mono', label: 'Mono' },
   ];
+  const weekStarts: { value: WeekStart; label: string }[] = [
+    { value: 0, label: 'Sunday' },
+    { value: 1, label: 'Monday' },
+  ];
   const shortcuts: { label: string; keys: string[][] }[] = [
-    { label: 'Search pages', keys: [['Ctrl', 'K']] },
+    { label: 'Search everything', keys: [['Ctrl', 'K']] },
     { label: 'New page', keys: [['Ctrl', 'N']] },
+    { label: 'Assignments, Calendar, Files', keys: [['Ctrl', '1'], ['Ctrl', '2'], ['Ctrl', '3']] },
+    { label: 'Calendar: previous or next', keys: [['←'], ['→']] },
+    { label: 'Calendar: today', keys: [['T']] },
     { label: 'Toggle sidebar', keys: [['Ctrl', '\\']] },
     { label: 'Back and forward', keys: [['Alt', '←'], ['Alt', '→']] },
     { label: 'Light or dark', keys: [['Ctrl', 'Shift', 'L']] },
     { label: 'Insert a block', keys: [['/']] },
-    { label: 'Link to a page', keys: [['@']] },
+    { label: 'Link a page, assignment or file', keys: [['@']] },
     { label: 'Add a link', keys: [['Ctrl', 'K']] },
     { label: 'Duplicate block', keys: [['Ctrl', 'D']] },
     { label: 'Indent list item', keys: [['Tab'], ['Shift', 'Tab']] },
   ];
+
+  const accentLabel = $derived(ACCENTS.find((a) => a.key === prefs.accent)?.label ?? 'Graphite');
 
   async function copyPath() {
     if (!info) return;
@@ -46,36 +60,69 @@
       ui.error(e);
     }
   }
+
+  async function addCourse() {
+    const res = await ui.prompt({
+      title: 'New Course',
+      placeholder: 'Course name',
+      confirmLabel: 'Add Course',
+      icon: 'book',
+      color: nextColor(planner.courses.map((c) => c.color)),
+    });
+    if (res) await planner.addCourse(res.value, res.color);
+  }
+
+  async function renameCourse(id: string, name: string) {
+    const res = await ui.prompt({ title: 'Rename Course', value: name, confirmLabel: 'Rename', icon: 'book' });
+    if (res) void planner.updateCourse(id, { name: res.value });
+  }
+
+  function colorMenu(e: MouseEvent, id: string, current: string) {
+    ui.openMenuAt(
+      e.currentTarget as Element,
+      PALETTE.map((p) => ({
+        label: p.label,
+        dot: colorVar(p.key),
+        checked: current === p.key,
+        action: () => void planner.updateCourse(id, { color: p.key }),
+      })),
+    );
+  }
+
+  const stats = $derived(
+    info
+      ? [
+          { n: info.pageCount, one: 'Page', many: 'Pages' },
+          { n: info.assignmentCount, one: 'Assignment', many: 'Assignments' },
+          { n: info.eventCount, one: 'Event', many: 'Events' },
+          { n: info.fileCount, one: 'File', many: 'Files' },
+        ]
+      : [],
+  );
 </script>
 
-{#snippet toggle(on: boolean, label: string, onchange: () => void)}
-  <button class="switch round" class:on onclick={onchange} role="switch" aria-checked={on} aria-label={label}>
-    <span class="knob round"></span>
-  </button>
-{/snippet}
-
-<Modal onclose={() => (ui.settingsOpen = false)} width={580} top="8vh" label="Settings">
-  <header class="head">
+<Modal onclose={() => (ui.settingsOpen = false)} label="Settings">
+  <header class="modal-head">
     <h2>Settings</h2>
     <button class="icon-btn" onclick={() => (ui.settingsOpen = false)} aria-label="Close"><Icon name="x" /></button>
   </header>
 
-  <div class="body">
-    <h3>Appearance</h3>
+  <div class="modal-body fade">
+    <h3 class="group-title">Appearance</h3>
     <div class="group">
-      <div class="row">
-        <div class="label">Theme</div>
-        <div class="segmented" role="radiogroup" aria-label="Theme">
-          {#each themes as t}
-            <button class:on={prefs.theme === t.value} role="radio" aria-checked={prefs.theme === t.value} onclick={() => (prefs.theme = t.value)}>
-              <Icon name={t.icon} size={14} stroke={2} />
-              {t.label}
-            </button>
-          {/each}
-        </div>
+      <div class="group-row">
+        <div class="row-label">Theme</div>
+        <Segmented options={themes} value={prefs.theme} onchange={(v) => (prefs.theme = v)} label="Theme" />
       </div>
-      <div class="row tall">
-        <div class="label">
+      <div class="group-row">
+        <div class="row-label">
+          Accent color
+          <small>{accentLabel}</small>
+        </div>
+        <Swatches keys={[...ACCENTS]} value={prefs.accent} onchange={(k) => (prefs.accent = k as Accent)} label="Accent color" />
+      </div>
+      <div class="group-row tall">
+        <div class="row-label">
           Page font
           <small>Titles and writing</small>
         </div>
@@ -88,55 +135,92 @@
           {/each}
         </div>
       </div>
-      <div class="row">
-        <div class="label">
+      <div class="group-row">
+        <div class="row-label">
           Small text
           <small>Fit more on the page</small>
         </div>
-        {@render toggle(prefs.smallText, 'Small text', () => (prefs.smallText = !prefs.smallText))}
+        <Switch on={prefs.smallText} label="Small text" onchange={() => (prefs.smallText = !prefs.smallText)} />
       </div>
     </div>
 
-    <h3>Writing</h3>
+    <h3 class="group-title">Writing</h3>
     <div class="group">
-      <div class="row">
-        <div class="label">
+      <div class="group-row">
+        <div class="row-label">
           Check spelling
           <small>Underline words that look misspelled</small>
         </div>
-        {@render toggle(prefs.spellcheck, 'Check spelling', () => (prefs.spellcheck = !prefs.spellcheck))}
+        <Switch on={prefs.spellcheck} label="Check spelling" onchange={() => (prefs.spellcheck = !prefs.spellcheck)} />
       </div>
     </div>
 
-    <h3>Storage</h3>
+    <h3 class="group-title">Calendar</h3>
+    <div class="group">
+      <div class="group-row">
+        <div class="row-label">Week starts on</div>
+        <Segmented options={weekStarts} value={prefs.weekStart} onchange={(v) => (prefs.weekStart = v)} label="Week starts on" />
+      </div>
+    </div>
+
+    <h3 class="group-title">
+      <span>Courses</span>
+      <button class="btn small raised" onclick={addCourse}><Icon name="plus" size={13} stroke={2.2} /> Add Course</button>
+    </h3>
+    <div class="group">
+      {#each planner.courses as c (c.id)}
+        {@const used = planner.live.filter((a) => a.courseId === c.id).length}
+        <div class="group-row compact course">
+          <button class="course-color" onclick={(e) => colorMenu(e, c.id, c.color)} data-tip="Change color" aria-label="Change color">
+            <span class="dot" style:--dot={colorVar(c.color)}></span>
+          </button>
+          <div class="row-label course-name">
+            {c.name || 'Untitled'}
+            <small>{used} assignment{used === 1 ? '' : 's'}</small>
+          </div>
+          <div class="course-actions">
+            <button class="icon-btn" onclick={() => renameCourse(c.id, c.name)} data-tip="Rename" aria-label="Rename"><Icon name="pencil" size={15} /></button>
+            <button class="icon-btn" onclick={() => planner.deleteCourse(c.id)} data-tip="Delete" aria-label="Delete"><Icon name="trash" size={15} /></button>
+          </div>
+        </div>
+      {:else}
+        <div class="group-row"><div class="row-label"><small>Courses group assignments and events and give them a color.</small></div></div>
+      {/each}
+    </div>
+
+    <h3 class="group-title">Storage</h3>
     <div class="group">
       {#if info}
-        <div class="row stats">
-          <div class="stat"><strong>{info.pageCount}</strong><span>{info.pageCount === 1 ? 'Page' : 'Pages'}</span></div>
-          <div class="stat"><strong>{formatBytes(info.dbBytes)}</strong><span>Database</span></div>
-          <div class="stat"><strong>{formatBytes(info.fileBytes)}</strong><span>{info.fileCount === 1 ? '1 image' : `${info.fileCount} images`}</span></div>
+        <div class="group-row stats">
+          {#each stats as st}
+            <div class="stat"><strong>{st.n}</strong><span>{st.n === 1 ? st.one : st.many}</span></div>
+          {/each}
         </div>
-        <div class="row">
-          <div class="label path-label">
+        <div class="group-row">
+          <div class="row-label">Size</div>
+          <span class="value">{formatBytes(info.dbBytes)} database · {formatBytes(info.fileBytes)} files</span>
+        </div>
+        <div class="group-row">
+          <div class="row-label path-label">
             Location
             <small class="path" data-tip={info.dataDir}>{info.dataDir}</small>
           </div>
-          <button class="btn small" onclick={copyPath}>Copy path</button>
+          <button class="btn small raised" onclick={copyPath}>Copy Path</button>
         </div>
       {:else}
-        <div class="row"><div class="label"><small>Loading…</small></div></div>
+        <div class="group-row"><div class="row-label"><small>Loading…</small></div></div>
       {/if}
     </div>
-    <p class="note">Everything is stored on this computer in a single SQLite file. Back up the folder above to keep your notes safe.</p>
+    <p class="group-note">Everything is stored on this computer: one SQLite file plus a files folder. Back up the folder above to keep your work safe.</p>
 
-    <h3>Keyboard</h3>
+    <h3 class="group-title">Keyboard</h3>
     <div class="group">
       {#each shortcuts as s}
-        <div class="row compact">
-          <div class="label">{s.label}</div>
+        <div class="group-row compact">
+          <div class="row-label">{s.label}</div>
           <div class="keys">
             {#each s.keys as combo, i}
-              {#if i > 0}<span class="or">or</span>{/if}
+              {#if i > 0}<span class="or">{s.keys.length > 2 ? '·' : 'or'}</span>{/if}
               <span class="combo">{#each combo as k}<kbd>{k}</kbd>{/each}</span>
             {/each}
           </div>
@@ -149,120 +233,6 @@
 </Modal>
 
 <style>
-  .head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    height: 56px;
-    padding: 0 14px 0 24px;
-    flex: none;
-  }
-  h2 {
-    margin: 0;
-    font-size: 17px;
-    font-weight: var(--fw-650);
-    letter-spacing: -0.016em;
-  }
-  .body {
-    overflow-y: auto;
-    padding: 0 24px 28px;
-    /* Content softly fades under the sheet edge instead of being cut. */
-    mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent);
-  }
-  h3 {
-    margin: 18px 0 8px 4px;
-    font-size: var(--fs-ui);
-    font-weight: var(--fw-600);
-    color: var(--text-2);
-  }
-  h3:first-child {
-    margin-top: 2px;
-  }
-
-  /* Inset grouped list */
-  .group {
-    background: var(--bg-grouped);
-    border-radius: var(--r-md);
-  }
-  .row {
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    min-height: 48px;
-    padding: 8px 14px 8px 16px;
-  }
-  .row.tall {
-    min-height: 76px;
-  }
-  .row.compact {
-    min-height: 38px;
-    padding-top: 4px;
-    padding-bottom: 4px;
-  }
-  /* Hairline separators inset from the leading edge, like iOS/macOS lists. */
-  .row + .row::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 16px;
-    right: 0;
-    height: 1px;
-    background: var(--hairline);
-  }
-  .label {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-    font-size: var(--fs-body-ui);
-    font-weight: var(--fw-500);
-    color: var(--text);
-  }
-  .label small {
-    font-size: var(--fs-footnote);
-    font-weight: 400;
-    color: var(--text-3);
-  }
-
-  /* Segmented control */
-  .segmented {
-    display: flex;
-    flex: none;
-    padding: 2px;
-    border-radius: var(--r-sm);
-    background: var(--fill-2);
-  }
-  .segmented button {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    height: 26px;
-    padding: 0 12px;
-    border-radius: 6px;
-    font-size: var(--fs-ui);
-    font-weight: var(--fw-500);
-    color: var(--text-2);
-    transition:
-      background-color var(--dur) var(--ease),
-      color var(--dur) var(--ease),
-      box-shadow var(--dur) var(--ease);
-  }
-  .segmented button:hover:not(.on) {
-    color: var(--text);
-  }
-  .segmented button.on {
-    background: var(--bg-elevated);
-    color: var(--text);
-    box-shadow:
-      0 0 0 0.5px var(--hairline),
-      var(--shadow-sm);
-  }
-  :global(:root[data-theme='dark']) .segmented button.on {
-    background: #48484a;
-  }
-
   /* Font picker */
   .fonts {
     display: flex;
@@ -278,7 +248,7 @@
     width: 64px;
     height: 56px;
     border-radius: var(--r-sm);
-    background: var(--bg-elevated);
+    background: var(--raised);
     box-shadow: 0 0 0 1px var(--hairline);
     color: var(--text-2);
     transition:
@@ -290,7 +260,7 @@
   }
   .font.on {
     color: var(--text);
-    box-shadow: 0 0 0 2px var(--text);
+    box-shadow: 0 0 0 2px var(--accent);
   }
   .ag {
     font-size: 21px;
@@ -312,44 +282,48 @@
     font-weight: var(--fw-500);
   }
 
-  /* Switch */
-  .switch {
-    position: relative;
-    flex: none;
-    width: 38px;
-    height: 22px;
-    border-radius: 11px;
-    background: var(--fill-3);
-    transition: background-color var(--dur) var(--ease);
+  /* Courses */
+  .course {
+    justify-content: flex-start;
+    gap: 12px;
+    min-height: 48px;
   }
-  .knob {
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background: #ffffff;
-    box-shadow:
-      0 0 0 0.5px rgba(0, 0, 0, 0.04),
-      0 2px 4px rgba(0, 0, 0, 0.15),
-      0 1px 1px rgba(0, 0, 0, 0.06);
-    transition:
-      transform var(--dur-slow) var(--spring),
-      background-color var(--dur) var(--ease);
+  .course-color {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    border-radius: var(--r-xs);
+    transition: background-color var(--dur-fast) var(--ease);
   }
-  .switch.on {
-    background: var(--accent);
+  .course-color:hover {
+    background: var(--fill-2);
   }
-  .switch.on .knob {
-    transform: translateX(16px);
-    background: var(--on-accent);
+  .course-color .dot {
+    width: 12px;
+    height: 12px;
+  }
+  .course-name {
+    flex: 1;
+  }
+  .course-actions {
+    display: flex;
+    gap: 2px;
+    opacity: 0;
+    transition: opacity var(--dur-fast) var(--ease);
+  }
+  .course:hover .course-actions,
+  .course-actions:focus-within {
+    opacity: 1;
+  }
+  .course + :global(.course)::before {
+    left: 52px;
   }
 
   /* Storage */
   .stats {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 0;
     padding: 14px 16px;
   }
@@ -372,6 +346,11 @@
     font-size: var(--fs-footnote);
     color: var(--text-3);
   }
+  .value {
+    font-size: var(--fs-ui);
+    color: var(--text-2);
+    font-variant-numeric: tabular-nums;
+  }
   .path-label {
     flex: 1;
   }
@@ -383,23 +362,6 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     user-select: text;
-  }
-  .btn.small {
-    height: 26px;
-    min-width: 0;
-    padding: 0 10px;
-    font-size: var(--fs-ui);
-    background: var(--bg-elevated);
-    box-shadow: 0 0 0 0.5px var(--hairline), var(--shadow-sm);
-  }
-  :global(:root[data-theme='dark']) .btn.small {
-    background: #3a3a3c;
-  }
-  .note {
-    margin: 8px 4px 0;
-    font-size: var(--fs-footnote);
-    line-height: 1.45;
-    color: var(--text-3);
   }
 
   /* Keyboard */
@@ -416,7 +378,7 @@
   .combo kbd {
     min-width: 20px;
     justify-content: center;
-    background: var(--bg-elevated);
+    background: var(--raised);
     box-shadow: 0 0 0 0.5px var(--hairline), 0 1px 0 var(--hairline);
     color: var(--text-2);
   }

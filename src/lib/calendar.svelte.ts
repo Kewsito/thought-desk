@@ -1,0 +1,96 @@
+/** Calendar navigation, items per day, and drag-to-reschedule. */
+
+import { addDays, diffDays, minutes, occurrences, todayISO, fromMinutes, type Occurrence } from './dates';
+import { planner } from './planner.svelte';
+import { store } from './store.svelte';
+import type { Assignment } from './types';
+
+export interface DayItems {
+  allDay: Occurrence[];
+  timed: Occurrence[];
+  due: Assignment[];
+}
+
+/** What's being dragged between days (or onto the week's time grid). */
+export interface DragItem {
+  kind: 'event' | 'assignment';
+  id: string;
+  /** The day it was picked up from; dropping shifts the item by the difference. */
+  from: string;
+}
+
+class CalendarState {
+  /** Any date inside the month or week on screen. */
+  cursor = $state(todayISO());
+  /** The day whose agenda shows beside the month. */
+  selected = $state(todayISO());
+  drag = $state<DragItem | null>(null);
+
+  /** Opens the calendar on `date`. */
+  show(date: string) {
+    this.cursor = date;
+    this.selected = date;
+    store.go('calendar');
+  }
+
+  /** Moves the dragged item to `day` (and `time`, for timed events). */
+  drop(day: string, time?: string) {
+    const d = this.drag;
+    this.drag = null;
+    if (!d) return;
+    if (d.kind === 'assignment') {
+      planner.updateAssignment(d.id, { dueDate: day, ...(time ? { dueTime: time } : {}) }, { immediate: true });
+      return;
+    }
+    const e = planner.eventById.get(d.id);
+    if (!e || e.repeat !== 'none') return;
+    const shift = diffDays(d.from, day);
+    const patch: Parameters<typeof planner.updateEvent>[1] = {
+      startDate: addDays(e.startDate, shift),
+      endDate: addDays(e.endDate, shift),
+    };
+    if (time && e.startTime) {
+      // Keep the duration when moving to another time of day.
+      const length = diffDays(e.startDate, e.endDate) * 1440 + minutes(e.endTime ?? e.startTime) - minutes(e.startTime);
+      const start = minutes(time);
+      const end = start + length;
+      patch.startTime = time;
+      patch.endDate = addDays(patch.startDate!, Math.floor(end / 1440));
+      patch.endTime = fromMinutes(end % 1440);
+    }
+    if (shift === 0 && !time) return;
+    planner.updateEvent(d.id, patch, { immediate: true });
+  }
+}
+
+export const calendar = new CalendarState();
+
+/** Events (expanded repeats) and due assignments for each day in [from, to]. */
+export function itemsByDay(from: string, to: string): Map<string, DayItems> {
+  const map = new Map<string, DayItems>();
+  const at = (day: string) => {
+    let items = map.get(day);
+    if (!items) map.set(day, (items = { allDay: [], timed: [], due: [] }));
+    return items;
+  };
+  for (const e of planner.liveEvents) {
+    for (const occ of occurrences(e, from, to)) {
+      const first = occ.start < from ? from : occ.start;
+      const last = occ.end > to ? to : occ.end;
+      for (let day = first; day <= last; day = addDays(day, 1)) {
+        // Multi-day timed events read as all-day on the days in between.
+        const timed = e.startTime && (occ.start === occ.end || day === occ.start);
+        (timed ? at(day).timed : at(day).allDay).push(occ);
+      }
+    }
+  }
+  for (const [day, list] of planner.dueByDate) {
+    if (day >= from && day <= to) at(day).due.push(...list);
+  }
+  for (const items of map.values()) {
+    items.timed.sort((a, b) => (a.event.startTime ?? '').localeCompare(b.event.startTime ?? ''));
+    items.allDay.sort((a, b) => a.start.localeCompare(b.start) || b.end.localeCompare(a.end));
+    items.due.sort((a, b) => Number(a.status === 'done') - Number(b.status === 'done') || (a.dueTime ?? '24').localeCompare(b.dueTime ?? '24'));
+  }
+  return map;
+}

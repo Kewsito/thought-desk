@@ -2,6 +2,7 @@
 
 import { api } from './api';
 import { toMarkdown, type JNode } from './markdown';
+import { titleOf } from './editor/page-link';
 import { store } from './store.svelte';
 import { ui, type MenuItem } from './ui.svelte';
 
@@ -19,7 +20,7 @@ async function pageMarkdown(id: string): Promise<{ title: string; markdown: stri
     div.innerHTML = page.content;
     doc = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: div.textContent ?? '' }] }] };
   }
-  const markdown = toMarkdown(doc, page.title, (pid) => store.byId.get(pid)?.title || 'Untitled');
+  const markdown = toMarkdown(doc, page.title, titleOf);
   return { title: page.title || 'Untitled', markdown };
 }
 

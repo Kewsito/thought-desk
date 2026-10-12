@@ -74,12 +74,12 @@
     color: var(--text-2);
   }
   .close:hover {
-    background: var(--accent);
-    color: var(--on-accent);
+    background: var(--ink);
+    color: var(--on-ink);
   }
   .close:active {
-    background: var(--accent);
-    color: var(--on-accent);
+    background: var(--ink);
+    color: var(--on-ink);
     opacity: 0.85;
   }
   .close svg {

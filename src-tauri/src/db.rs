@@ -4,6 +4,9 @@
 //! integer `position`, and are soft-deleted into the trash via `deleted_at`.
 //! Page bodies are stored as editor JSON; a plain-text copy lives in an FTS5
 //! index (`pages_fts`, rowid = `pages.rid`) for full-text search.
+//!
+//! Courses, assignments and events live in `planner.rs`, the file library in
+//! `library.rs`; both extend `Db` with their own `impl` blocks.
 
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
 use serde::{Deserialize, Serialize};
@@ -34,6 +37,33 @@ fn err<T>(msg: &str) -> Result<T> {
     Err(Error(msg.to_string()))
 }
 
+/// Tables whose rows go to the trash. Table names never come from the
+/// frontend as text, so they can't be used to inject SQL.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Table {
+    Pages,
+    Assignments,
+    Events,
+    Files,
+}
+
+impl Table {
+    pub fn name(self) -> &'static str {
+        match self {
+            Table::Pages => "pages",
+            Table::Assignments => "assignments",
+            Table::Events => "events",
+            Table::Files => "files",
+        }
+    }
+}
+
+/// Builds a "not found"-style error for the other storage modules.
+pub(crate) fn fail<T>(msg: &str) -> Result<T> {
+    err(msg)
+}
+
 pub fn now() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -41,7 +71,7 @@ pub fn now() -> i64 {
         .unwrap_or(0)
 }
 
-fn new_id() -> String {
+pub(crate) fn new_id() -> String {
     uuid::Uuid::new_v4().to_string()
 }
 
@@ -132,6 +162,70 @@ CREATE TRIGGER pages_fts_delete AFTER DELETE ON pages BEGIN
 END;
 ";
 
+/// Courses, assignments (with file attachments), calendar events and the file
+/// library. Dates are local calendar dates ("YYYY-MM-DD") and times are local
+/// wall-clock times ("HH:MM"), so a due date never shifts with the time zone.
+const SCHEMA_V2: &str = "
+CREATE TABLE courses (
+  id         TEXT PRIMARY KEY,
+  name       TEXT NOT NULL DEFAULT '',
+  color      TEXT NOT NULL DEFAULT 'blue',
+  position   INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL
+);
+CREATE TABLE assignments (
+  id           TEXT PRIMARY KEY,
+  title        TEXT NOT NULL DEFAULT '',
+  course_id    TEXT REFERENCES courses(id) ON DELETE SET NULL,
+  due_date     TEXT,
+  due_time     TEXT,
+  status       TEXT NOT NULL DEFAULT 'todo',
+  priority     INTEGER NOT NULL DEFAULT 0,
+  notes        TEXT NOT NULL DEFAULT '',
+  page_id      TEXT REFERENCES pages(id) ON DELETE SET NULL,
+  created_at   INTEGER NOT NULL,
+  updated_at   INTEGER NOT NULL,
+  completed_at INTEGER,
+  deleted_at   INTEGER
+);
+CREATE INDEX assignments_due ON assignments(due_date);
+CREATE TABLE events (
+  id           TEXT PRIMARY KEY,
+  title        TEXT NOT NULL DEFAULT '',
+  start_date   TEXT NOT NULL,
+  start_time   TEXT,
+  end_date     TEXT NOT NULL,
+  end_time     TEXT,
+  color        TEXT NOT NULL DEFAULT '',
+  course_id    TEXT REFERENCES courses(id) ON DELETE SET NULL,
+  location     TEXT NOT NULL DEFAULT '',
+  notes        TEXT NOT NULL DEFAULT '',
+  repeat       TEXT NOT NULL DEFAULT 'none',
+  repeat_until TEXT,
+  page_id      TEXT REFERENCES pages(id) ON DELETE SET NULL,
+  created_at   INTEGER NOT NULL,
+  updated_at   INTEGER NOT NULL,
+  deleted_at   INTEGER
+);
+CREATE INDEX events_start ON events(start_date);
+CREATE TABLE files (
+  id         TEXT PRIMARY KEY,
+  name       TEXT NOT NULL DEFAULT '',
+  stored     TEXT NOT NULL UNIQUE,
+  mime       TEXT NOT NULL DEFAULT '',
+  size       INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  deleted_at INTEGER
+);
+CREATE TABLE attachments (
+  assignment_id TEXT NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
+  file_id       TEXT NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+  position      INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (assignment_id, file_id)
+);
+";
+
 const WELCOME_HTML: &str = r#"<p>Thought Desk is a quiet place to write. Everything stays on this computer, in a single local database.</p>
 <h2>The basics</h2>
 <ul data-type="taskList">
@@ -153,6 +247,13 @@ const WELCOME_HTML: &str = r#"<p>Thought Desk is a quiet place to write. Everyth
 <tr><td><p>Ctrl+Shift+L</p></td><td><p>Switch between light and dark</p></td></tr>
 </tbody></table>
 <div data-callout="" data-icon="💡"><p>Pages can be nested as deep as you like. Drag pages in the sidebar to reorder them or drop one onto another to nest it.</p></div>
+<h2>Plan your work</h2>
+<ul>
+<li><p><strong>Assignments</strong> (<code>Ctrl+1</code>) keep track of due dates by course. Give one a notes page and it links back.</p></li>
+<li><p><strong>Calendar</strong> (<code>Ctrl+2</code>) shows events and everything that's due. Drag to reschedule.</p></li>
+<li><p><strong>Files</strong> (<code>Ctrl+3</code>) holds every file you attach, drop into a page or import.</p></li>
+<li><p>Type <code>@</code> to link a page, assignment, event or file, or <code>/assignment</code>, <code>/event</code> and <code>/file</code> to add one right here.</p></li>
+</ul>
 <p></p>"#;
 
 pub struct Db {
@@ -184,7 +285,7 @@ impl Db {
         Ok(db)
     }
 
-    fn conn(&self) -> std::sync::MutexGuard<'_, Connection> {
+    pub(crate) fn conn(&self) -> std::sync::MutexGuard<'_, Connection> {
         // A panic while holding the lock cannot leave SQLite half-written
         // (statements are atomic), so a poisoned lock is safe to reuse.
         self.conn.lock().unwrap_or_else(|p| p.into_inner())
@@ -199,6 +300,14 @@ impl Db {
             let text = strip_tags(WELCOME_HTML);
             insert_page(&tx, None, "Getting started", "👋", WELCOME_HTML, &text)?;
             tx.execute_batch("PRAGMA user_version = 1;")?;
+            tx.commit()?;
+        }
+        if version < 2 {
+            let tx = conn.transaction()?;
+            tx.execute_batch(SCHEMA_V2)?;
+            // Images added before the library existed become library files.
+            crate::library::register_existing(&tx, &self.files_dir)?;
+            tx.execute_batch("PRAGMA user_version = 2;")?;
             tx.commit()?;
         }
         Ok(())
@@ -485,9 +594,73 @@ impl Db {
         Ok(())
     }
 
+    /// Moves an assignment, event or file to the trash. Returns the time.
+    pub fn trash_item(&self, table: Table, id: &str) -> Result<i64> {
+        if table == Table::Pages {
+            return self.trash_page(id);
+        }
+        let ts = now();
+        let sql = format!("UPDATE {} SET deleted_at = ?1 WHERE id = ?2 AND deleted_at IS NULL", table.name());
+        self.conn().execute(&sql, params![ts, id])?;
+        Ok(ts)
+    }
+
+    pub fn restore_item(&self, table: Table, id: &str) -> Result<()> {
+        if table == Table::Pages {
+            return self.restore_page(id);
+        }
+        let sql = format!("UPDATE {} SET deleted_at = NULL WHERE id = ?1", table.name());
+        self.conn().execute(&sql, [id])?;
+        Ok(())
+    }
+
+    /// Permanently deletes one item; a file's bytes go with it.
+    pub fn delete_item(&self, table: Table, id: &str) -> Result<()> {
+        match table {
+            Table::Pages => self.delete_page(id),
+            Table::Files => {
+                let stored: Option<String> = {
+                    let conn = self.conn();
+                    let stored = conn
+                        .query_row("SELECT stored FROM files WHERE id = ?1", [id], |r| r.get(0))
+                        .optional()?;
+                    conn.execute("DELETE FROM files WHERE id = ?1", [id])?;
+                    stored
+                };
+                if let Some(name) = stored {
+                    let _ = std::fs::remove_file(self.files_dir.join(name));
+                }
+                Ok(())
+            }
+            _ => {
+                let sql = format!("DELETE FROM {} WHERE id = ?1", table.name());
+                self.conn().execute(&sql, [id])?;
+                Ok(())
+            }
+        }
+    }
+
+    /// Permanently deletes everything in the trash: pages, assignments,
+    /// events and files (including the files on disk).
     pub fn empty_trash(&self) -> Result<()> {
-        self.conn()
-            .execute("DELETE FROM pages WHERE deleted_at IS NOT NULL", [])?;
+        let stored = {
+            let mut conn = self.conn();
+            let tx = conn.transaction()?;
+            tx.execute("DELETE FROM pages WHERE deleted_at IS NOT NULL", [])?;
+            tx.execute("DELETE FROM assignments WHERE deleted_at IS NOT NULL", [])?;
+            tx.execute("DELETE FROM events WHERE deleted_at IS NOT NULL", [])?;
+            let stored: Vec<String> = {
+                let mut stmt = tx.prepare("SELECT stored FROM files WHERE deleted_at IS NOT NULL")?;
+                let rows = stmt.query_map([], |r| r.get(0))?;
+                rows.collect::<rusqlite::Result<_>>()?
+            };
+            tx.execute("DELETE FROM files WHERE deleted_at IS NOT NULL", [])?;
+            tx.commit()?;
+            stored
+        };
+        for name in stored {
+            let _ = std::fs::remove_file(self.files_dir.join(name));
+        }
         Ok(())
     }
 
@@ -599,10 +772,10 @@ impl Db {
         Ok(out)
     }
 
-    pub fn page_count(&self) -> Result<i64> {
-        Ok(self
-            .conn()
-            .query_row("SELECT count(*) FROM pages WHERE deleted_at IS NULL", [], |r| r.get(0))?)
+    /// Number of live (not trashed) rows in one of the item tables.
+    pub fn live_count(&self, table: Table) -> Result<i64> {
+        let sql = format!("SELECT count(*) FROM {} WHERE deleted_at IS NULL", table.name());
+        Ok(self.conn().query_row(&sql, [], |r| r.get(0))?)
     }
 }
 

@@ -1,5 +1,19 @@
 import { invoke, convertFileSrc } from '@tauri-apps/api/core';
-import type { DataInfo, Page, PageMeta, PagePatch, SearchHit } from './types';
+import type {
+  Assignment,
+  AssignmentPatch,
+  CalEvent,
+  Course,
+  DataInfo,
+  EventPatch,
+  FileMeta,
+  FileUsage,
+  Page,
+  PageMeta,
+  PagePatch,
+  SearchHit,
+  TrashTable,
+} from './types';
 
 export const api = {
   listPages: () => invoke<PageMeta[]>('list_pages'),
@@ -19,12 +33,37 @@ export const api = {
     invoke<string>('export_markdown', { title, markdown }),
   dataInfo: () => invoke<DataInfo>('data_info'),
 
-  /** Stores a file in the app's data folder and returns a URL the webview can load. */
-  async saveFile(file: Blob, ext: string): Promise<string> {
+  /** Adds a file to the library (bytes are copied into the data folder). */
+  async saveFile(file: Blob, name: string): Promise<FileMeta> {
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const name = await invoke<string>('save_file', bytes, { headers: { 'x-ext': ext } });
-    return fileUrl(name);
+    // Header values must be ASCII, so the name travels percent-encoded.
+    return invoke<FileMeta>('save_file', bytes, {
+      headers: { 'x-name': encodeURIComponent(name), 'x-mime': encodeURIComponent(file.type) },
+    });
   },
+  listFiles: () => invoke<FileMeta[]>('list_files'),
+  updateFile: (id: string, patch: { name?: string }) => invoke<FileMeta>('update_file', { id, patch }),
+  fileUsage: () => invoke<FileUsage[]>('file_usage'),
+  openFile: (id: string) => invoke<void>('open_file', { id }),
+  revealFile: (id: string) => invoke<void>('reveal_file', { id }),
+  exportFile: (id: string) => invoke<string>('export_file', { id }),
+
+  listCourses: () => invoke<Course[]>('list_courses'),
+  createCourse: (name: string, color: string) => invoke<Course>('create_course', { name, color }),
+  updateCourse: (id: string, patch: { name?: string; color?: string }) => invoke<Course>('update_course', { id, patch }),
+  deleteCourse: (id: string) => invoke<void>('delete_course', { id }),
+
+  listAssignments: () => invoke<Assignment[]>('list_assignments'),
+  createAssignment: (input: AssignmentPatch) => invoke<Assignment>('create_assignment', { input }),
+  updateAssignment: (id: string, patch: AssignmentPatch) => invoke<Assignment>('update_assignment', { id, patch }),
+
+  listEvents: () => invoke<CalEvent[]>('list_events'),
+  createEvent: (input: EventPatch) => invoke<CalEvent>('create_event', { input }),
+  updateEvent: (id: string, patch: EventPatch) => invoke<CalEvent>('update_event', { id, patch }),
+
+  trashItem: (table: TrashTable, id: string) => invoke<number>('trash_item', { table, id }),
+  restoreItem: (table: TrashTable, id: string) => invoke<void>('restore_item', { table, id }),
+  deleteItem: (table: TrashTable, id: string) => invoke<void>('delete_item', { table, id }),
 };
 
 export function fileUrl(name: string): string {

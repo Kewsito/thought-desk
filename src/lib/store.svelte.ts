@@ -7,6 +7,16 @@ import type { PageMeta, PagePatch } from './types';
 
 const SAVE_DELAY = 400;
 
+/** What fills the main area: a page, or one of the app views. */
+export type View = 'page' | 'assignments' | 'calendar' | 'files';
+export const VIEWS: Exclude<View, 'page'>[] = ['assignments', 'calendar', 'files'];
+
+interface Entry {
+  view: View;
+  /** The page, for page entries. */
+  id: string | null;
+}
+
 function applyLocal(page: PageMeta, patch: PagePatch) {
   if (patch.title !== undefined) page.title = patch.title;
   if (patch.icon !== undefined) page.icon = patch.icon;
@@ -19,9 +29,11 @@ function applyLocal(page: PageMeta, patch: PagePatch) {
 class Store {
   pages = $state<PageMeta[]>([]);
   loaded = $state(false);
+  view = $state<View>('page');
+  /** The open page; null while an app view is showing. */
   currentId = $state<string | null>(null);
   saving = $state(false);
-  #history = $state<string[]>([]);
+  #history = $state<Entry[]>([]);
   #historyIndex = $state(-1);
 
   byId = $derived(new Map(this.pages.map((p) => [p.id, p])));
@@ -91,6 +103,11 @@ class Store {
     for (const id of Object.keys(prefs.expanded)) {
       if (!this.byId.has(id)) delete prefs.expanded[id];
     }
+    const lastView = VIEWS.find((v) => v === prefs.lastView);
+    if (lastView) {
+      this.go(lastView);
+      return;
+    }
     const last = prefs.lastPageId ? this.byId.get(prefs.lastPageId) : undefined;
     const start = last && !last.deletedAt ? last : this.roots[0];
     if (start) this.open(start.id);
@@ -112,18 +129,31 @@ class Store {
   open(id: string, { push = true }: { push?: boolean } = {}) {
     const page = this.byId.get(id);
     if (!page || page.deletedAt) return;
-    if (this.currentId === id) return;
+    if (this.view === 'page' && this.currentId === id) return;
+    this.view = 'page';
     this.currentId = id;
     prefs.lastPageId = id;
+    prefs.lastView = 'page';
     // Reveal the page in the sidebar.
     for (const a of this.ancestors(id)) prefs.expanded[a.id] = true;
-    if (push) {
-      const next = this.#history.slice(0, this.#historyIndex + 1);
-      next.push(id);
-      if (next.length > 100) next.shift();
-      this.#history = next;
-      this.#historyIndex = next.length - 1;
-    }
+    if (push) this.#push({ view: 'page', id });
+  }
+
+  /** Shows Assignments, Calendar or Files. */
+  go(view: Exclude<View, 'page'>, { push = true }: { push?: boolean } = {}) {
+    if (this.view === view) return;
+    this.view = view;
+    this.currentId = null;
+    prefs.lastView = view;
+    if (push) this.#push({ view, id: null });
+  }
+
+  #push(entry: Entry) {
+    const next = this.#history.slice(0, this.#historyIndex + 1);
+    next.push(entry);
+    if (next.length > 100) next.shift();
+    this.#history = next;
+    this.#historyIndex = next.length - 1;
   }
 
   back() {
@@ -137,7 +167,13 @@ class Store {
   #step(dir: 1 | -1) {
     let i = this.#historyIndex + dir;
     while (i >= 0 && i < this.#history.length) {
-      const p = this.byId.get(this.#history[i]);
+      const entry = this.#history[i];
+      if (entry.view !== 'page') {
+        this.#historyIndex = i;
+        this.go(entry.view, { push: false });
+        return;
+      }
+      const p = entry.id ? this.byId.get(entry.id) : undefined;
       if (p && !p.deletedAt) {
         this.#historyIndex = i;
         this.open(p.id, { push: false });
@@ -162,9 +198,12 @@ class Store {
 
   // ---------------------------------------------------------------- editing
 
-  async create(parentId: string | null = null, opts: { index?: number; open?: boolean; title?: string } = {}) {
+  async create(
+    parentId: string | null = null,
+    opts: { index?: number; open?: boolean; title?: string; icon?: string } = {},
+  ) {
     try {
-      const meta = await api.createPage(parentId, opts.index ?? null, opts.title ?? '');
+      const meta = await api.createPage(parentId, opts.index ?? null, opts.title ?? '', opts.icon ?? '');
       await this.refresh();
       if (parentId) prefs.expanded[parentId] = true;
       if (opts.open !== false) {
@@ -266,34 +305,10 @@ class Store {
     }
   }
 
+  /** Permanently deletes a trashed page (the Trash confirms first). */
   async deleteForever(id: string) {
-    const page = this.byId.get(id);
-    const ok = await ui.confirm({
-      title: 'Delete Permanently?',
-      message: `“${page?.title || 'Untitled'}” and its sub-pages will be deleted. You can’t undo this.`,
-      confirmLabel: 'Delete',
-      danger: true,
-    });
-    if (!ok) return;
     try {
       await api.deletePage(id);
-      await this.refresh();
-    } catch (e) {
-      ui.error(e);
-    }
-  }
-
-  async emptyTrash() {
-    if (this.trash.length === 0) return;
-    const ok = await ui.confirm({
-      title: 'Empty the Trash?',
-      message: `${this.trash.length} page${this.trash.length === 1 ? '' : 's'} will be deleted. You can’t undo this.`,
-      confirmLabel: 'Empty Trash',
-      danger: true,
-    });
-    if (!ok) return;
-    try {
-      await api.emptyTrash();
       await this.refresh();
     } catch (e) {
       ui.error(e);

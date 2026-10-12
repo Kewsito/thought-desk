@@ -1,8 +1,12 @@
 //! Commands invoked from the frontend.
 
-use crate::db::{Db, Error, Page, PageMeta, PagePatch, Result, SearchHit};
+use crate::db::{Db, Error, Page, PageMeta, PagePatch, Result, SearchHit, Table};
+use crate::library::{FileMeta, FilePatch, FileUsage};
+use crate::planner::{Assignment, AssignmentPatch, Course, CoursePatch, Event, EventPatch};
 use serde::Serialize;
+use std::path::{Path, PathBuf};
 use tauri::{ipc::InvokeBody, AppHandle, Manager, State};
+use tauri_plugin_opener::OpenerExt;
 
 #[tauri::command]
 pub fn list_pages(db: State<Db>) -> Result<Vec<PageMeta>> {
@@ -70,34 +74,88 @@ pub fn search(db: State<Db>, query: String, limit: Option<usize>) -> Result<Vec<
     db.search(&query, limit.unwrap_or(30))
 }
 
-/// Stores an uploaded file (raw request body) and returns its file name.
-/// The file's extension is passed in the `x-ext` header.
+/// Decodes the percent-encoding the frontend uses for header values (HTTP
+/// headers can't carry arbitrary Unicode file names).
+fn percent_decode(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'%' && i + 2 < b.len() {
+            let hex = std::str::from_utf8(&b[i + 1..i + 3]).ok();
+            if let Some(v) = hex.and_then(|h| u8::from_str_radix(h, 16).ok()) {
+                out.push(v);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(b[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// Adds an uploaded file (raw request body) to the library. Its name and
+/// type come in the percent-encoded `x-name` and `x-mime` headers.
 #[tauri::command]
-pub fn save_file(db: State<Db>, request: tauri::ipc::Request<'_>) -> Result<String> {
+pub fn save_file(db: State<Db>, request: tauri::ipc::Request<'_>) -> Result<FileMeta> {
     let InvokeBody::Raw(bytes) = request.body() else {
         return Err(Error("Expected raw file bytes".into()));
     };
-    let ext: String = request
-        .headers()
-        .get("x-ext")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("bin")
-        .chars()
-        .filter(char::is_ascii_alphanumeric)
-        .take(8)
-        .collect::<String>()
-        .to_ascii_lowercase();
-    let ext = if ext.is_empty() { "bin".to_string() } else { ext };
-    let name = format!("{}.{}", uuid::Uuid::new_v4().simple(), ext);
-    std::fs::write(db.files_dir.join(&name), bytes)?;
-    Ok(name)
+    let header = |key: &str| {
+        request
+            .headers()
+            .get(key)
+            .and_then(|v| v.to_str().ok())
+            .map(percent_decode)
+            .unwrap_or_default()
+    };
+    db.import_file(bytes, &header("x-name"), &header("x-mime"))
 }
 
-/// Writes a Markdown export into the user's Downloads folder.
 #[tauri::command]
-pub fn export_markdown(app: AppHandle, title: String, markdown: String) -> Result<String> {
-    let dir = app.path().download_dir()?;
-    let base: String = title
+pub fn list_files(db: State<Db>) -> Result<Vec<FileMeta>> {
+    db.list_files()
+}
+
+#[tauri::command]
+pub fn update_file(db: State<Db>, id: String, patch: FilePatch) -> Result<FileMeta> {
+    db.update_file(&id, patch)
+}
+
+#[tauri::command]
+pub fn file_usage(db: State<Db>) -> Result<Vec<FileUsage>> {
+    db.file_usage()
+}
+
+/// Opens a library file in its default app.
+#[tauri::command]
+pub fn open_file(app: AppHandle, db: State<Db>, id: String) -> Result<()> {
+    let (path, _) = db.file_path(&id)?;
+    app.opener()
+        .open_path(path.to_string_lossy(), None::<&str>)
+        .map_err(|e| Error(e.to_string()))
+}
+
+/// Shows a library file in Explorer / Finder.
+#[tauri::command]
+pub fn reveal_file(app: AppHandle, db: State<Db>, id: String) -> Result<()> {
+    let (path, _) = db.file_path(&id)?;
+    app.opener().reveal_item_in_dir(path).map_err(|e| Error(e.to_string()))
+}
+
+/// Copies a library file into Downloads under its display name.
+#[tauri::command]
+pub fn export_file(app: AppHandle, db: State<Db>, id: String) -> Result<String> {
+    let (path, name) = db.file_path(&id)?;
+    let target = unique_path(&app.path().download_dir()?, &safe_file_name(&name), "");
+    std::fs::copy(&path, &target)?;
+    Ok(target.to_string_lossy().into_owned())
+}
+
+/// A name that's valid on every OS: reserved characters become spaces.
+fn safe_file_name(name: &str) -> String {
+    let base: String = name
         .chars()
         .map(|c| if r#"<>:"/\|?*"#.contains(c) || c.is_control() { ' ' } else { c })
         .collect::<String>()
@@ -105,15 +163,108 @@ pub fn export_markdown(app: AppHandle, title: String, markdown: String) -> Resul
         .collect::<Vec<_>>()
         .join(" ")
         .chars()
-        .take(80)
+        .take(120)
         .collect();
-    let base = if base.is_empty() { "Untitled".to_string() } else { base };
-    let mut path = dir.join(format!("{base}.md"));
+    if base.is_empty() || base.chars().all(|c| c == '.') {
+        "Untitled".to_string()
+    } else {
+        base
+    }
+}
+
+/// `dir/name` (+ `ext`), adding " (2)", " (3)"… until nothing is overwritten.
+fn unique_path(dir: &Path, name: &str, ext: &str) -> PathBuf {
+    let (stem, dot_ext) = if ext.is_empty() {
+        match name.rsplit_once('.') {
+            Some((stem, e)) if !stem.is_empty() => (stem.to_string(), format!(".{e}")),
+            _ => (name.to_string(), String::new()),
+        }
+    } else {
+        (name.to_string(), format!(".{ext}"))
+    };
+    let mut path = dir.join(format!("{stem}{dot_ext}"));
     let mut n = 1;
     while path.exists() {
         n += 1;
-        path = dir.join(format!("{base} ({n}).md"));
+        path = dir.join(format!("{stem} ({n}){dot_ext}"));
     }
+    path
+}
+
+// ---------------------------------------------------------- planner commands
+
+#[tauri::command]
+pub fn list_courses(db: State<Db>) -> Result<Vec<Course>> {
+    db.list_courses()
+}
+
+#[tauri::command]
+pub fn create_course(db: State<Db>, name: String, color: String) -> Result<Course> {
+    db.create_course(&name, &color)
+}
+
+#[tauri::command]
+pub fn update_course(db: State<Db>, id: String, patch: CoursePatch) -> Result<Course> {
+    db.update_course(&id, patch)
+}
+
+#[tauri::command]
+pub fn delete_course(db: State<Db>, id: String) -> Result<()> {
+    db.delete_course(&id)
+}
+
+#[tauri::command]
+pub fn list_assignments(db: State<Db>) -> Result<Vec<Assignment>> {
+    db.list_assignments()
+}
+
+#[tauri::command]
+pub fn create_assignment(db: State<Db>, input: AssignmentPatch) -> Result<Assignment> {
+    db.create_assignment(input)
+}
+
+#[tauri::command]
+pub fn update_assignment(db: State<Db>, id: String, patch: AssignmentPatch) -> Result<Assignment> {
+    db.update_assignment(&id, patch)
+}
+
+#[tauri::command]
+pub fn list_events(db: State<Db>) -> Result<Vec<Event>> {
+    db.list_events()
+}
+
+#[tauri::command]
+pub fn create_event(db: State<Db>, input: EventPatch) -> Result<Event> {
+    db.create_event(input)
+}
+
+#[tauri::command]
+pub fn update_event(db: State<Db>, id: String, patch: EventPatch) -> Result<Event> {
+    db.update_event(&id, patch)
+}
+
+// ------------------------------------------------------------ trash (items)
+
+#[tauri::command]
+pub fn trash_item(db: State<Db>, table: Table, id: String) -> Result<i64> {
+    db.trash_item(table, &id)
+}
+
+#[tauri::command]
+pub fn restore_item(db: State<Db>, table: Table, id: String) -> Result<()> {
+    db.restore_item(table, &id)
+}
+
+#[tauri::command]
+pub fn delete_item(db: State<Db>, table: Table, id: String) -> Result<()> {
+    db.delete_item(table, &id)
+}
+
+/// Writes a Markdown export into the user's Downloads folder.
+#[tauri::command]
+pub fn export_markdown(app: AppHandle, title: String, markdown: String) -> Result<String> {
+    let dir = app.path().download_dir()?;
+    let path = unique_path(&dir, &safe_file_name(&title), "md");
     std::fs::write(&path, markdown)?;
     Ok(path.to_string_lossy().into_owned())
 }
@@ -124,8 +275,11 @@ pub struct DataInfo {
     data_dir: String,
     db_bytes: u64,
     file_bytes: u64,
-    file_count: u64,
+    /// Live files in the library.
+    file_count: i64,
     page_count: i64,
+    assignment_count: i64,
+    event_count: i64,
     version: String,
 }
 
@@ -137,12 +291,11 @@ pub fn data_info(app: AppHandle, db: State<Db>) -> Result<DataInfo> {
             .unwrap_or(0)
     };
     let db_bytes = size("thoughtdesk.db") + size("thoughtdesk.db-wal");
-    let (mut file_bytes, mut file_count) = (0, 0);
+    let mut file_bytes = 0;
     if let Ok(entries) = std::fs::read_dir(&db.files_dir) {
         for e in entries.flatten() {
             if let Ok(m) = e.metadata() {
                 file_bytes += m.len();
-                file_count += 1;
             }
         }
     }
@@ -150,8 +303,33 @@ pub fn data_info(app: AppHandle, db: State<Db>) -> Result<DataInfo> {
         data_dir: db.data_dir.to_string_lossy().into_owned(),
         db_bytes,
         file_bytes,
-        file_count,
-        page_count: db.page_count()?,
+        file_count: db.live_count(Table::Files)?,
+        page_count: db.live_count(Table::Pages)?,
+        assignment_count: db.live_count(Table::Assignments)?,
+        event_count: db.live_count(Table::Events)?,
         version: app.package_info().version.to_string(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn decodes_header_names() {
+        assert_eq!(percent_decode("Lab%20report%20%E2%80%94%20v2.pdf"), "Lab report — v2.pdf");
+        assert_eq!(percent_decode("100%"), "100%");
+        assert_eq!(percent_decode("%zz.txt"), "%zz.txt");
+    }
+
+    #[test]
+    fn safe_unique_names() {
+        assert_eq!(safe_file_name("a/b:c?.pdf"), "a b c .pdf");
+        assert_eq!(safe_file_name("..."), "Untitled");
+        let dir = std::env::temp_dir().join(format!("td-names-{}", uuid::Uuid::new_v4().simple()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("Essay.docx"), b"").unwrap();
+        assert_eq!(unique_path(&dir, "Essay.docx", ""), dir.join("Essay (2).docx"));
+        assert_eq!(unique_path(&dir, "Notes", "md"), dir.join("Notes.md"));
+    }
 }

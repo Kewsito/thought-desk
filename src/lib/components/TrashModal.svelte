@@ -1,119 +1,125 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
   import Modal from './Modal.svelte';
-  import { store } from '../store.svelte';
+  import EmptyState from '../ui/EmptyState.svelte';
+  import FileTile from '../ui/FileTile.svelte';
+  import SearchField from '../ui/SearchField.svelte';
+  import { TABLE_LABELS, deleteItem, emptyTrash, restoreItem, trashItems } from '../trash.svelte';
   import { ui } from '../ui.svelte';
   import { relativeTime } from '../time';
+  import type { TrashTable } from '../types';
 
   let filter = $state('');
+  let kind = $state<TrashTable | 'all'>('all');
 
-  const items = $derived(
-    store.trash.filter((p) => (p.title || 'Untitled').toLowerCase().includes(filter.trim().toLowerCase())),
+  const all = $derived(trashItems());
+  const counts = $derived(
+    all.reduce<Record<string, number>>((c, it) => ((c[it.table] = (c[it.table] ?? 0) + 1), c), {}),
   );
+  const items = $derived(
+    all.filter(
+      (it) => (kind === 'all' || it.table === kind) && it.title.toLowerCase().includes(filter.trim().toLowerCase()),
+    ),
+  );
+  const tables: TrashTable[] = ['pages', 'assignments', 'events', 'files'];
 
-  function origin(id: string) {
-    const path = store.ancestors(id);
-    return path.length ? path.map((a) => a.title || 'Untitled').join(' › ') : null;
-  }
+  // Don't strand the user on an empty filter after restoring its last item.
+  $effect(() => {
+    if (kind !== 'all' && !counts[kind]) kind = 'all';
+  });
 </script>
 
-<Modal onclose={() => (ui.trashOpen = false)} width={560} label="Trash">
-  <header class="head">
+<Modal onclose={() => (ui.trashOpen = false)} label="Trash">
+  <header class="modal-head">
     <h2>Trash</h2>
     <button class="icon-btn" onclick={() => (ui.trashOpen = false)} aria-label="Close"><Icon name="x" /></button>
   </header>
 
-  {#if store.trash.length}
-    <label class="filter">
-      <Icon name="search" size={15} stroke={2} />
-      <input bind:value={filter} placeholder="Filter" spellcheck="false" />
-    </label>
-  {/if}
+  <div class="modal-body fade">
+    {#if all.length}
+      <div class="tools">
+        <div class="kinds" role="radiogroup" aria-label="Kind">
+          <button class="chip" class:on={kind === 'all'} role="radio" aria-checked={kind === 'all'} onclick={() => (kind = 'all')}>
+            All <span class="n">{all.length}</span>
+          </button>
+          {#each tables as t (t)}
+            {#if counts[t]}
+              <button class="chip" class:on={kind === t} role="radio" aria-checked={kind === t} onclick={() => (kind = t)}>
+                {TABLE_LABELS[t].many} <span class="n">{counts[t]}</span>
+              </button>
+            {/if}
+          {/each}
+        </div>
+        <SearchField bind:value={filter} placeholder="Filter" width={180} />
+      </div>
+    {/if}
 
-  <div class="list">
-    {#each items as p (p.id)}
-      {@const from = origin(p.id)}
-      <div class="item">
-        <span class="icon">{#if p.icon}<span class="emoji">{p.icon}</span>{:else}<Icon name="page" />{/if}</span>
-        <div class="main">
-          <span class="title">{p.title || 'Untitled'}</span>
-          <span class="meta">Deleted {relativeTime(p.deletedAt ?? 0)}{from ? ` from ${from}` : ''}</span>
-        </div>
-        <div class="actions">
-          <button class="btn small" onclick={() => store.restore(p.id)}>Restore</button>
-          <button class="icon-btn" onclick={() => store.deleteForever(p.id)} data-tip="Delete permanently"><Icon name="trash" /></button>
-        </div>
+    {#if items.length}
+      <div class="group">
+        {#each items as it (`${it.table}:${it.id}`)}
+          <div class="group-row item">
+            <span class="icon" style:color={it.color}>
+              {#if it.file}<FileTile file={it.file} size={28} />
+              {:else if it.emoji}<span class="emoji">{it.emoji}</span>
+              {:else}<Icon name={it.icon} size={17} />{/if}
+            </span>
+            <div class="main">
+              <span class="title">{it.title}</span>
+              <span class="meta">
+                {TABLE_LABELS[it.table].one} · Deleted {relativeTime(it.deletedAt)}{it.origin ? ` from ${it.origin}` : ''}
+              </span>
+            </div>
+            <div class="actions">
+              <button class="btn small raised" onclick={() => restoreItem(it)}>Restore</button>
+              <button class="icon-btn" onclick={() => deleteItem(it)} data-tip="Delete permanently" aria-label="Delete permanently"><Icon name="trash" /></button>
+            </div>
+          </div>
+        {/each}
       </div>
     {:else}
-      <div class="empty">
-        <span class="empty-icon"><Icon name="trash" size={22} /></span>
-        <strong>{filter ? 'No matches' : 'Trash is empty'}</strong>
-        <span>{filter ? 'Try a different name.' : 'Pages you delete stay here until you remove them for good.'}</span>
-      </div>
-    {/each}
+      <EmptyState
+        icon="trash"
+        title={filter ? 'No matches' : 'Trash is empty'}
+        text={filter ? 'Try a different name.' : 'Pages, assignments, events and files you delete stay here until you remove them for good.'}
+      />
+    {/if}
   </div>
 
-  {#if store.trash.length}
-    <footer class="foot">
+  {#if all.length}
+    <footer class="modal-foot">
       <span>Restoring a page brings back the sub-pages deleted with it.</span>
-      <button class="btn small" onclick={() => store.emptyTrash()}>Empty Trash</button>
+      <button class="btn small" onclick={() => emptyTrash(all.length)}>Empty Trash</button>
     </footer>
   {/if}
 </Modal>
 
 <style>
-  .head {
+  .tools {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    height: 56px;
-    padding: 0 14px 0 24px;
-    flex: none;
+    gap: 12px;
+    margin: 4px 0 16px;
   }
-  h2 {
-    margin: 0;
-    font-size: 17px;
-    font-weight: var(--fw-650);
-    letter-spacing: -0.016em;
-  }
-  .filter {
+  .kinds {
     display: flex;
-    align-items: center;
-    gap: 8px;
-    height: 32px;
-    margin: 0 20px 8px;
-    padding: 0 10px;
-    border-radius: var(--r-sm);
-    background: var(--fill);
-    color: var(--text-3);
+    flex-wrap: wrap;
+    gap: 6px;
   }
-  .filter input {
-    flex: 1;
-    min-width: 0;
-    border: none;
-    background: transparent;
-    font-size: var(--fs-body-ui);
-  }
-  .list {
-    overflow-y: auto;
-    padding: 2px 12px 12px;
-    min-height: 140px;
+  .n {
+    opacity: 0.6;
+    font-variant-numeric: tabular-nums;
   }
   .item {
-    display: flex;
-    align-items: center;
     gap: 12px;
-    min-height: 52px;
-    padding: 6px 8px 6px 10px;
-    border-radius: var(--r-md);
-    transition: background-color var(--dur-fast) var(--ease);
+    min-height: 56px;
   }
-  .item:hover {
-    background: var(--fill);
+  .item + :global(.item)::before {
+    left: 56px;
   }
   .icon {
     flex: none;
-    width: 24px;
+    width: 28px;
     display: grid;
     place-items: center;
     color: var(--text-3);
@@ -130,7 +136,7 @@
     gap: 1px;
   }
   .title {
-    font-size: var(--fs-callout);
+    font-size: var(--fs-body-ui);
     font-weight: var(--fw-500);
     white-space: nowrap;
     overflow: hidden;
@@ -153,52 +159,5 @@
   .item:hover .actions,
   .actions:focus-within {
     opacity: 1;
-  }
-  .btn.small {
-    height: 26px;
-    min-width: 0;
-    padding: 0 10px;
-    font-size: var(--fs-ui);
-  }
-  .empty {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-    padding: 32px 24px 36px;
-    text-align: center;
-    font-size: var(--fs-ui);
-    color: var(--text-3);
-  }
-  .empty-icon {
-    display: grid;
-    place-items: center;
-    width: 48px;
-    height: 48px;
-    margin-bottom: 10px;
-    border-radius: var(--r-lg);
-    background: var(--fill);
-    color: var(--text-3);
-  }
-  .empty strong {
-    font-size: var(--fs-callout);
-    font-weight: var(--fw-600);
-    color: var(--text);
-  }
-  .empty span {
-    max-width: 280px;
-    line-height: 1.45;
-    text-wrap: balance;
-  }
-  .foot {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    min-height: 52px;
-    padding: 0 16px 0 24px;
-    box-shadow: inset 0 1px 0 var(--hairline);
-    font-size: var(--fs-footnote);
-    color: var(--text-3);
   }
 </style>

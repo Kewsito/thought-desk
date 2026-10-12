@@ -13,7 +13,8 @@ export interface JNode {
   marks?: Mark[];
 }
 
-type TitleOf = (pageId: string) => string;
+/** Title of a linked page, assignment, event or file. */
+type TitleOf = (id: string, kind?: 'page' | 'assignment' | 'event' | 'file') => string;
 
 const escapeText = (s: string) => s.replace(/([\\`*_[\]])/g, '\\$1');
 
@@ -58,7 +59,10 @@ function inline(nodes: JNode[] | undefined, titleOf: TitleOf): string {
     .map((n) => {
       if (n.type === 'text') return wrapMarks(n.text ?? '', n.marks);
       if (n.type === 'hardBreak') return '  \n';
-      if (n.type === 'mention') return `[[${titleOf(n.attrs?.id)}]]`;
+      if (n.type === 'mention') {
+        const kind = n.attrs?.kind ?? 'page';
+        return kind === 'page' ? `[[${titleOf(n.attrs?.id)}]]` : `**${escapeText(titleOf(n.attrs?.id, kind))}**`;
+      }
       if (n.type === 'image') return `![${n.attrs?.alt ?? ''}](${n.attrs?.src ?? ''})`;
       return inline(n.content, titleOf);
     })
@@ -114,6 +118,8 @@ function block(n: JNode, titleOf: TitleOf): string {
       return `![${n.attrs?.alt ?? ''}](${n.attrs?.src ?? ''})`;
     case 'pageLink':
       return `[[${titleOf(n.attrs?.id)}]]`;
+    case 'fileBlock':
+      return `📎 ${escapeText(titleOf(n.attrs?.id, 'file'))}`;
     case 'details': {
       const [summary, content] = n.content ?? [];
       return `<details>\n<summary>${inline(summary?.content, titleOf)}</summary>\n\n${blocks(content?.content, titleOf)}\n\n</details>`;

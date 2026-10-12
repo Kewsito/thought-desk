@@ -4,7 +4,9 @@
 mod commands;
 mod db;
 mod files;
+mod library;
 mod memory;
+mod planner;
 
 use std::path::PathBuf;
 use tauri::Manager;
@@ -74,6 +76,25 @@ fn main() {
             commands::empty_trash,
             commands::search,
             commands::save_file,
+            commands::list_files,
+            commands::update_file,
+            commands::file_usage,
+            commands::open_file,
+            commands::reveal_file,
+            commands::export_file,
+            commands::list_courses,
+            commands::create_course,
+            commands::update_course,
+            commands::delete_course,
+            commands::list_assignments,
+            commands::create_assignment,
+            commands::update_assignment,
+            commands::list_events,
+            commands::create_event,
+            commands::update_event,
+            commands::trash_item,
+            commands::restore_item,
+            commands::delete_item,
             commands::export_markdown,
             commands::data_info,
         ])

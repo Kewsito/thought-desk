@@ -1,5 +1,7 @@
 /** Transient UI state: overlays, menus, dialogs and toasts. */
 
+import type { AssignmentPatch, EventPatch, FileMeta } from './types';
+
 export type MenuItem =
   | {
       label: string;
@@ -8,6 +10,8 @@ export type MenuItem =
       danger?: boolean;
       checked?: boolean;
       disabled?: boolean;
+      /** A coloured dot instead of an icon (CSS colour). */
+      dot?: string;
       action: () => void;
     }
   | { separator: true }
@@ -34,7 +38,29 @@ export interface ConfirmState {
   message: string;
   confirmLabel: string;
   danger: boolean;
-  resolve: (ok: boolean) => void;
+  icon?: string;
+  /** Present for prompts: the text field's starting value and placeholder. */
+  input?: { value: string; placeholder: string; select?: 'all' | 'stem' };
+  /** Present for prompts that also pick a colour. */
+  color?: string;
+  resolve: (ok: boolean, value?: string, color?: string) => void;
+}
+
+export interface FilePickerState {
+  x: number;
+  y: number;
+  /** Files that shouldn't be offered (already attached). */
+  exclude?: string[];
+  multiple?: boolean;
+  onPick: (files: FileMeta[]) => void;
+}
+
+/** An assignment or event sheet: an existing item (id) or a new one (draft). */
+export interface SheetState<P> {
+  id: string | null;
+  draft: P;
+  /** Called with the new item's id when a new one is added. */
+  onCreated?: (id: string) => void;
 }
 
 export interface Toast {
@@ -50,14 +76,27 @@ class UI {
   trashOpen = $state(false);
   menu = $state<MenuState | null>(null);
   iconPicker = $state<IconPickerState | null>(null);
+  filePicker = $state<FilePickerState | null>(null);
   confirmState = $state<ConfirmState | null>(null);
+  assignmentSheet = $state<SheetState<AssignmentPatch> | null>(null);
+  eventSheet = $state<SheetState<EventPatch> | null>(null);
+  /** File shown in the preview sheet. */
+  filePreview = $state<string | null>(null);
   toasts = $state<Toast[]>([]);
   /** Page whose title should take focus once shown (new page, "Rename"). */
   focusTitle = $state<string | null>(null);
   #toastId = 0;
 
   get anyModalOpen() {
-    return this.searchOpen || this.settingsOpen || this.trashOpen || this.confirmState !== null;
+    return (
+      this.searchOpen ||
+      this.settingsOpen ||
+      this.trashOpen ||
+      this.confirmState !== null ||
+      this.assignmentSheet !== null ||
+      this.eventSheet !== null ||
+      this.filePreview !== null
+    );
   }
 
   openMenu(state: MenuState) {
@@ -83,6 +122,11 @@ class UI {
     m?.onClose?.();
   }
 
+  pickFile(anchor: Element | DOMRect, onPick: (files: FileMeta[]) => void, opts: { exclude?: string[]; multiple?: boolean } = {}) {
+    const r = anchor instanceof Element ? anchor.getBoundingClientRect() : anchor;
+    this.filePicker = { x: r.left, y: r.bottom + 6, onPick, ...opts };
+  }
+
   pickIcon(anchor: Element | DOMRect, onPick: (emoji: string) => void, onRemove?: () => void) {
     const r = anchor instanceof Element ? anchor.getBoundingClientRect() : anchor;
     this.iconPicker = { x: r.left, y: r.bottom + 6, onPick, onRemove };
@@ -96,6 +140,32 @@ class UI {
         confirmLabel: opts.confirmLabel ?? 'Confirm',
         danger: opts.danger ?? false,
         resolve,
+      };
+    });
+  }
+
+  /** Asks for a line of text (and optionally a colour). Null when cancelled. */
+  prompt(opts: {
+    title: string;
+    message?: string;
+    value?: string;
+    placeholder?: string;
+    confirmLabel?: string;
+    icon?: string;
+    color?: string;
+    /** Select the whole value, or just the name before the extension. */
+    select?: 'all' | 'stem';
+  }): Promise<{ value: string; color: string } | null> {
+    return new Promise((resolve) => {
+      this.confirmState = {
+        title: opts.title,
+        message: opts.message ?? '',
+        confirmLabel: opts.confirmLabel ?? 'Save',
+        danger: false,
+        icon: opts.icon ?? 'pencil',
+        input: { value: opts.value ?? '', placeholder: opts.placeholder ?? '', select: opts.select ?? 'all' },
+        color: opts.color,
+        resolve: (ok, value, color) => resolve(ok && value?.trim() ? { value: value.trim(), color: color ?? '' } : null),
       };
     });
   }

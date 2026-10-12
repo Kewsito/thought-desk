@@ -1,31 +1,18 @@
-//! Serves stored files (images) to the webview through the `tdfile` scheme,
-//! and removes files no page refers to anymore.
+//! Serves stored files to the webview through the `tdfile` scheme, and
+//! removes stray files that neither the library nor any page knows about.
 
 use crate::db::Db;
+use crate::library::mime_for;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 use tauri::http::{Request, Response, StatusCode};
 use tauri::{Manager, Runtime, UriSchemeContext, UriSchemeResponder};
 
-fn is_valid_name(name: &str) -> bool {
+pub fn is_valid_name(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= 64
         && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '.')
         && !name.starts_with('.')
-}
-
-fn mime_for(name: &str) -> &'static str {
-    match name.rsplit('.').next().unwrap_or("") {
-        "png" => "image/png",
-        "jpg" | "jpeg" => "image/jpeg",
-        "gif" => "image/gif",
-        "webp" => "image/webp",
-        "avif" => "image/avif",
-        "svg" => "image/svg+xml",
-        "bmp" => "image/bmp",
-        "ico" => "image/x-icon",
-        _ => "application/octet-stream",
-    }
 }
 
 pub fn protocol<R: Runtime>(
@@ -43,11 +30,21 @@ pub fn protocol<R: Runtime>(
             std::fs::read(dir.join(&name)).ok()
         };
         let response = match response {
-            Some(bytes) => Response::builder()
-                .status(StatusCode::OK)
-                .header("Content-Type", mime_for(&name))
-                .header("Cache-Control", "max-age=31536000, immutable")
-                .body(bytes),
+            Some(bytes) => {
+                let mime = mime_for(&name);
+                // Documents can be edited in another app, so revalidate those;
+                // images are never rewritten in place.
+                let cache = if mime.starts_with("image/") { "max-age=31536000, immutable" } else { "no-cache" };
+                Response::builder()
+                    .status(StatusCode::OK)
+                    .header("Content-Type", mime)
+                    .header("X-Content-Type-Options", "nosniff")
+                    // The app reads text files with fetch() for previews, and
+                    // the app's origin differs from this scheme's.
+                    .header("Access-Control-Allow-Origin", "*")
+                    .header("Cache-Control", cache)
+                    .body(bytes)
+            }
             None => Response::builder()
                 .status(StatusCode::NOT_FOUND)
                 .body(Vec::new()),
@@ -58,15 +55,16 @@ pub fn protocol<R: Runtime>(
     });
 }
 
-/// Deletes stored files that no page references. Files younger than a day
-/// are kept, since a page that uses them may not have been saved yet.
+/// Deletes stored files that the library doesn't list and no page refers to
+/// (left over from a failed save, say). Files younger than a day are kept.
 pub fn collect_garbage(db: &Db) {
     let Ok(content) = db.all_content() else { return };
+    let Ok(known) = db.known_files() else { return };
     let Ok(entries) = std::fs::read_dir(&db.files_dir) else { return };
     let cutoff = SystemTime::now() - Duration::from_secs(24 * 60 * 60);
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().into_owned();
-        if content.contains(&name) {
+        if known.contains(&name) || content.contains(&name) {
             continue;
         }
         let old = entry

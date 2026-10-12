@@ -5,6 +5,8 @@
   import { api } from './lib/api';
   import { prefs } from './lib/prefs.svelte';
   import { store } from './lib/store.svelte';
+  import { planner } from './lib/planner.svelte';
+  import { library } from './lib/library.svelte';
   import { ui } from './lib/ui.svelte';
   import type { Page } from './lib/types';
   import Sidebar from './lib/components/Sidebar.svelte';
@@ -19,6 +21,13 @@
   import Toasts from './lib/components/Toasts.svelte';
   import Icon from './lib/components/Icon.svelte';
   import Tooltip from './lib/components/Tooltip.svelte';
+  import FilePicker from './lib/components/FilePicker.svelte';
+  import AssignmentsView from './lib/views/AssignmentsView.svelte';
+  import CalendarView from './lib/views/CalendarView.svelte';
+  import FilesView from './lib/views/FilesView.svelte';
+  import AssignmentSheet from './lib/sheets/AssignmentSheet.svelte';
+  import EventSheet from './lib/sheets/EventSheet.svelte';
+  import FilePreview from './lib/sheets/FilePreview.svelte';
 
   const win = getCurrentWindow();
   const webviewWin = getCurrentWebviewWindow();
@@ -35,6 +44,16 @@
     void win.setTheme(dark ? 'dark' : 'light').catch(() => {});
     void webviewWin.setBackgroundColor(dark ? [0, 0, 0, 255] : [255, 255, 255, 255]).catch(() => {});
   });
+
+  // Each view starts at the top.
+  $effect(() => {
+    void store.view;
+    if (scroller) scroller.scrollTop = 0;
+    scrolled = false;
+  });
+
+  /** Saves everything that's waiting to be written. */
+  const flushAll = () => Promise.all([store.flush(), planner.flush()]);
 
   // Load the full page (with content) whenever the selection changes.
   $effect(() => {
@@ -66,7 +85,8 @@
     let unlistenClose: (() => void) | undefined;
     void (async () => {
       try {
-        await store.load();
+        // Pages decide where to start, so the planner and files load alongside.
+        await Promise.all([planner.load(), library.load(), store.load()]);
       } catch (e) {
         ui.error(e);
       }
@@ -82,11 +102,11 @@
       setTimeout(show, 500);
       // Minimizing hides and suspends the webview; save everything first.
       document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'hidden') void store.flush();
+        if (document.visibilityState === 'hidden') void flushAll();
       });
       unlistenClose = await win.onCloseRequested(async () => {
         window.dispatchEvent(new Event('td:flush'));
-        await store.flush();
+        await flushAll();
       });
     })();
     return () => unlistenClose?.();
@@ -112,6 +132,9 @@
     } else if (mod && key === ',') {
       e.preventDefault();
       ui.settingsOpen = true;
+    } else if (mod && !e.shiftKey && !e.altKey && ['1', '2', '3'].includes(e.key)) {
+      e.preventDefault();
+      store.go(e.key === '1' ? 'assignments' : e.key === '2' ? 'calendar' : 'files');
     } else if (e.altKey && e.key === 'ArrowLeft') {
       e.preventDefault();
       store.back();
@@ -122,7 +145,7 @@
       // Everything autosaves; just flush now instead of "Save page as…".
       e.preventDefault();
       window.dispatchEvent(new Event('td:flush'));
-      void store.flush();
+      void flushAll();
     } else if (mod && !e.shiftKey && (key === 'o' || key === 'j')) {
       // Browser shortcuts (open file, downloads) that make no sense here.
       e.preventDefault();
@@ -143,6 +166,24 @@
     }
   }
 
+  // Files dropped where nothing else takes them go to the library, instead
+  // of the webview navigating away to show the file.
+  const hasFiles = (e: DragEvent) => !!e.dataTransfer?.types.includes('Files');
+  function onDragOver(e: DragEvent) {
+    if (hasFiles(e) && !e.defaultPrevented) e.preventDefault();
+  }
+  async function onDrop(e: DragEvent) {
+    if (!hasFiles(e) || e.defaultPrevented) return;
+    e.preventDefault();
+    const added = await library.add(Array.from(e.dataTransfer?.files ?? []));
+    if (added.length) {
+      ui.toast(`Added ${added.length === 1 ? `“${added[0].name}”` : `${added.length} files`} to Files`, {
+        label: 'Show',
+        run: () => (added.length === 1 ? library.preview(added[0].id) : store.go('files')),
+      });
+    }
+  }
+
   // Only editable areas get the native context menu (spelling, copy/paste).
   function onContextMenu(e: MouseEvent) {
     const t = e.target as HTMLElement;
@@ -151,7 +192,7 @@
   }
 </script>
 
-<svelte:window onkeydown={onKeydown} onmouseup={onMouseUp} oncontextmenu={onContextMenu} />
+<svelte:window onkeydown={onKeydown} onmouseup={onMouseUp} oncontextmenu={onContextMenu} ondragover={onDragOver} ondrop={onDrop} />
 
 <div class="app">
   {#if prefs.sidebarOpen}
@@ -160,7 +201,13 @@
   <main class="main">
     <TitleBar {words} {scrolled} />
     <div class="scroller" bind:this={scroller} onscroll={() => (scrolled = (scroller?.scrollTop ?? 0) > 2)}>
-      {#if page && store.currentId === page.id}
+      {#if store.view === 'assignments'}
+        {#if planner.loaded}<AssignmentsView />{/if}
+      {:else if store.view === 'calendar'}
+        {#if planner.loaded}<CalendarView />{/if}
+      {:else if store.view === 'files'}
+        {#if library.loaded}<FilesView />{/if}
+      {:else if page && store.currentId === page.id}
         {#key page.id}
           <PageView {page} onstats={(w) => (words = w)} />
         {/key}
@@ -190,6 +237,18 @@
 {/if}
 {#if ui.iconPicker}
   {#key ui.iconPicker}<IconPicker picker={ui.iconPicker} />{/key}
+{/if}
+{#if ui.assignmentSheet}
+  {#key ui.assignmentSheet}<AssignmentSheet sheet={ui.assignmentSheet} />{/key}
+{/if}
+{#if ui.eventSheet}
+  {#key ui.eventSheet}<EventSheet sheet={ui.eventSheet} />{/key}
+{/if}
+{#if ui.filePreview}
+  {#key ui.filePreview}<FilePreview id={ui.filePreview} />{/key}
+{/if}
+{#if ui.filePicker}
+  {#key ui.filePicker}<FilePicker picker={ui.filePicker} />{/key}
 {/if}
 {#if ui.confirmState}<ConfirmDialog dialog={ui.confirmState} />{/if}
 <Toasts />

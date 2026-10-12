@@ -4,8 +4,8 @@
 
   let {
     onclose,
-    width = 560,
-    top = '12vh',
+    width = 600,
+    top = '10vh',
     label,
     glass = false,
     children,
@@ -64,7 +64,7 @@
   }
   .modal {
     max-width: calc(100vw - 32px);
-    max-height: 78vh;
+    max-height: 80vh;
     display: flex;
     flex-direction: column;
     overflow: hidden;

@@ -45,10 +45,10 @@
     max-width: min(560px, calc(100vw - 32px));
     padding: 0 6px 0 18px;
     border-radius: 20px;
-    background: color-mix(in srgb, var(--accent) 92%, transparent);
+    background: color-mix(in srgb, var(--ink) 92%, transparent);
     -webkit-backdrop-filter: blur(20px) saturate(0.2);
     backdrop-filter: blur(20px) saturate(0.2);
-    color: var(--on-accent);
+    color: var(--on-ink);
     font-size: var(--fs-body-ui);
     font-weight: var(--fw-500);
     box-shadow: 0 10px 30px -8px rgba(0, 0, 0, 0.35), 0 2px 6px rgba(0, 0, 0, 0.12);
@@ -64,12 +64,12 @@
     padding: 0 12px;
     border-radius: 14px;
     font-weight: var(--fw-650);
-    color: var(--on-accent);
-    background: color-mix(in srgb, var(--on-accent) 14%, transparent);
+    color: var(--on-ink);
+    background: color-mix(in srgb, var(--on-ink) 14%, transparent);
     transition: background-color var(--dur-fast) var(--ease);
   }
   .act:hover {
-    background: color-mix(in srgb, var(--on-accent) 22%, transparent);
+    background: color-mix(in srgb, var(--on-ink) 22%, transparent);
   }
   .x {
     display: grid;
@@ -77,13 +77,13 @@
     width: 28px;
     height: 28px;
     border-radius: 14px;
-    color: color-mix(in srgb, var(--on-accent) 60%, transparent);
+    color: color-mix(in srgb, var(--on-ink) 60%, transparent);
     transition:
       background-color var(--dur-fast) var(--ease),
       color var(--dur-fast) var(--ease);
   }
   .x:hover {
-    background: color-mix(in srgb, var(--on-accent) 14%, transparent);
-    color: var(--on-accent);
+    background: color-mix(in srgb, var(--on-ink) 14%, transparent);
+    color: var(--on-ink);
   }
 </style>

@@ -16,7 +16,13 @@
     return () => clearInterval(t);
   });
 
-  const page = $derived(store.current);
+  const page = $derived(store.view === 'page' ? store.current : null);
+  const VIEW_CRUMBS: Record<string, { label: string; icon: string }> = {
+    assignments: { label: 'Assignments', icon: 'assignment' },
+    calendar: { label: 'Calendar', icon: 'calendar' },
+    files: { label: 'Files', icon: 'files' },
+  };
+  const viewCrumb = $derived(VIEW_CRUMBS[store.view]);
   const crumbs = $derived.by(() => {
     if (!page) return [];
     const all = [...store.ancestors(page.id), page];
@@ -59,6 +65,12 @@
   </div>
 
   <nav class="crumbs" data-tauri-drag-region aria-label="Breadcrumb">
+    {#if viewCrumb}
+      <span class="crumb current view-crumb" data-tauri-drag-region>
+        <span class="view-icon"><Icon name={viewCrumb.icon} size={15} /></span>
+        <span class="crumb-title" data-tauri-drag-region>{viewCrumb.label}</span>
+      </span>
+    {/if}
     {#each crumbs as c, i (c?.id ?? `gap-${i}`)}
       {#if i > 0}<span class="sep" data-tauri-drag-region><Icon name="chevron-right" size={12} stroke={2} /></span>{/if}
       {#if c === null}
@@ -160,6 +172,13 @@
   .crumb.current {
     color: var(--text);
     font-weight: var(--fw-550);
+  }
+  .view-crumb:hover {
+    background: none;
+  }
+  .view-icon {
+    display: grid;
+    color: var(--tint);
   }
   .crumb-title {
     overflow: hidden;

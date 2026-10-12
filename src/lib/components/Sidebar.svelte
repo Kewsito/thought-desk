@@ -2,7 +2,12 @@
   import Icon from './Icon.svelte';
   import TreeItem, { drag } from './TreeItem.svelte';
   import { prefs } from '../prefs.svelte';
-  import { store } from '../store.svelte';
+  import { store, type View } from '../store.svelte';
+  import { planner } from '../planner.svelte';
+  import { library } from '../library.svelte';
+  import { itemsByDay } from '../calendar.svelte';
+  import { clock } from '../clock.svelte';
+  import { dueState } from '../dates';
   import { ui } from '../ui.svelte';
 
   const MIN = 208;
@@ -51,8 +56,37 @@
     void store.move(id, null, count);
   }
 
+  const overdue = $derived(planner.dueSoon.some((a) => dueState(a, clock.today, clock.time) === 'overdue'));
+  const todayEvents = $derived.by(() => {
+    const d = itemsByDay(clock.today, clock.today).get(clock.today);
+    return d ? d.allDay.length + d.timed.length : 0;
+  });
+
+  const nav: { view: Exclude<View, 'page'>; label: string; icon: string; key: string }[] = [
+    { view: 'assignments', label: 'Assignments', icon: 'assignment', key: 'Ctrl+1' },
+    { view: 'calendar', label: 'Calendar', icon: 'calendar', key: 'Ctrl+2' },
+    { view: 'files', label: 'Files', icon: 'files', key: 'Ctrl+3' },
+  ];
+  const counts = $derived<Record<string, number>>({
+    assignments: planner.dueSoon.length,
+    calendar: todayEvents,
+    files: library.live.length,
+  });
+  const countTips = $derived<Record<string, string>>({
+    assignments: `${planner.dueSoon.length} due within a week${overdue ? ', some overdue' : ''}`,
+    calendar: `${todayEvents} event${todayEvents === 1 ? '' : 's'} today`,
+    files: `${library.live.length} file${library.live.length === 1 ? '' : 's'}`,
+  });
+
   const themeIcon = $derived(prefs.theme === 'system' ? 'monitor' : prefs.theme === 'dark' ? 'moon' : 'sun');
   const themeLabel = $derived(prefs.theme === 'system' ? 'System' : prefs.theme === 'dark' ? 'Dark' : 'Light');
+  const trashCount = $derived(
+    store.trash.length +
+      planner.assignments.filter((a) => a.deletedAt).length +
+      planner.events.filter((e) => e.deletedAt).length +
+      library.files.filter((f) => f.deletedAt).length,
+  );
+
   function cycleTheme() {
     prefs.theme = prefs.theme === 'system' ? 'light' : prefs.theme === 'light' ? 'dark' : 'system';
   }
@@ -83,6 +117,20 @@
     <span>Search</span>
     <kbd>Ctrl K</kbd>
   </button>
+
+  <nav class="views" aria-label="Views">
+    {#each nav as n (n.view)}
+      <div class="nav-row" class:active={store.view === n.view}>
+        <button class="nav-main" onclick={() => store.go(n.view)} aria-current={store.view === n.view ? 'page' : undefined}>
+          <span class="lead tinted"><Icon name={n.icon} /></span>
+          <span class="label">{n.label}</span>
+        </button>
+        {#if counts[n.view]}
+          <span class="count" class:alert={n.view === 'assignments' && overdue} data-tip={countTips[n.view]}>{counts[n.view]}</span>
+        {/if}
+      </div>
+    {/each}
+  </nav>
 
   <div class="scroll">
     {#if store.favorites.length}
@@ -135,19 +183,23 @@
     </section>
   </div>
 
+  <!-- Trash and Settings share one row shape: full width, with a trailing
+       accessory (the count, the appearance toggle) inside the row. -->
   <div class="foot">
-    <button class="row-btn" onclick={() => (ui.trashOpen = true)}>
-      <span class="lead"><Icon name="trash" /></span>
-      <span class="label">Trash</span>
-      {#if store.trash.length}<span class="count">{store.trash.length}</span>{/if}
-    </button>
-    <div class="foot-row">
-      <button class="row-btn" onclick={() => (ui.settingsOpen = true)}>
+    <div class="nav-row" class:active={ui.trashOpen}>
+      <button class="nav-main" onclick={() => (ui.trashOpen = true)}>
+        <span class="lead"><Icon name="trash" /></span>
+        <span class="label">Trash</span>
+      </button>
+      {#if trashCount}<span class="count">{trashCount}</span>{/if}
+    </div>
+    <div class="nav-row" class:active={ui.settingsOpen}>
+      <button class="nav-main" onclick={() => (ui.settingsOpen = true)}>
         <span class="lead"><Icon name="settings" /></span>
         <span class="label">Settings</span>
       </button>
-      <button class="icon-btn" onclick={cycleTheme} data-tip="Appearance: {themeLabel}" data-tip-key="Ctrl+Shift+L">
-        <Icon name={themeIcon} />
+      <button class="acc" onclick={cycleTheme} data-tip="Appearance: {themeLabel}" data-tip-key="Ctrl+Shift+L" aria-label="Appearance: {themeLabel}">
+        <Icon name={themeIcon} size={15} />
       </button>
     </div>
   </div>
@@ -321,7 +373,79 @@
     color: var(--text);
   }
 
-  /* Footer rows share the tree rows' metrics. */
+  /* Navigation and footer rows share the tree rows' metrics: a 30px row
+     inset 10px from the edges, a 20px icon slot, and trailing accessories
+     that sit 4px from the right edge, like a tree row's actions. */
+  .nav-row {
+    display: flex;
+    align-items: center;
+    height: 30px;
+    margin: 0 10px;
+    border-radius: var(--r-sm);
+    color: var(--text-sidebar);
+    transition: background-color var(--dur-fast) var(--ease);
+  }
+  .nav-row:hover {
+    background: var(--fill);
+  }
+  .nav-row:has(.nav-main:active) {
+    background: var(--fill-2);
+  }
+  .nav-row.active {
+    background: var(--fill-2);
+    color: var(--text);
+    font-weight: var(--fw-550);
+  }
+  .nav-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 100%;
+    padding: 0 8px;
+    border-radius: var(--r-sm);
+    font-size: var(--fs-body-ui);
+    text-align: left;
+  }
+  .nav-main:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 1.5px var(--focus);
+  }
+  .nav-row .count {
+    margin-right: 10px;
+  }
+  .count.alert {
+    color: var(--danger);
+    font-weight: var(--fw-600);
+  }
+  .acc {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    margin-right: 4px;
+    border-radius: var(--r-xs);
+    color: var(--text-3);
+    transition:
+      background-color var(--dur-fast) var(--ease),
+      color var(--dur-fast) var(--ease);
+  }
+  .acc:hover {
+    background: var(--fill-2);
+    color: var(--text);
+  }
+  .views {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    margin-bottom: 14px;
+  }
+  .tinted {
+    color: var(--tint);
+  }
+
   .row-btn {
     display: flex;
     align-items: center;
@@ -382,17 +506,6 @@
     gap: 1px;
     padding: 8px 0 10px;
     box-shadow: inset 0 1px 0 var(--separator);
-  }
-  .foot-row {
-    display: flex;
-    align-items: center;
-  }
-  .foot-row .row-btn {
-    margin-right: 2px;
-  }
-  .foot-row .icon-btn {
-    margin-right: 10px;
-    color: var(--text-3);
   }
 
   /* Resize grip: invisible until hovered, then a 2px rule. */

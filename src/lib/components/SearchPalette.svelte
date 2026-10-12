@@ -2,11 +2,35 @@
   import { onMount } from 'svelte';
   import Icon from './Icon.svelte';
   import Modal from './Modal.svelte';
+  import FileTile from '../ui/FileTile.svelte';
   import { api } from '../api';
+  import { calendar } from '../calendar.svelte';
+  import { clock } from '../clock.svelte';
+  import { dueState, formatDate, formatDue, formatTime } from '../dates';
+  import { rank } from '../editor/suggestion.svelte';
+  import { KINDS, fileKind, library } from '../library.svelte';
+  import { planner } from '../planner.svelte';
   import { store } from '../store.svelte';
   import { ui } from '../ui.svelte';
-  import { relativeTime } from '../time';
-  import type { SearchHit } from '../types';
+  import { formatBytes, relativeTime } from '../time';
+  import type { FileMeta, SearchHit } from '../types';
+
+  /** One result row. Rows of the same group are listed together. */
+  interface Row {
+    key: string;
+    group: string;
+    title: string;
+    icon?: string;
+    emoji?: string;
+    file?: FileMeta;
+    /** CSS colour for the icon (course and event colours). */
+    color?: string;
+    path?: string;
+    snippet?: string;
+    meta?: string;
+    metaClass?: string;
+    run: () => void;
+  }
 
   let input: HTMLInputElement;
   let list = $state<HTMLDivElement>();
@@ -14,9 +38,6 @@
   let hits = $state<SearchHit[]>([]);
   let selected = $state(0);
   let seq = 0;
-
-  const showCreate = $derived(query.trim().length > 0);
-  const total = $derived(hits.length + (showCreate ? 1 : 0));
 
   onMount(() => {
     input.focus();
@@ -38,41 +59,13 @@
   let timer: ReturnType<typeof setTimeout> | undefined;
   function onInput() {
     clearTimeout(timer);
+    selected = 0;
     timer = setTimeout(() => run(query), 60);
   }
 
   function close() {
     ui.searchOpen = false;
   }
-
-  function choose(i: number) {
-    if (i < hits.length) {
-      store.open(hits[i].id);
-      close();
-    } else if (showCreate) {
-      const title = query.trim();
-      close();
-      void store.create(null, { title });
-    }
-  }
-
-  function onKey(e: KeyboardEvent) {
-    if (e.key === 'ArrowDown' || (e.key === 'n' && e.ctrlKey)) {
-      e.preventDefault();
-      selected = total ? (selected + 1) % total : 0;
-    } else if (e.key === 'ArrowUp' || (e.key === 'p' && e.ctrlKey)) {
-      e.preventDefault();
-      selected = total ? (selected - 1 + total) % total : 0;
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      choose(selected);
-    }
-  }
-
-  $effect(() => {
-    const i = selected;
-    list?.querySelector(`[data-index="${i}"]`)?.scrollIntoView({ block: 'nearest' });
-  });
 
   /** Splits an FTS snippet into plain and highlighted runs. */
   function parts(snippet: string): { text: string; hit: boolean }[] {
@@ -91,6 +84,146 @@
       .map((a) => a.title || 'Untitled')
       .join(' / ');
   }
+
+  const GOTO = [
+    { title: 'Assignments', icon: 'assignment', keywords: 'homework tasks due', run: () => store.go('assignments') },
+    { title: 'Calendar', icon: 'calendar', keywords: 'schedule events week month', run: () => store.go('calendar') },
+    { title: 'Files', icon: 'files', keywords: 'library attachments documents', run: () => store.go('files') },
+    { title: 'Settings', icon: 'settings', keywords: 'preferences theme accent color', run: () => (ui.settingsOpen = true) },
+    { title: 'Trash', icon: 'trash', keywords: 'deleted restore', run: () => (ui.trashOpen = true) },
+  ];
+
+  const rows = $derived.by((): Row[] => {
+    const q = query.trim();
+    const out: Row[] = [];
+    const pages = hits.map(
+      (hit): Row => ({
+        key: `p:${hit.id}`,
+        group: q ? 'Pages' : 'Recently Edited',
+        title: hit.title || 'Untitled',
+        emoji: hit.icon || undefined,
+        icon: hit.icon ? undefined : 'page',
+        path: pathOf(hit.id) || undefined,
+        snippet: hit.snippet || undefined,
+        meta: relativeTime(hit.updatedAt),
+        run: () => store.open(hit.id),
+      }),
+    );
+    const assignmentRow = (a: (typeof planner.live)[number]): Row => {
+      const course = a.courseId ? planner.courseById.get(a.courseId) : undefined;
+      return {
+        key: `a:${a.id}`,
+        group: q ? 'Assignments' : 'Up Next',
+        title: a.title || 'Untitled',
+        icon: a.status === 'done' ? 'check' : 'assignment',
+        color: planner.courseColor(a.courseId),
+        path: course?.name,
+        meta: formatDue(a.dueDate, a.dueTime, clock.today),
+        metaClass: dueState(a, clock.today, clock.time),
+        run: () => planner.openAssignment(a.id),
+      };
+    };
+
+    if (!q) {
+      out.push(...pages.slice(0, 8));
+      out.push(
+        ...planner.live
+          .filter((a) => a.status !== 'done' && a.dueDate)
+          .slice(0, 3)
+          .map(assignmentRow),
+      );
+      return out;
+    }
+
+    out.push(...pages);
+    const assignments = planner.live.map((a) => ({
+      a,
+      title: a.title,
+      keywords: `${a.notes} ${a.courseId ? (planner.courseById.get(a.courseId)?.name ?? '') : ''}`,
+    }));
+    out.push(...rank(assignments, q, 6).map(({ a }) => assignmentRow(a)));
+    const events = planner.liveEvents.map((e) => ({ e, title: e.title, keywords: `${e.location} ${e.notes}` }));
+    out.push(
+      ...rank(events, q, 5).map(
+        ({ e }): Row => ({
+          key: `e:${e.id}`,
+          group: 'Events',
+          title: e.title || 'Untitled',
+          icon: 'calendar',
+          color: planner.eventColor(e),
+          path: e.location || undefined,
+          meta: formatDate(e.startDate) + (e.startTime ? `, ${formatTime(e.startTime)}` : '') + (e.repeat !== 'none' ? ' · repeats' : ''),
+          run: () => {
+            calendar.show(e.startDate);
+            planner.openEvent(e.id);
+          },
+        }),
+      ),
+    );
+    const files = library.live.map((f) => ({ f, title: f.name, keywords: KINDS[fileKind(f)].label }));
+    out.push(
+      ...rank(files, q, 5).map(
+        ({ f }): Row => ({
+          key: `f:${f.id}`,
+          group: 'Files',
+          title: f.name,
+          file: f,
+          path: KINDS[fileKind(f)].label,
+          meta: formatBytes(f.size),
+          run: () => library.preview(f.id),
+        }),
+      ),
+    );
+    out.push(...rank(GOTO, q, 3).map((g): Row => ({ key: `g:${g.title}`, group: 'Go To', title: g.title, icon: g.icon, run: g.run })));
+    out.push(
+      { key: 'new-page', group: 'Create', title: `New page “${q}”`, icon: 'page-plus', meta: 'Page', run: () => void store.create(null, { title: q }) },
+      {
+        key: 'new-assignment',
+        group: 'Create',
+        title: `New assignment “${q}”`,
+        icon: 'assignment',
+        meta: 'Assignment',
+        run: () => planner.newAssignment({ title: q }),
+      },
+      {
+        key: 'new-event',
+        group: 'Create',
+        title: `New event “${q}”`,
+        icon: 'calendar',
+        meta: 'Event',
+        run: () => planner.newEvent({ title: q, startDate: clock.today, endDate: clock.today, startTime: '09:00', endTime: '10:00' }),
+      },
+    );
+    return out;
+  });
+
+  function choose(i: number) {
+    const row = rows[i];
+    if (!row) return;
+    close();
+    row.run();
+  }
+
+  function onKey(e: KeyboardEvent) {
+    const total = rows.length;
+    if (e.key === 'ArrowDown' || (e.key === 'n' && e.ctrlKey)) {
+      e.preventDefault();
+      selected = total ? (selected + 1) % total : 0;
+    } else if (e.key === 'ArrowUp' || (e.key === 'p' && e.ctrlKey)) {
+      e.preventDefault();
+      selected = total ? (selected - 1 + total) % total : 0;
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      choose(selected);
+    }
+  }
+
+  $effect(() => {
+    const i = selected;
+    list?.querySelector(`[data-index="${i}"]`)?.scrollIntoView({ block: 'nearest' });
+  });
+
+  const nothingFound = $derived(query.trim() !== '' && rows.every((r) => r.group === 'Create'));
 </script>
 
 <Modal onclose={close} width={640} top="16vh" label="Search" glass>
@@ -101,18 +234,20 @@
       bind:value={query}
       oninput={onInput}
       onkeydown={onKey}
-      placeholder="Search pages"
+      placeholder="Search pages, assignments, events and files"
       spellcheck="false"
       autocomplete="off"
     />
   </div>
-  {#if hits.length || showCreate || query.trim()}
+  {#if rows.length}
     <div class="results" bind:this={list}>
-      {#if !query.trim() && hits.length}
-        <div class="group">Recently edited</div>
+      {#if nothingFound}
+        <div class="none">Nothing matches “{query.trim()}”</div>
       {/if}
-      {#each hits as hit, i (hit.id)}
-        {@const path = pathOf(hit.id)}
+      {#each rows as row, i (row.key)}
+        {#if i === 0 || rows[i - 1].group !== row.group}
+          <div class="group">{row.group}</div>
+        {/if}
         <button
           class="hit"
           class:selected={i === selected}
@@ -120,37 +255,25 @@
           onmousemove={() => (selected = i)}
           onclick={() => choose(i)}
         >
-          <span class="hit-icon">{#if hit.icon}<span class="emoji">{hit.icon}</span>{:else}<Icon name="page" size={18} />{/if}</span>
+          <span class="hit-icon" style:color={row.color}>
+            {#if row.file}<FileTile file={row.file} size={26} />
+            {:else if row.emoji}<span class="emoji">{row.emoji}</span>
+            {:else if row.icon}<Icon name={row.icon} size={18} />{/if}
+          </span>
           <span class="hit-main">
             <span class="hit-line">
-              <span class="hit-title">{hit.title || 'Untitled'}</span>
-              {#if path}<span class="hit-path">{path}</span>{/if}
+              <span class="hit-title">{row.title}</span>
+              {#if row.path}<span class="hit-path">{row.path}</span>{/if}
             </span>
-            {#if hit.snippet}
+            {#if row.snippet}
               <span class="hit-snippet">
-                {#each parts(hit.snippet) as p}{#if p.hit}<mark>{p.text}</mark>{:else}{p.text}{/if}{/each}
+                {#each parts(row.snippet) as p}{#if p.hit}<mark>{p.text}</mark>{:else}{p.text}{/if}{/each}
               </span>
             {/if}
           </span>
-          <span class="hit-time">{relativeTime(hit.updatedAt)}</span>
+          {#if row.meta}<span class="hit-time {row.metaClass ?? ''}">{row.meta}</span>{/if}
         </button>
       {/each}
-      {#if showCreate}
-        <button
-          class="hit create"
-          class:selected={selected === hits.length}
-          data-index={hits.length}
-          onmousemove={() => (selected = hits.length)}
-          onclick={() => choose(hits.length)}
-        >
-          <span class="hit-icon"><Icon name="page-plus" size={18} /></span>
-          <span class="hit-main"><span class="hit-line"><span class="hit-title">Create “{query.trim()}”</span></span></span>
-          <span class="hit-time">New page</span>
-        </button>
-      {/if}
-      {#if query.trim() && hits.length === 0}
-        <div class="none">No pages match “{query.trim()}”</div>
-      {/if}
     </div>
     <div class="foot">
       <span class="hint"><kbd>↑</kbd><kbd>↓</kbd> Navigate</span>
@@ -201,8 +324,8 @@
     align-items: center;
     gap: 12px;
     width: 100%;
-    min-height: 48px;
-    padding: 7px 14px 7px 10px;
+    min-height: 44px;
+    padding: 6px 14px 6px 10px;
     border-radius: var(--r-md);
     text-align: left;
   }
@@ -270,8 +393,14 @@
     color: var(--text-3);
     font-variant-numeric: tabular-nums;
   }
+  .hit-time.overdue {
+    color: var(--danger);
+  }
+  .hit-time.today {
+    color: var(--c-orange);
+  }
   .none {
-    padding: 28px 16px 30px;
+    padding: 18px 16px 10px;
     text-align: center;
     color: var(--text-3);
     font-size: var(--fs-body-ui);

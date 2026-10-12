@@ -102,7 +102,7 @@
         onmouseleave={() => (selected = -1)}
         onclick={() => run(item)}
       >
-        {#if item.icon}<span class="icon"><Icon name={item.icon} /></span>{/if}
+        {#if item.dot}<span class="icon"><span class="dot" style:--dot={item.dot}></span></span>{:else if item.icon}<span class="icon"><Icon name={item.icon} /></span>{/if}
         <span class="label">{item.label}</span>
         {#if item.hint}<span class="hint">{item.hint}</span>{/if}
         {#if item.checked}<span class="check"><Icon name="check" size={14} stroke={2.4} /></span>{/if}
@@ -142,13 +142,19 @@
   .item.selected:not(:disabled) {
     background: var(--fill-2);
   }
+  .item.danger {
+    color: var(--danger);
+  }
+  .item.danger .icon {
+    color: var(--danger);
+  }
   .item.danger.selected:not(:disabled) {
-    background: var(--accent);
-    color: var(--on-accent);
+    background: var(--danger);
+    color: #ffffff;
   }
   .item.danger.selected .icon,
   .item.danger.selected .hint {
-    color: var(--on-accent);
+    color: #ffffff;
   }
   .item:disabled {
     color: var(--text-4);
