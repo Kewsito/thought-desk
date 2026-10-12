@@ -4,7 +4,7 @@
  */
 
 import { mockConvertFileSrc, mockIPC, mockWindows } from '@tauri-apps/api/mocks';
-import type { Assignment, CalEvent, Course, FileMeta, PageMeta, Tag } from './lib/types';
+import type { Assignment, CalEvent, Course, FileMeta, OccurrencePage, PageMeta, Tag } from './lib/types';
 
 type Row = PageMeta & { content: string; text: string };
 
@@ -137,6 +137,7 @@ interface PlannerData {
   events: CalEvent[];
   files: FileMeta[];
   tags: Tag[];
+  sessions: OccurrencePage[];
 }
 const PLANNER_KEY = 'thoughtdesk.devmock.planner.v1';
 const BLOBS_KEY = 'thoughtdesk.devmock.blobs.v1';
@@ -172,50 +173,47 @@ let planner: PlannerData = loadPlanner() ?? seedPlanner();
 // Older preview data predates tags.
 planner.tags ??= [];
 for (const x of [...planner.assignments, ...planner.events, ...planner.files]) x.tags ??= [];
+// …and course details, skipped dates and session notes.
+planner.sessions ??= [];
+for (const c of planner.courses) Object.assign(c, { ...newCourse(c.name, c.color, c.position), ...c });
+for (const x of planner.assignments) x.sourceUid ??= null;
+for (const x of planner.events) {
+  x.exdates ??= [];
+  x.sourceUid ??= null;
+}
 const persistPlanner = () => localStorage.setItem(PLANNER_KEY, JSON.stringify(planner));
+
+function newCourse(name: string, color: string, position: number): Course {
+  return { id: crypto.randomUUID(), name, color, position, createdAt: Date.now(), teacher: '', email: '', officeHours: '', room: '', pageId: null };
+}
+
+function newAssignment(): Assignment {
+  const ts = Date.now();
+  return { id: crypto.randomUUID(), title: '', courseId: null, dueDate: null, dueTime: null, status: 'todo', priority: 0, notes: '', pageId: null, fileIds: [], createdAt: ts, updatedAt: ts, completedAt: null, deletedAt: null, tags: [], sourceUid: null };
+}
+
+function newEvent(startDate: string): CalEvent {
+  const ts = Date.now();
+  return { id: crypto.randomUUID(), title: '', startDate, startTime: null, endDate: startDate, endTime: null, color: '', courseId: null, location: '', notes: '', repeat: 'none', repeatUntil: null, pageId: null, createdAt: ts, updatedAt: ts, deletedAt: null, tags: [], exdates: [], sourceUid: null };
+}
 
 function seedPlanner(): PlannerData {
   const ts = Date.now();
-  const course = (name: string, color: string, position: number): Course => ({ id: crypto.randomUUID(), name, color, position, createdAt: ts });
-  const bio = course('Biology', 'green', 0);
-  const hist = course('History', 'orange', 1);
-  const cs = course('Computer Science', 'blue', 2);
+  const bio = { ...newCourse('Biology', 'green', 0), teacher: 'Dr. Rivera', room: 'Science 204', officeHours: 'Tue 2–4 PM' };
+  const hist = newCourse('History', 'orange', 1);
+  const cs = newCourse('Computer Science', 'blue', 2);
   const assignment = (title: string, c: Course | null, dueDate: string | null, extra: Partial<Assignment> = {}): Assignment => ({
-    id: crypto.randomUUID(),
+    ...newAssignment(),
     title,
     courseId: c?.id ?? null,
     dueDate,
-    dueTime: null,
-    status: 'todo',
-    priority: 0,
-    notes: '',
-    pageId: null,
-    fileIds: [],
-    createdAt: ts,
-    updatedAt: ts,
-    completedAt: null,
-    deletedAt: null,
-    tags: [],
     ...extra,
   });
   const event = (title: string, startDate: string, startTime: string | null, endTime: string | null, extra: Partial<CalEvent> = {}): CalEvent => ({
-    id: crypto.randomUUID(),
+    ...newEvent(startDate),
     title,
-    startDate,
     startTime,
-    endDate: startDate,
     endTime,
-    color: '',
-    courseId: null,
-    location: '',
-    notes: '',
-    repeat: 'none',
-    repeatUntil: null,
-    pageId: null,
-    createdAt: ts,
-    updatedAt: ts,
-    deletedAt: null,
-    tags: [],
     ...extra,
   });
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="420" viewBox="0 0 640 420"><rect width="640" height="420" fill="#e8f5e9"/><circle cx="320" cy="210" r="120" fill="#34c759" opacity=".35"/><circle cx="320" cy="210" r="60" fill="#34c759"/><text x="320" y="390" font-family="sans-serif" font-size="22" text-anchor="middle" fill="#1d1d1f">Plant cell</text></svg>`;
@@ -251,6 +249,7 @@ function seedPlanner(): PlannerData {
       { name: 'exam', color: 'red' },
       { name: 'lab', color: 'green' },
     ],
+    sessions: [],
   };
 }
 
@@ -372,13 +371,13 @@ mockIPC((cmd, payload) => {
       case 'list_courses':
         return planner.courses;
       case 'create_course': {
-        const c: Course = { id: crypto.randomUUID(), name: a.name, color: a.color, position: planner.courses.length, createdAt: Date.now() };
+        const c = newCourse(a.name, a.color, planner.courses.length);
         planner.courses.push(c);
         return c;
       }
       case 'update_course': {
         const c = planner.courses.find((x) => x.id === a.id)!;
-        patchFields(c, a.patch, ['name', 'color']);
+        patchFields(c, a.patch, ['name', 'color', 'teacher', 'email', 'officeHours', 'room', 'pageId']);
         return c;
       }
       case 'delete_course':
@@ -392,12 +391,11 @@ mockIPC((cmd, payload) => {
         let x = planner.assignments.find((y) => y.id === a.id);
         const p = (a.patch ?? a.input) as Record<string, any>;
         if (!x) {
-          const ts = Date.now();
-          x = { id: crypto.randomUUID(), title: '', courseId: null, dueDate: null, dueTime: null, status: 'todo', priority: 0, notes: '', pageId: null, fileIds: [], createdAt: ts, updatedAt: ts, completedAt: null, deletedAt: null, tags: [] };
+          x = newAssignment();
           planner.assignments.push(x);
         }
         if (p.status !== undefined && p.status !== x.status) x.completedAt = p.status === 'done' ? Date.now() : null;
-        patchFields(x, p, ['title', 'courseId', 'dueDate', 'dueTime', 'status', 'priority', 'notes', 'pageId', 'fileIds']);
+        patchFields(x, p, ['title', 'courseId', 'dueDate', 'dueTime', 'status', 'priority', 'notes', 'pageId', 'fileIds', 'sourceUid']);
         if (!x.dueDate) x.dueTime = null;
         x.fileIds = x.fileIds.filter((id) => planner.files.some((f) => f.id === id));
         x.updatedAt = Date.now();
@@ -410,11 +408,11 @@ mockIPC((cmd, payload) => {
         let x = planner.events.find((y) => y.id === a.id);
         const p = (a.patch ?? a.input) as Record<string, any>;
         if (!x) {
-          const ts = Date.now();
-          x = { id: crypto.randomUUID(), title: '', startDate: p.startDate, startTime: null, endDate: p.startDate, endTime: null, color: '', courseId: null, location: '', notes: '', repeat: 'none', repeatUntil: null, pageId: null, createdAt: ts, updatedAt: ts, deletedAt: null, tags: [] };
+          x = newEvent(p.startDate);
           planner.events.push(x);
         }
-        patchFields(x, p, ['title', 'startDate', 'startTime', 'endDate', 'endTime', 'color', 'courseId', 'location', 'notes', 'repeat', 'repeatUntil', 'pageId']);
+        patchFields(x, p, ['title', 'startDate', 'startTime', 'endDate', 'endTime', 'color', 'courseId', 'location', 'notes', 'repeat', 'repeatUntil', 'pageId', 'sourceUid']);
+        if (p.exdates !== undefined) x.exdates = [...new Set(p.exdates as string[])].sort();
         if (x.endDate < x.startDate) x.endDate = x.startDate;
         if (!x.startTime) x.endTime = null;
         else if (!x.endTime || (x.endDate === x.startDate && x.endTime < x.startTime)) x.endTime = x.startTime;
@@ -505,6 +503,15 @@ mockIPC((cmd, payload) => {
         r.updatedAt = Date.now();
         return r.updatedAt;
       }
+      case 'list_occurrence_pages':
+        return planner.sessions.filter((s) => rows.some((r) => r.id === s.pageId) && planner.events.some((e) => e.id === s.eventId));
+      case 'set_occurrence_page':
+        planner.sessions = planner.sessions.filter((s) => !(s.eventId === a.eventId && s.date === a.date));
+        planner.sessions.push({ eventId: a.eventId, date: a.date, pageId: a.pageId });
+        return null;
+      case 'set_reminders':
+        console.info('[dev] reminders', a.list);
+        return null;
       case 'set_capture_shortcut':
         return null;
       case 'trash_item':

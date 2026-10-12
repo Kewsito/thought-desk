@@ -4,10 +4,10 @@ import { api } from './api';
 import { Autosave } from './autosave';
 import { colorVar, nextColor } from './colors';
 import { clock } from './clock.svelte';
-import { addDays } from './dates';
+import { addDays, diffDays, formatDate, minutes, occurrences } from './dates';
 import { store } from './store.svelte';
 import { ui } from './ui.svelte';
-import type { Assignment, AssignmentPatch, CalEvent, Course, EventPatch } from './types';
+import type { Assignment, AssignmentPatch, CalEvent, Course, CoursePatch, EventPatch, OccurrencePage } from './types';
 
 const byDue = (a: Assignment, b: Assignment) =>
   (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999') ||
@@ -19,6 +19,8 @@ class Planner {
   courses = $state<Course[]>([]);
   assignments = $state<Assignment[]>([]);
   events = $state<CalEvent[]>([]);
+  /** Notes pages for single sessions of events. */
+  sessionPages = $state<OccurrencePage[]>([]);
   loaded = $state(false);
 
   courseById = $derived(new Map(this.courses.map((c) => [c.id, c])));
@@ -70,20 +72,28 @@ class Planner {
     (id, e) => this.eventById.has(id) && ui.error(e),
   );
 
+  #courseSaver = new Autosave<CoursePatch, Course>(
+    (id, patch) => api.updateCourse(id, patch),
+    () => {},
+    (id, e) => this.courseById.has(id) && ui.error(e),
+  );
+
   async load() {
-    const [courses, assignments, events] = await Promise.all([
+    const [courses, assignments, events, sessionPages] = await Promise.all([
       api.listCourses(),
       api.listAssignments(),
       api.listEvents(),
+      api.listOccurrencePages(),
     ]);
     this.courses = courses;
     this.assignments = assignments;
     this.events = events;
+    this.sessionPages = sessionPages;
     this.loaded = true;
   }
 
   flush() {
-    return Promise.all([this.#assignmentSaver.flush(), this.#eventSaver.flush()]);
+    return Promise.all([this.#assignmentSaver.flush(), this.#eventSaver.flush(), this.#courseSaver.flush()]);
   }
 
   // ------------------------------------------------------------- colours
@@ -110,14 +120,60 @@ class Planner {
     }
   }
 
-  async updateCourse(id: string, patch: { name?: string; color?: string }) {
+  /** Asks for a name and colour, then adds the course. */
+  async promptCourse(): Promise<Course | null> {
+    const res = await ui.prompt({
+      title: 'New Course',
+      placeholder: 'Course name',
+      confirmLabel: 'Add Course',
+      icon: 'book',
+      color: nextColor(this.courses.map((c) => c.color)),
+    });
+    return res ? this.addCourse(res.value, res.color) : null;
+  }
+
+  /** Applies right away; typing in course details is saved shortly after. */
+  updateCourse(id: string, patch: CoursePatch, { typing = false } = {}) {
     const c = this.courseById.get(id);
     if (c) Object.assign(c, patch);
-    try {
-      await api.updateCourse(id, patch);
-    } catch (e) {
-      ui.error(e);
-    }
+    this.#courseSaver.queue(id, patch, !typing);
+  }
+
+  /** The page that holds a course's notes, created the first time. */
+  async courseFolder(courseId: string): Promise<string | null> {
+    const c = this.courseById.get(courseId);
+    if (!c) return null;
+    const page = c.pageId ? store.byId.get(c.pageId) : undefined;
+    if (page && !page.deletedAt) return page.id;
+    const meta = await store.create(null, { open: false, title: c.name || 'Course', icon: '📘' });
+    if (!meta) return null;
+    this.updateCourse(courseId, { pageId: meta.id });
+    return meta.id;
+  }
+
+  /** A blank page in the course's notes folder, opened for typing. */
+  async newCourseNote(courseId: string) {
+    const folder = await this.courseFolder(courseId);
+    if (folder) await store.create(folder, { index: 0 });
+  }
+
+  /**
+   * "Take Notes" on a course: notes for today's class (the one under way or
+   * the next one), or a blank note when there's no class today.
+   */
+  async courseNotes(courseId: string) {
+    const today = clock.today;
+    const sessions = this.liveEvents
+      .filter((e) => e.courseId === courseId && e.startTime)
+      .flatMap((e) => occurrences(e, today, today))
+      .filter((o) => o.start === today)
+      .sort((a, b) => a.event.startTime!.localeCompare(b.event.startTime!));
+    // A class counts as started 15 minutes early, when people sit down.
+    const now = minutes(clock.time) + 15;
+    const started = sessions.filter((o) => minutes(o.event.startTime!) <= now);
+    const pick = started[started.length - 1] ?? sessions[0];
+    if (pick) await this.takeNotes(pick.event.id, today);
+    else await this.newCourseNote(courseId);
   }
 
   async deleteCourse(id: string) {
@@ -136,6 +192,7 @@ class Planner {
     try {
       await api.deleteCourse(id);
       this.courses = this.courses.filter((x) => x.id !== id);
+      store.forgetCourse(id);
       for (const a of this.assignments) if (a.courseId === id) a.courseId = null;
       for (const e of this.events) if (e.courseId === id) e.courseId = null;
     } catch (e) {
@@ -188,9 +245,130 @@ class Planner {
     ui.eventSheet = { id: null, draft };
   }
 
-  openEvent(id: string) {
+  /** Opens an event; `date` picks one session of a repeating event. */
+  openEvent(id: string, date?: string) {
     if (this.eventById.get(id)?.deletedAt) return;
-    ui.eventSheet = { id, draft: {} };
+    ui.eventSheet = { id, draft: {}, date };
+  }
+
+  /**
+   * The notes page of one session, if it has one (and it isn't trashed). A
+   * one-off event has a single session, whose notes are its notes page.
+   */
+  sessionPage(eventId: string, date: string): string | null {
+    const e = this.eventById.get(eventId);
+    const id =
+      e && e.repeat === 'none'
+        ? e.pageId
+        : this.sessionPages.find((s) => s.eventId === eventId && s.date === date)?.pageId;
+    const page = id ? store.byId.get(id) : undefined;
+    return page && !page.deletedAt ? page.id : null;
+  }
+
+  /**
+   * Opens the notes for one session ("Biology lecture — Oct 14"), creating
+   * the page inside the course's notes folder the first time.
+   */
+  async takeNotes(eventId: string, date: string) {
+    const e = this.eventById.get(eventId);
+    if (!e) return;
+    let pageId = this.sessionPage(eventId, date);
+    if (!pageId) {
+      const parent = e.courseId ? await this.courseFolder(e.courseId) : null;
+      const meta = await store.create(parent, {
+        open: false,
+        title: `${e.title || 'Class'} — ${formatDate(date, { month: 'short', day: 'numeric' })}`,
+        icon: '🗒️',
+        index: 0,
+      });
+      if (!meta) return;
+      const when = formatDate(date, { weekday: 'long', month: 'long', day: 'numeric' });
+      const doc = {
+        type: 'doc',
+        content: [
+          { type: 'paragraph', content: [{ type: 'mention', attrs: { id: eventId, kind: 'event', date } }, { type: 'text', text: ' ' }] },
+          { type: 'paragraph' },
+        ],
+      };
+      store.update(meta.id, { content: JSON.stringify(doc), text: `${e.title} ${when}` }, { immediate: true });
+      if (e.repeat === 'none') this.updateEvent(eventId, { pageId: meta.id }, { immediate: true });
+      else {
+        try {
+          await api.setOccurrencePage(eventId, date, meta.id);
+          this.sessionPages = [...this.sessionPages.filter((s) => !(s.eventId === eventId && s.date === date)), { eventId, date, pageId: meta.id }];
+        } catch (err) {
+          ui.error(err);
+        }
+      }
+      pageId = meta.id;
+    }
+    ui.eventSheet = null;
+    store.open(pageId);
+  }
+
+  /** Skips one date of a repeating event, with Undo. */
+  skipDate(eventId: string, date: string) {
+    const e = this.eventById.get(eventId);
+    if (!e) return;
+    const before = [...e.exdates];
+    this.updateEvent(eventId, { exdates: [...before, date] }, { immediate: true });
+    if (ui.eventSheet?.id === eventId) ui.eventSheet = null;
+    ui.toast(`Removed ${e.title || 'event'} on ${formatDate(date)}`, {
+      label: 'Undo',
+      run: () => this.updateEvent(eventId, { exdates: before }, { immediate: true }),
+    });
+  }
+
+  /**
+   * Splits one session off a repeating event: the series skips that date and
+   * a standalone copy (with `patch` applied) takes its place. Returns the copy.
+   */
+  async detach(eventId: string, date: string, patch: EventPatch): Promise<CalEvent | null> {
+    const e = this.eventById.get(eventId);
+    if (!e) return null;
+    const span = diffDays(e.startDate, e.endDate);
+    // The session's notes follow it (a one-off event keeps them as its page).
+    const notes = this.sessionPage(eventId, date);
+    const copy = await this.addEvent({
+      title: e.title,
+      startDate: date,
+      endDate: addDays(date, span),
+      startTime: e.startTime,
+      endTime: e.endTime,
+      color: e.color,
+      courseId: e.courseId,
+      location: e.location,
+      notes: e.notes,
+      repeat: 'none',
+      pageId: notes,
+      ...patch,
+    });
+    if (!copy) return null;
+    this.updateEvent(eventId, { exdates: [...e.exdates, date] }, { immediate: true });
+    if (e.tags.length) copy.tags = await api.setItemTags('events', copy.id, e.tags).catch(() => []);
+    return copy;
+  }
+
+  /** Moves one session of a repeating event (drag and drop), with Undo. */
+  async moveSession(eventId: string, date: string, patch: EventPatch) {
+    const copy = await this.detach(eventId, date, patch);
+    if (!copy) return;
+    ui.toast(`Moved “${copy.title || 'Untitled'}” on ${formatDate(date)} only`, { label: 'Undo', run: () => void this.reattach(copy.id, eventId, date) });
+  }
+
+  /** Undoes `detach`: drops the standalone copy and restores the session. */
+  async reattach(copyId: string, eventId: string, date: string) {
+    const e = this.eventById.get(eventId);
+    if (!e) return;
+    try {
+      await this.#eventSaver.flush();
+      await api.deleteItem('events', copyId);
+      this.events = this.events.filter((x) => x.id !== copyId);
+      if (ui.eventSheet?.id === copyId) ui.eventSheet = null;
+      this.updateEvent(eventId, { exdates: e.exdates.filter((d) => d !== date) }, { immediate: true });
+    } catch (err) {
+      ui.error(err);
+    }
   }
 
   async addEvent(input: EventPatch): Promise<CalEvent | null> {

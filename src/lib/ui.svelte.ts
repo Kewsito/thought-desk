@@ -1,6 +1,7 @@
 /** Transient UI state: overlays, menus, dialogs and toasts. */
 
 import type { AssignmentPatch, EventPatch, FileMeta, TrashTable } from './types';
+import type { IcsItem } from './ics';
 
 export type MenuItem =
   | {
@@ -68,6 +69,8 @@ export interface SheetState<P> {
   draft: P;
   /** Called with the new item's id when a new one is added. */
   onCreated?: (id: string) => void;
+  /** For a repeating event: the session it was opened from. */
+  date?: string;
 }
 
 export interface Toast {
@@ -92,6 +95,8 @@ class UI {
   eventSheet = $state<SheetState<EventPatch> | null>(null);
   /** File shown in the preview sheet. */
   filePreview = $state<string | null>(null);
+  /** Calendar file being imported. */
+  importSheet = $state<{ name: string; items: IcsItem[] } | null>(null);
   toasts = $state<Toast[]>([]);
   /** Page whose title should take focus once shown (new page, "Rename"). */
   focusTitle = $state<string | null>(null);
@@ -106,6 +111,7 @@ class UI {
       this.assignmentSheet !== null ||
       this.eventSheet !== null ||
       this.filePreview !== null ||
+      this.importSheet !== null ||
       this.capture !== null
     );
   }

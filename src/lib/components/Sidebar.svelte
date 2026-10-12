@@ -9,6 +9,7 @@
   import { itemsByDay } from '../calendar.svelte';
   import { clock } from '../clock.svelte';
   import { dueState } from '../dates';
+  import { colorVar } from '../colors';
   import { ui } from '../ui.svelte';
 
   const MIN = 208;
@@ -89,6 +90,18 @@
       library.files.filter((f) => f.deletedAt).length,
   );
 
+  /** Open assignments per course. */
+  const courseOpen = $derived.by(() => {
+    const map = new Map<string, number>();
+    for (const a of planner.live) if (a.courseId && a.status !== 'done') map.set(a.courseId, (map.get(a.courseId) ?? 0) + 1);
+    return map;
+  });
+
+  async function addCourse() {
+    const c = await planner.promptCourse();
+    if (c) store.openCourse(c.id);
+  }
+
   function cycleTheme() {
     prefs.theme = prefs.theme === 'system' ? 'light' : prefs.theme === 'light' ? 'dark' : 'system';
   }
@@ -147,6 +160,37 @@
           <div role="tree" aria-label="Favorites">
             {#each store.favorites as p (p.id)}
               <TreeItem page={p} favorite />
+            {/each}
+          </div>
+        {/if}
+      </section>
+    {/if}
+
+    {#if planner.loaded}
+      <section>
+        <div class="section-head">
+          <button class="section-title" onclick={() => toggleSection('courses')} aria-expanded={!prefs.sections.courses}>
+            Courses
+            <span class="caret" class:closed={prefs.sections.courses}><Icon name="chevron-down" size={11} stroke={2.4} /></span>
+          </button>
+          <button class="section-add" onclick={addCourse} data-tip="New course"><Icon name="plus" size={14} stroke={2} /></button>
+        </div>
+        {#if !prefs.sections.courses}
+          <div class="tag-list">
+            {#each planner.courses as c (c.id)}
+              {@const open = courseOpen.get(c.id) ?? 0}
+              <div class="nav-row" class:active={store.view === 'course' && store.courseId === c.id}>
+                <button class="nav-main" onclick={() => store.openCourse(c.id)}>
+                  <span class="lead"><span class="dot" style:--dot={colorVar(c.color)}></span></span>
+                  <span class="label">{c.name || 'Untitled'}</span>
+                </button>
+                {#if open}<span class="count" data-tip="{open} open assignment{open === 1 ? '' : 's'}">{open}</span>{/if}
+              </div>
+            {:else}
+              <button class="row-btn muted" onclick={addCourse}>
+                <span class="lead"><Icon name="plus" /></span>
+                <span class="label">Add a course</span>
+              </button>
             {/each}
           </div>
         {/if}

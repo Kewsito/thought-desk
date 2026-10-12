@@ -77,7 +77,7 @@
     <h2 class="group-title"><span>Events</span><span class="count">{items.events.length}</span></h2>
     <div class="group">
       {#each items.events as e (e.id)}
-        <EventRow occ={occ(e)} />
+        <EventRow occ={occ(e)} series />
       {/each}
     </div>
   {/if}

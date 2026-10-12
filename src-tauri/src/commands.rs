@@ -3,7 +3,8 @@
 use crate::db::{Db, Error, Page, PageMeta, PagePatch, Result, SearchHit, Table};
 use crate::library::{FileMeta, FilePatch, FileUsage};
 use crate::organize::{Tag, Todo};
-use crate::planner::{Assignment, AssignmentPatch, Course, CoursePatch, Event, EventPatch};
+use crate::planner::{Assignment, AssignmentPatch, Course, CoursePatch, Event, EventPatch, OccurrencePage};
+use crate::reminders::{Reminder, Reminders};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use tauri::{ipc::InvokeBody, AppHandle, Manager, State};
@@ -296,6 +297,22 @@ pub fn set_capture_shortcut(app: AppHandle, enabled: bool) -> Result<()> {
         gs.unregister(shortcut).map_err(|e| Error(e.to_string()))?;
     }
     Ok(())
+}
+
+#[tauri::command]
+pub fn list_occurrence_pages(db: State<Db>) -> Result<Vec<OccurrencePage>> {
+    db.list_occurrence_pages()
+}
+
+#[tauri::command]
+pub fn set_occurrence_page(db: State<Db>, event_id: String, date: String, page_id: String) -> Result<()> {
+    db.set_occurrence_page(&event_id, &date, &page_id)
+}
+
+/// Replaces the upcoming reminders (the UI resends them whenever things change).
+#[tauri::command]
+pub fn set_reminders(reminders: State<Reminders>, list: Vec<Reminder>) {
+    reminders.set(list);
 }
 
 // ------------------------------------------------------------ trash (items)

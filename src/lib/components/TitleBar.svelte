@@ -7,6 +7,7 @@
   import { ui } from '../ui.svelte';
   import { relativeTime } from '../time';
   import { pageMenuItems } from '../page-actions';
+  import { planner } from '../planner.svelte';
 
   let { words = 0, scrolled = false }: { words?: number; scrolled?: boolean } = $props();
 
@@ -24,7 +25,11 @@
     files: { label: 'Files', icon: 'files' },
   };
   const viewCrumb = $derived(
-    store.view === 'tag' ? { label: `#${store.tag ?? ''}`, icon: 'tag' } : VIEW_CRUMBS[store.view],
+    store.view === 'tag'
+      ? { label: `#${store.tag ?? ''}`, icon: 'tag' }
+      : store.view === 'course'
+        ? { label: planner.courseById.get(store.courseId ?? '')?.name || 'Course', icon: 'book' }
+        : VIEW_CRUMBS[store.view],
   );
   const crumbs = $derived.by(() => {
     if (!page) return [];

@@ -67,6 +67,12 @@ pub struct Course {
     pub color: String,
     pub position: i64,
     pub created_at: i64,
+    pub teacher: String,
+    pub email: String,
+    pub office_hours: String,
+    pub room: String,
+    /// The page that holds this course's notes (lecture notes go inside).
+    pub page_id: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -74,6 +80,12 @@ pub struct Course {
 pub struct CoursePatch {
     pub name: Option<String>,
     pub color: Option<String>,
+    pub teacher: Option<String>,
+    pub email: Option<String>,
+    pub office_hours: Option<String>,
+    pub room: Option<String>,
+    #[serde(deserialize_with = "nullable")]
+    pub page_id: Option<Option<String>>,
 }
 
 fn course_from_row(r: &rusqlite::Row) -> rusqlite::Result<Course> {
@@ -83,10 +95,15 @@ fn course_from_row(r: &rusqlite::Row) -> rusqlite::Result<Course> {
         color: r.get(2)?,
         position: r.get(3)?,
         created_at: r.get(4)?,
+        teacher: r.get(5)?,
+        email: r.get(6)?,
+        office_hours: r.get(7)?,
+        room: r.get(8)?,
+        page_id: r.get(9)?,
     })
 }
 
-const COURSE_COLS: &str = "id, name, color, position, created_at";
+const COURSE_COLS: &str = "id, name, color, position, created_at, teacher, email, office_hours, room, page_id";
 
 // ----------------------------------------------------------------- assignments
 
@@ -111,11 +128,14 @@ pub struct Assignment {
     pub completed_at: Option<i64>,
     pub deleted_at: Option<i64>,
     pub tags: Vec<String>,
+    /// UID of the calendar entry this was imported from.
+    pub source_uid: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
 #[serde(rename_all = "camelCase", default)]
 pub struct AssignmentPatch {
+    pub source_uid: Option<String>,
     pub title: Option<String>,
     #[serde(deserialize_with = "nullable")]
     pub course_id: Option<Option<String>>,
@@ -132,7 +152,7 @@ pub struct AssignmentPatch {
 }
 
 const ASSIGNMENT_COLS: &str = "id, title, course_id, due_date, due_time, status, priority, notes, page_id,
-     created_at, updated_at, completed_at, deleted_at, tags";
+     created_at, updated_at, completed_at, deleted_at, tags, source_uid";
 
 fn assignment_from_row(r: &rusqlite::Row) -> rusqlite::Result<Assignment> {
     Ok(Assignment {
@@ -151,6 +171,7 @@ fn assignment_from_row(r: &rusqlite::Row) -> rusqlite::Result<Assignment> {
         completed_at: r.get(11)?,
         deleted_at: r.get(12)?,
         tags: crate::organize::parse_tags(&r.get::<_, String>(13)?),
+        source_uid: r.get(14)?,
     })
 }
 
@@ -211,6 +232,9 @@ fn apply_assignment(tx: &Transaction, id: &str, patch: &AssignmentPatch) -> Resu
     if let Some(v) = &patch.page_id {
         set(tx, T, "page_id", id, v)?;
     }
+    if let Some(v) = &patch.source_uid {
+        set(tx, T, "source_uid", id, v)?;
+    }
     if let Some(files) = &patch.file_ids {
         tx.execute("DELETE FROM attachments WHERE assignment_id = ?1", [id])?;
         let mut stmt = tx.prepare(
@@ -249,11 +273,17 @@ pub struct Event {
     pub updated_at: i64,
     pub deleted_at: Option<i64>,
     pub tags: Vec<String>,
+    /// Dates ("YYYY-MM-DD") a repeating event skips.
+    pub exdates: Vec<String>,
+    /// UID of the calendar entry this was imported from.
+    pub source_uid: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
 #[serde(rename_all = "camelCase", default)]
 pub struct EventPatch {
+    pub exdates: Option<Vec<String>>,
+    pub source_uid: Option<String>,
     pub title: Option<String>,
     pub start_date: Option<String>,
     #[serde(deserialize_with = "nullable")]
@@ -274,7 +304,7 @@ pub struct EventPatch {
 }
 
 const EVENT_COLS: &str = "id, title, start_date, start_time, end_date, end_time, color, course_id, location, notes,
-     repeat, repeat_until, page_id, created_at, updated_at, deleted_at, tags";
+     repeat, repeat_until, page_id, created_at, updated_at, deleted_at, tags, exdates, source_uid";
 
 fn event_from_row(r: &rusqlite::Row) -> rusqlite::Result<Event> {
     Ok(Event {
@@ -295,6 +325,8 @@ fn event_from_row(r: &rusqlite::Row) -> rusqlite::Result<Event> {
         updated_at: r.get(14)?,
         deleted_at: r.get(15)?,
         tags: crate::organize::parse_tags(&r.get::<_, String>(16)?),
+        exdates: crate::organize::parse_tags(&r.get::<_, String>(17)?),
+        source_uid: r.get(18)?,
     })
 }
 
@@ -357,6 +389,18 @@ fn apply_event(tx: &Transaction, id: &str, patch: &EventPatch) -> Result<()> {
     if let Some(v) = &patch.page_id {
         set(tx, T, "page_id", id, v)?;
     }
+    if let Some(dates) = &patch.exdates {
+        for d in dates {
+            check_date(&Some(d.clone()))?;
+        }
+        let mut dates = dates.clone();
+        dates.sort();
+        dates.dedup();
+        set(tx, T, "exdates", id, serde_json::to_string(&dates)?)?;
+    }
+    if let Some(v) = &patch.source_uid {
+        set(tx, T, "source_uid", id, v)?;
+    }
     // An event never ends before it starts; all-day events have no times.
     tx.execute(
         "UPDATE events SET end_date = start_date WHERE id = ?1 AND end_date < start_date",
@@ -406,6 +450,19 @@ impl Db {
         if let Some(color) = &patch.color {
             check_color(color)?;
             set(&tx, "courses", "color", id, color)?;
+        }
+        for (col, value) in [
+            ("teacher", &patch.teacher),
+            ("email", &patch.email),
+            ("office_hours", &patch.office_hours),
+            ("room", &patch.room),
+        ] {
+            if let Some(v) = value {
+                set(&tx, "courses", col, id, v.trim())?;
+            }
+        }
+        if let Some(v) = &patch.page_id {
+            set(&tx, "courses", "page_id", id, v)?;
         }
         let course = tx
             .query_row(&format!("SELECT {COURSE_COLS} FROM courses WHERE id = ?1"), [id], course_from_row)
@@ -502,6 +559,34 @@ impl Db {
         let e = event_by_id(&tx, id)?;
         tx.commit()?;
         Ok(e)
+    }
+}
+
+/// The notes page for one session of an event ("Biology lecture, Oct 14").
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct OccurrencePage {
+    pub event_id: String,
+    pub date: String,
+    pub page_id: String,
+}
+
+impl Db {
+    pub fn list_occurrence_pages(&self) -> Result<Vec<OccurrencePage>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare("SELECT event_id, date, page_id FROM occurrence_pages")?;
+        let rows = stmt.query_map([], |r| Ok(OccurrencePage { event_id: r.get(0)?, date: r.get(1)?, page_id: r.get(2)? }))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    pub fn set_occurrence_page(&self, event_id: &str, date: &str, page_id: &str) -> Result<()> {
+        check_date(&Some(date.to_string()))?;
+        self.conn().execute(
+            "INSERT INTO occurrence_pages (event_id, date, page_id) VALUES (?1, ?2, ?3)
+             ON CONFLICT(event_id, date) DO UPDATE SET page_id = excluded.page_id",
+            params![event_id, date, page_id],
+        )?;
+        Ok(())
     }
 }
 
@@ -623,5 +708,33 @@ mod tests {
         assert_eq!(db.list_events().unwrap().len(), 1);
         assert!(db.list_files().unwrap().is_empty());
         assert!(!disk.exists(), "emptying the trash removes the file");
+    }
+
+    #[test]
+    fn course_details_exdates_and_session_notes() {
+        let (db, _) = temp_db();
+        let c = db.create_course("Chemistry", "blue").unwrap();
+        let c = db
+            .update_course(&c.id, serde_json::from_str(r#"{"teacher":" Dr. Lee ","email":"lee@uni.edu","room":"B12"}"#).unwrap())
+            .unwrap();
+        assert_eq!((c.teacher.as_str(), c.room.as_str()), ("Dr. Lee", "B12"));
+
+        let e = db
+            .create_event(serde_json::from_str(r#"{"title":"Lab","startDate":"2026-10-05","startTime":"14:00","repeat":"weekly","sourceUid":"abc@school"}"#).unwrap())
+            .unwrap();
+        assert_eq!(e.source_uid.as_deref(), Some("abc@school"));
+        let e = db
+            .update_event(&e.id, serde_json::from_str(r#"{"exdates":["2026-10-19","2026-10-12","2026-10-19"]}"#).unwrap())
+            .unwrap();
+        assert_eq!(e.exdates, vec!["2026-10-12", "2026-10-19"], "sorted and de-duplicated");
+        assert!(db.update_event(&e.id, serde_json::from_str(r#"{"exdates":["soon"]}"#).unwrap()).is_err());
+
+        let page = db.create_page(None, None, "Lab — Oct 5", "").unwrap();
+        db.set_occurrence_page(&e.id, "2026-10-05", &page.id).unwrap();
+        let list = db.list_occurrence_pages().unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].page_id, page.id);
+        db.delete_page(&page.id).unwrap();
+        assert!(db.list_occurrence_pages().unwrap().is_empty(), "goes away with the page");
     }
 }

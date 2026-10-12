@@ -3,6 +3,7 @@
   import Icon from '../components/Icon.svelte';
   import Modal from '../components/Modal.svelte';
   import Swatches from '../ui/Swatches.svelte';
+  import Segmented from '../ui/Segmented.svelte';
   import Switch from '../ui/Switch.svelte';
   import Backlinks from '../ui/Backlinks.svelte';
   import TagRow from '../ui/TagRow.svelte';
@@ -21,8 +22,21 @@
   // The sheet is re-created per item, and closing clears the prop, so keep
   // what's needed after closing.
   // svelte-ignore state_referenced_locally
-  const { id, onCreated } = sheet;
-  const existing = $derived(id ? planner.eventById.get(id) : undefined);
+  const { id, onCreated, date } = sheet;
+  /** The event being edited; becomes the standalone copy once one session is split off. */
+  let targetId = $state(id);
+  const existing = $derived(targetId ? planner.eventById.get(targetId) : undefined);
+  const series = $derived(id ? planner.eventById.get(id) : undefined);
+  /** Opened on one session of a repeating event. */
+  const isSession = $derived(!!date && !!series && series.repeat !== 'none');
+  let scope = $state<'this' | 'all'>('all');
+  /** This session now lives on as its own event. */
+  const split = $derived(targetId !== id);
+  const editingSession = $derived(isSession && scope === 'this' && !split);
+  const scopes = [
+    { value: 'this' as const, label: 'This Event' },
+    { value: 'all' as const, label: 'All Events' },
+  ];
   // svelte-ignore state_referenced_locally
   let draft = $state({
     title: '',
@@ -38,9 +52,21 @@
     repeatUntil: null as string | null,
     ...sheet.draft,
   });
-  const form = $derived(existing ?? draft);
+  /** In "This Event" mode the form shows the session, not the series. */
+  const form = $derived.by(() => {
+    if (!existing) return draft;
+    if (!editingSession || !date) return existing;
+    return { ...existing, startDate: date, endDate: addDays(date, diffDays(existing.startDate, existing.endDate)) };
+  });
   const course = $derived(form.courseId ? planner.courseById.get(form.courseId) : undefined);
   const page = $derived(existing?.pageId ? store.byId.get(existing.pageId) : undefined);
+  /** The session whose class notes the sheet offers. */
+  const sessionEvent = $derived(existing?.id);
+  const sessionDate = $derived(existing && isSession ? (split ? existing.startDate : date) : undefined);
+  const sessionNotes = $derived.by(() => {
+    const pid = sessionEvent && sessionDate ? planner.sessionPage(sessionEvent, sessionDate) : null;
+    return pid ? store.byId.get(pid) : undefined;
+  });
   const allDay = $derived(form.startTime === null);
   const color = $derived(form.color ? colorVar(form.color) : planner.courseColor(form.courseId));
 
@@ -49,9 +75,32 @@
     if (!existing) titleEl.focus();
   });
 
+  let detaching: Promise<void> | null = null;
+  let queued: EventPatch = {};
+
   function set(patch: EventPatch, { typing = false } = {}) {
-    if (existing) planner.updateEvent(existing.id, patch, { immediate: !typing });
-    else Object.assign(draft, patch);
+    if (!existing) {
+      Object.assign(draft, patch);
+      return;
+    }
+    if (!editingSession || !date) {
+      planner.updateEvent(existing.id, patch, { immediate: !typing });
+      return;
+    }
+    // The first change to one session splits it off the series; changes made
+    // while that's under way follow it onto the copy.
+    if (detaching) {
+      Object.assign(queued, patch);
+      return;
+    }
+    detaching = planner.detach(existing.id, date, patch).then((copy) => {
+      if (copy) {
+        targetId = copy.id;
+        if (Object.keys(queued).length) planner.updateEvent(copy.id, queued, { immediate: true });
+      }
+      queued = {};
+      detaching = null;
+    });
   }
 
   /** Moving the start keeps the length of the event. */
@@ -167,6 +216,15 @@
 
   <div class="modal-body">
     <div class="group">
+      {#if isSession && !split}
+        <div class="group-row">
+          <div class="row-label">
+            Edit
+            <small>{scope === 'this' ? `Only ${formatDate(date!, { weekday: 'long', month: 'short', day: 'numeric' })} changes` : 'Changes apply to every repeat'}</small>
+          </div>
+          <Segmented options={scopes} value={scope} onchange={(v) => (scope = v)} label="Edit which events" />
+        </div>
+      {/if}
       <div class="group-row">
         <div class="row-label">All-day</div>
         <Switch on={allDay} label="All-day" onchange={toggleAllDay} />
@@ -199,28 +257,30 @@
           {/if}
         </div>
       </div>
-      <div class="group-row">
-        <div class="row-label">
-          Repeat
-          {#if form.repeat !== 'none'}<small>Changes apply to every repeat</small>{/if}
+      {#if !editingSession}
+        <div class="group-row">
+          <div class="row-label">
+            Repeat
+            {#if form.repeat !== 'none' && !isSession}<small>Changes apply to every repeat</small>{/if}
+          </div>
+          <div class="when">
+            {#if form.repeat !== 'none'}
+              <label class="field date" data-tip="Repeat until (optional)">
+                <input
+                  type="date"
+                  value={form.repeatUntil ?? ''}
+                  min={form.startDate}
+                  aria-label="Repeat until"
+                  onchange={(e) => set({ repeatUntil: e.currentTarget.value || null })}
+                />
+              </label>
+            {/if}
+            <button class="btn small raised picker" onclick={repeatMenu}>
+              <Icon name="repeat" size={13} stroke={2} />{REPEAT_LABELS[form.repeat]}<Icon name="chevron-down" size={12} stroke={2.2} />
+            </button>
+          </div>
         </div>
-        <div class="when">
-          {#if form.repeat !== 'none'}
-            <label class="field date" data-tip="Repeat until (optional)">
-              <input
-                type="date"
-                value={form.repeatUntil ?? ''}
-                min={form.startDate}
-                aria-label="Repeat until"
-                onchange={(e) => set({ repeatUntil: e.currentTarget.value || null })}
-              />
-            </label>
-          {/if}
-          <button class="btn small raised picker" onclick={repeatMenu}>
-            <Icon name="repeat" size={13} stroke={2} />{REPEAT_LABELS[form.repeat]}<Icon name="chevron-down" size={12} stroke={2.2} />
-          </button>
-        </div>
-      </div>
+      {/if}
     </div>
 
     <h3 class="group-title">Details</h3>
@@ -259,29 +319,57 @@
       <div class="group-row stack">
         <textarea class="field" value={form.notes} placeholder="Agenda, reading, things to bring…" oninput={(e) => set({ notes: e.currentTarget.value }, { typing: true })}></textarea>
       </div>
-      <div class="group-row">
-        <div class="row-label">
-          Notes page
-          <small>{page && !page.deletedAt ? 'Meeting or lecture notes' : 'Take notes on a full page'}</small>
+      {#if sessionDate}
+        <div class="group-row">
+          <div class="row-label">
+            Notes for {formatDate(sessionDate, { weekday: 'short', month: 'short', day: 'numeric' })}
+            <small>{sessionNotes ? 'Saved in the course’s notes' : 'A dated page for this class'}</small>
+          </div>
+          {#if sessionNotes}
+            <button class="btn small raised" onclick={() => void planner.takeNotes(sessionEvent!, sessionDate)}>
+              {#if sessionNotes.icon}<span>{sessionNotes.icon}</span>{:else}<Icon name="page" size={14} />{/if}
+              <span class="page-name">{sessionNotes.title || 'Untitled'}</span>
+              <Icon name="arrow-right" size={13} stroke={2} />
+            </button>
+          {:else}
+            <button class="btn small raised" onclick={() => void planner.takeNotes(sessionEvent!, sessionDate)}><Icon name="note" size={14} /> Take Notes</button>
+          {/if}
         </div>
-        {#if page && !page.deletedAt}
-          <button class="btn small raised" onclick={notesPage}>
-            {#if page.icon}<span>{page.icon}</span>{:else}<Icon name="page" size={14} />{/if}
-            <span class="page-name">{page.title || 'Untitled'}</span>
-            <Icon name="arrow-right" size={13} stroke={2} />
-          </button>
-        {:else}
-          <button class="btn small raised" onclick={notesPage}><Icon name="page-plus" size={14} /> Create Page</button>
-        {/if}
-      </div>
+      {/if}
+      {#if !sessionDate || (scope === 'all' && !split)}
+        <div class="group-row">
+          <div class="row-label">
+            {isSession ? 'Series notes page' : 'Notes page'}
+            <small>{page && !page.deletedAt ? 'Meeting or lecture notes' : 'Take notes on a full page'}</small>
+          </div>
+          {#if page && !page.deletedAt}
+            <button class="btn small raised" onclick={notesPage}>
+              {#if page.icon}<span>{page.icon}</span>{:else}<Icon name="page" size={14} />{/if}
+              <span class="page-name">{page.title || 'Untitled'}</span>
+              <Icon name="arrow-right" size={13} stroke={2} />
+            </button>
+          {:else}
+            <button class="btn small raised" onclick={notesPage}><Icon name="page-plus" size={14} /> Create Page</button>
+          {/if}
+        </div>
+      {/if}
     </div>
 
     {#if existing}<Backlinks id={existing.id} inSheet />{/if}
   </div>
 
   <footer class="modal-foot">
-    {#if existing}
-      <span>{form.repeat !== 'none' ? `Repeats ${REPEAT_LABELS[form.repeat].toLowerCase()}${form.repeatUntil ? ` until ${formatDate(form.repeatUntil)}` : ''}` : `Created ${relativeTime(existing.createdAt)}`}</span>
+    {#if existing && isSession && !split}
+      <span>{`Repeats ${REPEAT_LABELS[existing.repeat].toLowerCase()}${existing.repeatUntil ? ` until ${formatDate(existing.repeatUntil)}` : ''}`}</span>
+      <div class="actions">
+        <button class="btn small destructive" onclick={() => planner.skipDate(existing.id, date!)}>Delete This Event</button>
+        <button class="btn small destructive" onclick={() => planner.trash('events', existing.id)}>Delete Series</button>
+        <button class="btn small primary" onclick={close}>Done</button>
+      </div>
+    {:else if existing}
+      <span>
+        {#if split}Changed separately from the series{:else if form.repeat !== 'none'}{`Repeats ${REPEAT_LABELS[form.repeat].toLowerCase()}${form.repeatUntil ? ` until ${formatDate(form.repeatUntil)}` : ''}`}{:else}Created {relativeTime(existing.createdAt)}{/if}
+      </span>
       <div class="actions">
         <button class="btn small destructive" onclick={() => planner.trash('events', existing.id)}>Move to Trash</button>
         <button class="btn small primary" onclick={close}>Done</button>

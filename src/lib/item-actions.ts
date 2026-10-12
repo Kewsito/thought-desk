@@ -57,20 +57,35 @@ export function assignmentMenuItems(id: string): MenuItem[] {
   ];
 }
 
-export function eventMenuItems(id: string): MenuItem[] {
+export function eventMenuItems(id: string, date?: string): MenuItem[] {
   const e = planner.eventById.get(id);
   if (!e) return [];
-  const hasPage = !!(e.pageId && store.byId.get(e.pageId) && !store.byId.get(e.pageId)!.deletedAt);
-  return [
-    { label: 'Open', icon: 'calendar', action: () => planner.openEvent(id) },
-    { label: hasPage ? 'Open Notes Page' : 'Create Notes Page', icon: 'note', action: () => void openNotesPage('event', id) },
-    {
-      label: 'Show in Calendar',
-      icon: 'calendar',
-      disabled: store.view === 'calendar',
-      action: () => calendar.show(e.startDate),
-    },
-    { separator: true },
-    { label: 'Move to Trash', icon: 'trash', danger: true, action: () => void planner.trash('events', id) },
-  ];
+  const repeats = e.repeat !== 'none';
+  const items: MenuItem[] = [{ label: 'Open', icon: 'calendar', action: () => planner.openEvent(id, date) }];
+  if (date || !repeats) {
+    // Notes for this session (a one-off event has just the one).
+    const session = date ?? e.startDate;
+    const has = !!planner.sessionPage(id, session);
+    items.push({ label: has ? 'Open Notes' : 'Take Notes', icon: 'note', action: () => void planner.takeNotes(id, session) });
+  } else {
+    const hasPage = !!(e.pageId && store.byId.get(e.pageId) && !store.byId.get(e.pageId)!.deletedAt);
+    items.push({ label: hasPage ? 'Open Notes Page' : 'Create Notes Page', icon: 'note', action: () => void openNotesPage('event', id) });
+  }
+  items.push({
+    label: 'Show in Calendar',
+    icon: 'calendar',
+    disabled: store.view === 'calendar',
+    action: () => calendar.show(date ?? e.startDate),
+  });
+  items.push({ separator: true });
+  if (repeats && date) {
+    items.push({ label: 'Skip This Date', icon: 'x', action: () => planner.skipDate(id, date) });
+  }
+  items.push({
+    label: repeats ? 'Delete Series' : 'Move to Trash',
+    icon: 'trash',
+    danger: true,
+    action: () => void planner.trash('events', id),
+  });
+  return items;
 }

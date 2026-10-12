@@ -56,7 +56,15 @@ export interface Course {
   color: string;
   position: number;
   createdAt: number;
+  teacher: string;
+  email: string;
+  officeHours: string;
+  room: string;
+  /** The page holding this course's notes; lecture notes go inside it. */
+  pageId: string | null;
 }
+
+export type CoursePatch = Partial<Pick<Course, 'name' | 'color' | 'teacher' | 'email' | 'officeHours' | 'room' | 'pageId'>>;
 
 export type AssignmentStatus = 'todo' | 'doing' | 'done';
 
@@ -79,11 +87,13 @@ export interface Assignment {
   completedAt: number | null;
   deletedAt: number | null;
   tags: string[];
+  /** UID of the calendar entry it was imported from. */
+  sourceUid: string | null;
 }
 
 export type AssignmentPatch = Partial<
   Pick<Assignment, 'title' | 'courseId' | 'dueDate' | 'dueTime' | 'status' | 'priority' | 'notes' | 'pageId' | 'fileIds'>
->;
+> & { sourceUid?: string };
 
 export type Repeat = 'none' | 'daily' | 'weekly' | 'monthly';
 
@@ -107,9 +117,27 @@ export interface CalEvent {
   updatedAt: number;
   deletedAt: number | null;
   tags: string[];
+  /** Dates a repeating event skips. */
+  exdates: string[];
+  sourceUid: string | null;
 }
 
-export type EventPatch = Partial<
+/** The notes page for one session of an event. */
+export interface OccurrencePage {
+  eventId: string;
+  date: string;
+  pageId: string;
+}
+
+export interface Reminder {
+  key: string;
+  /** When (ms since the epoch). */
+  at: number;
+  title: string;
+  body: string;
+}
+
+export type EventPatch = { exdates?: string[]; sourceUid?: string } & Partial<
   Pick<
     CalEvent,
     | 'title'

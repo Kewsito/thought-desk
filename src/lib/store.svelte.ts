@@ -7,14 +7,14 @@ import type { PageMeta, PagePatch } from './types';
 
 const SAVE_DELAY = 400;
 
-/** What fills the main area: a page, a tag's items, or an app view. */
-export type View = 'page' | 'tag' | 'home' | 'assignments' | 'calendar' | 'files';
-export type AppView = Exclude<View, 'page' | 'tag'>;
+/** What fills the main area: a page, a tag's items, a course, or an app view. */
+export type View = 'page' | 'tag' | 'course' | 'home' | 'assignments' | 'calendar' | 'files';
+export type AppView = Exclude<View, 'page' | 'tag' | 'course'>;
 export const VIEWS: AppView[] = ['home', 'assignments', 'calendar', 'files'];
 
 interface Entry {
   view: View;
-  /** The page id, or the tag name. */
+  /** The page id, tag name or course id. */
   id: string | null;
 }
 
@@ -35,6 +35,8 @@ class Store {
   currentId = $state<string | null>(null);
   /** The tag whose items are showing (view "tag"). */
   tag = $state<string | null>(null);
+  /** The course whose hub is showing (view "course"). */
+  courseId = $state<string | null>(null);
   saving = $state(false);
   #history = $state<Entry[]>([]);
   #historyIndex = $state(-1);
@@ -136,6 +138,7 @@ class Store {
     if (this.view === 'page' && this.currentId === id) return;
     this.view = 'page';
     this.tag = null;
+    this.courseId = null;
     this.currentId = id;
     prefs.lastPageId = id;
     prefs.lastView = 'page';
@@ -150,6 +153,7 @@ class Store {
     this.view = view;
     this.currentId = null;
     this.tag = null;
+    this.courseId = null;
     prefs.lastView = view;
     if (push) this.#push({ view, id: null });
   }
@@ -159,8 +163,28 @@ class Store {
     if (this.view === 'tag' && this.tag === name) return;
     this.view = 'tag';
     this.tag = name;
+    this.courseId = null;
     this.currentId = null;
     if (push) this.#push({ view: 'tag', id: name });
+  }
+
+  /** Shows a course's hub: schedule, assignments, notes and details. */
+  openCourse(id: string, { push = true }: { push?: boolean } = {}) {
+    if (this.view === 'course' && this.courseId === id) return;
+    this.view = 'course';
+    this.courseId = id;
+    this.tag = null;
+    this.currentId = null;
+    if (push) this.#push({ view: 'course', id });
+  }
+
+  /** Drops a deleted course from history (and leaves its hub). */
+  forgetCourse(id: string) {
+    const keep = this.#history.map((e, i) => ({ e, i })).filter(({ e }) => !(e.view === 'course' && e.id === id));
+    const before = keep.filter(({ i }) => i <= this.#historyIndex).length;
+    this.#history = keep.map(({ e }) => e);
+    this.#historyIndex = Math.max(0, before - 1);
+    if (this.view === 'course' && this.courseId === id) this.go('home');
   }
 
   #push(entry: Entry) {
@@ -186,6 +210,11 @@ class Store {
       if (entry.view === 'tag') {
         this.#historyIndex = i;
         this.openTag(entry.id ?? '', { push: false });
+        return;
+      }
+      if (entry.view === 'course') {
+        this.#historyIndex = i;
+        this.openCourse(entry.id ?? '', { push: false });
         return;
       }
       if (entry.view !== 'page') {

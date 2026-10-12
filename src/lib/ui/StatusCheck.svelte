@@ -13,6 +13,7 @@
   class="check round"
   class:done
   style:--c={color}
+  style:--mark={color === 'var(--accent)' ? 'var(--check)' : 'var(--check-white)'}
   style:--s="{size}px"
   role="checkbox"
   aria-checked={done}
@@ -43,7 +44,8 @@
     transform: scale(0.88);
   }
   .check.done {
-    background: var(--c) var(--check-white) center / 72% no-repeat;
+    /* The accent can be light (Graphite in dark mode), so it gets a matching mark. */
+    background: var(--c) var(--mark) center / 72% no-repeat;
     box-shadow: inset 0 0 0 1.5px var(--c);
     animation: check-pop var(--dur-slow) var(--spring);
   }

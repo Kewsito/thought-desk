@@ -17,6 +17,8 @@ export interface DragItem {
   id: string;
   /** The day it was picked up from; dropping shifts the item by the difference. */
   from: string;
+  /** For events: the start of the session picked up (repeats move just that one). */
+  session?: string;
 }
 
 class CalendarState {
@@ -43,23 +45,29 @@ class CalendarState {
       return;
     }
     const e = planner.eventById.get(d.id);
-    if (!e || e.repeat !== 'none') return;
+    if (!e) return;
+    const repeats = e.repeat !== 'none';
+    if (repeats && !d.session) return;
+    // A repeat moves only the session that was dragged.
+    const startDate = repeats ? d.session! : e.startDate;
+    const endDate = addDays(startDate, diffDays(e.startDate, e.endDate));
     const shift = diffDays(d.from, day);
     const patch: Parameters<typeof planner.updateEvent>[1] = {
-      startDate: addDays(e.startDate, shift),
-      endDate: addDays(e.endDate, shift),
+      startDate: addDays(startDate, shift),
+      endDate: addDays(endDate, shift),
     };
     if (time && e.startTime) {
       // Keep the duration when moving to another time of day.
-      const length = diffDays(e.startDate, e.endDate) * 1440 + minutes(e.endTime ?? e.startTime) - minutes(e.startTime);
+      const length = diffDays(startDate, endDate) * 1440 + minutes(e.endTime ?? e.startTime) - minutes(e.startTime);
       const start = minutes(time);
       const end = start + length;
       patch.startTime = time;
       patch.endDate = addDays(patch.startDate!, Math.floor(end / 1440));
       patch.endTime = fromMinutes(end % 1440);
     }
-    if (shift === 0 && !time) return;
-    planner.updateEvent(d.id, patch, { immediate: true });
+    if (shift === 0 && (!time || time === e.startTime)) return;
+    if (repeats) void planner.moveSession(e.id, startDate, patch);
+    else planner.updateEvent(d.id, patch, { immediate: true });
   }
 }
 

@@ -27,12 +27,12 @@
     ];
   }
 
-  function dragStart(e: DragEvent, kind: 'event' | 'assignment', id: string, from: string, movable = true) {
-    if (!movable || !e.dataTransfer) {
+  function dragStart(e: DragEvent, kind: 'event' | 'assignment', id: string, from: string, session?: string) {
+    if (!e.dataTransfer) {
       e.preventDefault();
       return;
     }
-    calendar.drag = { kind, id, from };
+    calendar.drag = { kind, id, from, session };
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', id);
   }
@@ -109,14 +109,14 @@
                 class:ends={it.kind === 'allDay' && day === it.occ.end}
                 style:--c={planner.eventColor(ev)}
                 draggable="true"
-                ondragstart={(e) => dragStart(e, 'event', ev.id, day, ev.repeat === 'none')}
+                ondragstart={(e) => dragStart(e, 'event', ev.id, day, it.occ.start)}
                 ondragend={() => (calendar.drag = null)}
                 onclick={(e) => {
                   e.stopPropagation();
                   calendar.selected = day;
-                  planner.openEvent(ev.id);
+                  planner.openEvent(ev.id, it.occ.start);
                 }}
-                oncontextmenu={(e) => menu(e, eventMenuItems(ev.id))}
+                oncontextmenu={(e) => menu(e, eventMenuItems(ev.id, it.occ.start))}
               >
                 {#if it.kind === 'timed'}<span class="dot" style:--dot="var(--c)"></span>{/if}
                 <span class="label">{ev.title || 'New Event'}</span>

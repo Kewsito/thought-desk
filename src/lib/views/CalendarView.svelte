@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { importCalendar } from '../ics-import.svelte';
   import Icon from '../components/Icon.svelte';
   import AssignmentRow from '../ui/AssignmentRow.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
@@ -150,6 +151,7 @@
           <Icon name="chevron-right" />
         </button>
       </div>
+      <button class="icon-btn" onclick={importCalendar} data-tip="Import a calendar (.ics)" aria-label="Import a calendar"><Icon name="download" /></button>
       <button class="btn primary" onclick={() => newEvent()}><Icon name="plus" size={15} stroke={2.2} /> New Event</button>
     </div>
   </header>

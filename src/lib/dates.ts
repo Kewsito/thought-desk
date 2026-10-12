@@ -159,8 +159,10 @@ export interface Occurrence {
 export function occurrences(event: CalEvent, from: string, to: string): Occurrence[] {
   const span = diffDays(event.startDate, event.endDate);
   const out: Occurrence[] = [];
+  const skip = new Set(event.exdates ?? []);
   const push = (start: string) => {
     const end = addDays(start, span);
+    if (skip.has(start)) return;
     if (end >= from && start <= to) out.push({ event, key: `${event.id}:${start}`, start, end });
   };
   if (event.repeat === 'none') {

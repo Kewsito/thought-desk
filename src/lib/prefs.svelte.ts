@@ -9,6 +9,10 @@ export type WeekStart = 0 | 1;
 export type CalendarMode = 'month' | 'week';
 export type FilesLayout = 'grid' | 'list';
 export type AssignmentScope = 'upcoming' | 'all' | 'done';
+/** When to be reminded of a due date: the evening before or that morning. */
+export type RemindAssignments = 'off' | 'evening' | 'morning';
+/** Minutes before a timed event (0 = off). */
+export type RemindEvents = 0 | 5 | 10 | 15 | 30;
 
 interface Stored {
   theme: Theme;
@@ -32,6 +36,8 @@ interface Stored {
   globalCapture: boolean;
   /** The page captured notes and to-dos go to. */
   inboxId: string | null;
+  remindAssignments: RemindAssignments;
+  remindEvents: RemindEvents;
 }
 
 /** Monday in most of the world, Sunday where the locale says so. */
@@ -68,6 +74,8 @@ const defaults: Stored = {
   assignmentScope: 'upcoming',
   globalCapture: true,
   inboxId: null,
+  remindAssignments: 'evening',
+  remindEvents: 10,
 };
 
 function read(): Stored {
@@ -107,6 +115,8 @@ class Prefs {
   assignmentScope = $state<AssignmentScope>(this.#initial.assignmentScope);
   globalCapture = $state(this.#initial.globalCapture);
   inboxId = $state<string | null>(this.#initial.inboxId);
+  remindAssignments = $state<RemindAssignments>(this.#initial.remindAssignments);
+  remindEvents = $state<RemindEvents>(this.#initial.remindEvents);
 
   systemDark = $state(darkQuery.matches);
   resolvedTheme = $derived<'light' | 'dark'>(
@@ -137,6 +147,8 @@ class Prefs {
       assignmentScope: this.assignmentScope,
       globalCapture: this.globalCapture,
       inboxId: this.inboxId,
+      remindAssignments: this.remindAssignments,
+      remindEvents: this.remindEvents,
     };
   }
 }

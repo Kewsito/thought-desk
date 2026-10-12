@@ -8,6 +8,7 @@ mod library;
 mod memory;
 mod organize;
 mod planner;
+mod reminders;
 
 use std::path::PathBuf;
 use tauri::{Emitter, Manager};
@@ -45,6 +46,8 @@ fn main() {
 
     builder
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
+        .manage(reminders::Reminders::default())
         .plugin(
             // Quick Capture from anywhere: bring the window up and ask the UI
             // to open the capture box. Registered on demand (Settings).
@@ -78,6 +81,8 @@ fn main() {
             };
             let db = db::Db::open(&dir).map_err(|e| e.0)?;
             app.manage(db);
+
+            reminders::start(app.handle().clone());
 
             let handle = app.handle().clone();
             std::thread::spawn(move || {
@@ -124,6 +129,9 @@ fn main() {
             commands::list_todos,
             commands::set_todo,
             commands::set_capture_shortcut,
+            commands::list_occurrence_pages,
+            commands::set_occurrence_page,
+            commands::set_reminders,
             commands::trash_item,
             commands::restore_item,
             commands::delete_item,

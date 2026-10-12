@@ -79,12 +79,12 @@
     ui.openMenu({ x: e.clientX, y: e.clientY, items: list });
   }
 
-  function start(e: DragEvent, kind: 'event' | 'assignment', id: string, from: string, movable = true) {
-    if (!movable || !e.dataTransfer) {
+  function start(e: DragEvent, kind: 'event' | 'assignment', id: string, from: string, session?: string) {
+    if (!e.dataTransfer) {
       e.preventDefault();
       return;
     }
-    calendar.drag = { kind, id, from };
+    calendar.drag = { kind, id, from, session };
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', id);
   }
@@ -128,10 +128,10 @@
             class="chip-ev pill"
             style:--c={planner.eventColor(occ.event)}
             draggable="true"
-            ondragstart={(e) => start(e, 'event', occ.event.id, day, occ.event.repeat === 'none')}
+            ondragstart={(e) => start(e, 'event', occ.event.id, day, occ.start)}
             ondragend={() => (calendar.drag = null)}
-            onclick={() => planner.openEvent(occ.event.id)}
-            oncontextmenu={(e) => menu(e, eventMenuItems(occ.event.id))}>{occ.event.title || 'New Event'}</button
+            onclick={() => planner.openEvent(occ.event.id, occ.start)}
+            oncontextmenu={(e) => menu(e, eventMenuItems(occ.event.id, occ.start))}>{occ.event.title || 'New Event'}</button
           >
         {/each}
         {#each d.due as a (a.id)}
@@ -193,10 +193,10 @@
               style:left="calc({(b.col / b.cols) * 100}% + 2px)"
               style:width="calc({100 / b.cols}% - 4px)"
               draggable="true"
-              ondragstart={(e) => start(e, 'event', ev.id, day, ev.repeat === 'none')}
+              ondragstart={(e) => start(e, 'event', ev.id, day, b.occ.start)}
               ondragend={() => (calendar.drag = null)}
-              onclick={() => planner.openEvent(ev.id)}
-              oncontextmenu={(e) => menu(e, eventMenuItems(ev.id))}
+              onclick={() => planner.openEvent(ev.id, b.occ.start)}
+              oncontextmenu={(e) => menu(e, eventMenuItems(ev.id, b.occ.start))}
             >
               <span class="b-title">{ev.title || 'New Event'}</span>
               <span class="b-time">{formatTime(ev.startTime ?? '00:00')}{ev.location ? ` · ${ev.location}` : ''}</span>

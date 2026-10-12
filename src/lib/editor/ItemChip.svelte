@@ -14,7 +14,12 @@
 
   type ChipKind = 'page' | 'assignment' | 'event' | 'file';
 
-  let { id, kind = 'page', block = false }: { id: string; kind?: ChipKind; block?: boolean } = $props();
+  let {
+    id,
+    kind = 'page',
+    block = false,
+    date,
+  }: { id: string; kind?: ChipKind; block?: boolean; /** One session of an event. */ date?: string } = $props();
 
   const page = $derived(kind === 'page' ? store.byId.get(id) : undefined);
   const assignment = $derived(kind === 'assignment' ? planner.assignmentById.get(id) : undefined);
@@ -35,7 +40,7 @@
     if (missing) return;
     if (kind === 'page') store.open(id);
     else if (kind === 'assignment') planner.openAssignment(id);
-    else if (kind === 'event') planner.openEvent(id);
+    else if (kind === 'event') planner.openEvent(id, date);
     else library.preview(id);
   }
 </script>
@@ -71,7 +76,7 @@
   {#if assignment && !missing && assignment.dueDate}
     <span class="chip-meta {urgency}">{formatDue(assignment.dueDate, assignment.dueTime, clock.today)}</span>
   {:else if event && !missing}
-    <span class="chip-meta">{formatDate(event.startDate)}{event.startTime ? `, ${formatTime(event.startTime)}` : ''}</span>
+    <span class="chip-meta">{formatDate(date ?? event.startDate)}{event.startTime ? `, ${formatTime(event.startTime)}` : ''}</span>
   {/if}
 </span>
 

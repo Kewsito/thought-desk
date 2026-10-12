@@ -4,6 +4,9 @@ import type {
   AssignmentPatch,
   CalEvent,
   Course,
+  CoursePatch,
+  OccurrencePage,
+  Reminder,
   DataInfo,
   EventPatch,
   FileMeta,
@@ -52,7 +55,7 @@ export const api = {
 
   listCourses: () => invoke<Course[]>('list_courses'),
   createCourse: (name: string, color: string) => invoke<Course>('create_course', { name, color }),
-  updateCourse: (id: string, patch: { name?: string; color?: string }) => invoke<Course>('update_course', { id, patch }),
+  updateCourse: (id: string, patch: CoursePatch) => invoke<Course>('update_course', { id, patch }),
   deleteCourse: (id: string) => invoke<void>('delete_course', { id }),
 
   listAssignments: () => invoke<Assignment[]>('list_assignments'),
@@ -72,6 +75,10 @@ export const api = {
   listTodos: () => invoke<Todo[]>('list_todos'),
   setTodo: (pageId: string, index: number, key: string, checked: boolean) =>
     invoke<number>('set_todo', { pageId, index, key, checked }),
+  listOccurrencePages: () => invoke<OccurrencePage[]>('list_occurrence_pages'),
+  setOccurrencePage: (eventId: string, date: string, pageId: string) =>
+    invoke<void>('set_occurrence_page', { eventId, date, pageId }),
+  setReminders: (list: Reminder[]) => invoke<void>('set_reminders', { list }),
   setCaptureShortcut: (enabled: boolean) => invoke<void>('set_capture_shortcut', { enabled }),
 
   trashItem: (table: TrashTable, id: string) => invoke<number>('trash_item', { table, id }),

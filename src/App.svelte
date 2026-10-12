@@ -8,6 +8,7 @@
   import { planner } from './lib/planner.svelte';
   import { library } from './lib/library.svelte';
   import { tags } from './lib/tags.svelte';
+  import './lib/reminders.svelte';
   import { listen } from '@tauri-apps/api/event';
   import { ui } from './lib/ui.svelte';
   import type { Page } from './lib/types';
@@ -27,6 +28,7 @@
   import TagPicker from './lib/components/TagPicker.svelte';
   import HomeView from './lib/views/HomeView.svelte';
   import TagView from './lib/views/TagView.svelte';
+  import CourseView from './lib/views/CourseView.svelte';
   import CaptureSheet from './lib/sheets/CaptureSheet.svelte';
   import AssignmentsView from './lib/views/AssignmentsView.svelte';
   import CalendarView from './lib/views/CalendarView.svelte';
@@ -34,6 +36,7 @@
   import AssignmentSheet from './lib/sheets/AssignmentSheet.svelte';
   import EventSheet from './lib/sheets/EventSheet.svelte';
   import FilePreview from './lib/sheets/FilePreview.svelte';
+  import ImportSheet from './lib/sheets/ImportSheet.svelte';
 
   const win = getCurrentWindow();
   const webviewWin = getCurrentWebviewWindow();
@@ -71,6 +74,8 @@
   // Each view starts at the top.
   $effect(() => {
     void store.view;
+    void store.courseId;
+    void store.tag;
     if (scroller) scroller.scrollTop = 0;
     scrolled = false;
   });
@@ -240,6 +245,10 @@
         {#if planner.loaded && library.loaded}<HomeView />{/if}
       {:else if store.view === 'tag' && store.tag}
         {#key store.tag}<TagView name={store.tag} />{/key}
+      {:else if store.view === 'course' && store.courseId}
+        {#if planner.loaded && library.loaded}
+          {#key store.courseId}<CourseView id={store.courseId} />{/key}
+        {/if}
       {:else if store.view === 'assignments'}
         {#if planner.loaded}<AssignmentsView />{/if}
       {:else if store.view === 'calendar'}
@@ -285,6 +294,9 @@
 {/if}
 {#if ui.filePreview}
   {#key ui.filePreview}<FilePreview id={ui.filePreview} />{/key}
+{/if}
+{#if ui.importSheet}
+  {#key ui.importSheet}<ImportSheet name={ui.importSheet.name} items={ui.importSheet.items} />{/key}
 {/if}
 {#if ui.tagPicker}
   {#key ui.tagPicker}<TagPicker picker={ui.tagPicker} />{/key}

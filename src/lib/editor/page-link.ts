@@ -20,12 +20,15 @@ function chipView(block: boolean) {
     const dom = document.createElement(block ? 'div' : 'span');
     dom.className = block ? 'page-link' : 'page-mention';
     dom.contentEditable = 'false';
-    const { id, kind } = node.attrs as { id: string; kind: MentionKind };
-    const chip = mount(ItemChip, { target: dom, props: { id, kind: kind ?? 'page', block } });
+    const { id, kind, date } = node.attrs as { id: string; kind: MentionKind; date?: string | null };
+    const chip = mount(ItemChip, { target: dom, props: { id, kind: kind ?? 'page', block, date: date ?? undefined } });
     return {
       dom,
       update: (updated: { type: { name: string }; attrs: Record<string, any> }) =>
-        updated.type.name === (block ? 'pageLink' : 'mention') && updated.attrs.id === id && updated.attrs.kind === kind,
+        updated.type.name === (block ? 'pageLink' : 'mention') &&
+        updated.attrs.id === id &&
+        updated.attrs.kind === kind &&
+        (updated.attrs.date ?? null) === (date ?? null),
       destroy: () => void unmount(chip),
       ignoreMutation: () => true,
     };
@@ -71,6 +74,12 @@ export const Mention = Node.create({
       default: 'page',
       parseHTML: (el: HTMLElement) => el.getAttribute('data-kind') || 'page',
       renderHTML: (attrs: Record<string, any>) => (attrs.kind && attrs.kind !== 'page' ? { 'data-kind': attrs.kind } : {}),
+    },
+    /** For an event: the one session meant (lecture notes link their class). */
+    date: {
+      default: null,
+      parseHTML: (el: HTMLElement) => el.getAttribute('data-date'),
+      renderHTML: (attrs: Record<string, any>) => (attrs.date ? { 'data-date': attrs.date } : {}),
     },
   }),
   parseHTML: () => [{ tag: 'span[data-page-mention]' }],

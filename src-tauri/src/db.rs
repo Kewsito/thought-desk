@@ -241,6 +241,26 @@ CREATE TABLE tags (
 );
 ";
 
+/// Course details and notes folder, single-date exceptions for repeating
+/// events, ids from imported calendars (so re-importing updates instead of
+/// duplicating), and notes pages for single class sessions.
+const SCHEMA_V4: &str = "
+ALTER TABLE courses ADD COLUMN teacher TEXT NOT NULL DEFAULT '';
+ALTER TABLE courses ADD COLUMN email TEXT NOT NULL DEFAULT '';
+ALTER TABLE courses ADD COLUMN office_hours TEXT NOT NULL DEFAULT '';
+ALTER TABLE courses ADD COLUMN room TEXT NOT NULL DEFAULT '';
+ALTER TABLE courses ADD COLUMN page_id TEXT REFERENCES pages(id) ON DELETE SET NULL;
+ALTER TABLE events ADD COLUMN exdates TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE events ADD COLUMN source_uid TEXT;
+ALTER TABLE assignments ADD COLUMN source_uid TEXT;
+CREATE TABLE occurrence_pages (
+  event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  date     TEXT NOT NULL,
+  page_id  TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+  PRIMARY KEY (event_id, date)
+);
+";
+
 const WELCOME_HTML: &str = r#"<p>Thought Desk is a quiet place to write. Everything stays on this computer, in a single local database.</p>
 <h2>The basics</h2>
 <ul data-type="taskList">
@@ -331,6 +351,12 @@ impl Db {
             let tx = conn.transaction()?;
             tx.execute_batch(SCHEMA_V3)?;
             tx.execute_batch("PRAGMA user_version = 3;")?;
+            tx.commit()?;
+        }
+        if version < 4 {
+            let tx = conn.transaction()?;
+            tx.execute_batch(SCHEMA_V4)?;
+            tx.execute_batch("PRAGMA user_version = 4;")?;
             tx.commit()?;
         }
         Ok(())

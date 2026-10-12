@@ -8,7 +8,8 @@
   import { api } from '../api';
   import { ACCENTS, PALETTE, PALETTES, colorVar, nextColor, type Accent } from '../colors';
   import { planner } from '../planner.svelte';
-  import { prefs, type Font, type Theme, type WeekStart } from '../prefs.svelte';
+  import { prefs, type Font, type RemindAssignments, type RemindEvents, type Theme, type WeekStart } from '../prefs.svelte';
+  import { importCalendar } from '../ics-import.svelte';
   import { ui } from '../ui.svelte';
   import { formatBytes } from '../time';
   import type { DataInfo } from '../types';
@@ -32,6 +33,18 @@
   const weekStarts: { value: WeekStart; label: string }[] = [
     { value: 0, label: 'Sunday' },
     { value: 1, label: 'Monday' },
+  ];
+  const remindAssignments: { value: RemindAssignments; label: string }[] = [
+    { value: 'off', label: 'Off' },
+    { value: 'evening', label: 'Evening Before' },
+    { value: 'morning', label: 'That Morning' },
+  ];
+  const remindEvents: { value: RemindEvents; label: string }[] = [
+    { value: 0, label: 'Off' },
+    { value: 5, label: '5 min' },
+    { value: 10, label: '10 min' },
+    { value: 15, label: '15 min' },
+    { value: 30, label: '30 min' },
   ];
   const shortcuts: { label: string; keys: string[][] }[] = [
     { label: 'Search everything', keys: [['Ctrl', 'K']] },
@@ -62,16 +75,7 @@
     }
   }
 
-  async function addCourse() {
-    const res = await ui.prompt({
-      title: 'New Course',
-      placeholder: 'Course name',
-      confirmLabel: 'Add Course',
-      icon: 'book',
-      color: nextColor(planner.courses.map((c) => c.color)),
-    });
-    if (res) await planner.addCourse(res.value, res.color);
-  }
+  const addCourse = () => planner.promptCourse();
 
   async function renameCourse(id: string, name: string) {
     const res = await ui.prompt({ title: 'Rename Course', value: name, confirmLabel: 'Rename', icon: 'book' });
@@ -190,6 +194,31 @@
       <div class="group-row">
         <div class="row-label">Week starts on</div>
         <Segmented options={weekStarts} value={prefs.weekStart} onchange={(v) => (prefs.weekStart = v)} label="Week starts on" />
+      </div>
+      <div class="group-row">
+        <div class="row-label">
+          Import a calendar
+          <small>Class schedules and due dates from a .ics file (Canvas, Google, Outlook)</small>
+        </div>
+        <button class="btn small raised" onclick={importCalendar}><Icon name="download" size={13} stroke={2.2} /> Import…</button>
+      </div>
+    </div>
+
+    <h3 class="group-title">Reminders</h3>
+    <div class="group">
+      <div class="group-row">
+        <div class="row-label">
+          Assignments
+          <small>Plus one an hour before anything with a due time</small>
+        </div>
+        <Segmented options={remindAssignments} value={prefs.remindAssignments} onchange={(v) => (prefs.remindAssignments = v)} label="Assignment reminders" />
+      </div>
+      <div class="group-row">
+        <div class="row-label">
+          Before events
+          <small>Only events with a start time</small>
+        </div>
+        <Segmented options={remindEvents} value={prefs.remindEvents} onchange={(v) => (prefs.remindEvents = v)} label="Event reminders" />
       </div>
     </div>
 
