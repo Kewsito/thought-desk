@@ -5,13 +5,27 @@
 //! its memory target so caches are trimmed. All of it is undone as soon as
 //! the window is restored. Unsaved edits are flushed by the frontend when the
 //! page becomes hidden, before the suspend takes effect.
+//!
+//! While the window stays visible but unfocused for a while (you're working in
+//! another app), we only lower the memory target, so WebView2 drops its
+//! graphics and decode caches without pausing anything. Focus brings it back.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::time::Duration;
 use tauri::{Manager, Runtime, Window, WindowEvent};
 
 static LOW: AtomicBool = AtomicBool::new(false);
 
+/// Bumped on every focus change, so a pending idle trim can tell it is stale.
+static FOCUS_GEN: AtomicU64 = AtomicU64::new(0);
+static IDLE_TRIMMED: AtomicBool = AtomicBool::new(false);
+const IDLE_AFTER: Duration = Duration::from_secs(45);
+
 pub fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
+    if let WindowEvent::Focused(focused) = event {
+        on_focus_change(window, *focused);
+        return;
+    }
     if !matches!(event, WindowEvent::Resized(_)) {
         return;
     }
@@ -23,6 +37,51 @@ pub fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
         set_low_memory(&webview, minimized);
     }
 }
+
+fn on_focus_change<R: Runtime>(window: &Window<R>, focused: bool) {
+    let generation = FOCUS_GEN.fetch_add(1, Ordering::Relaxed) + 1;
+    let app = window.app_handle().clone();
+    let label = window.label().to_string();
+    if focused {
+        if IDLE_TRIMMED.swap(false, Ordering::Relaxed) && !LOW.load(Ordering::Relaxed) {
+            if let Some(webview) = app.get_webview_window(&label) {
+                set_memory_target(&webview, false);
+            }
+        }
+        return;
+    }
+    std::thread::spawn(move || {
+        std::thread::sleep(IDLE_AFTER);
+        // Still unfocused since then, and not minimized (that path does more).
+        if FOCUS_GEN.load(Ordering::Relaxed) != generation || LOW.load(Ordering::Relaxed) {
+            return;
+        }
+        if let Some(webview) = app.get_webview_window(&label) {
+            set_memory_target(&webview, true);
+            IDLE_TRIMMED.store(true, Ordering::Relaxed);
+        }
+    });
+}
+
+/// Only the memory target: the page keeps running and stays visible.
+#[cfg(windows)]
+fn set_memory_target<R: Runtime>(webview: &tauri::WebviewWindow<R>, low: bool) {
+    use webview2_com::Microsoft::Web::WebView2::Win32::{
+        ICoreWebView2_19, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL,
+    };
+    use windows_core::Interface;
+
+    let _ = webview.with_webview(move |wv| unsafe {
+        let Ok(core) = wv.controller().CoreWebView2() else { return };
+        if let Ok(core19) = core.cast::<ICoreWebView2_19>() {
+            let level = if low { COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW } else { COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL };
+            let _ = core19.SetMemoryUsageTargetLevel(level);
+        }
+    });
+}
+
+#[cfg(not(windows))]
+fn set_memory_target<R: Runtime>(_webview: &tauri::WebviewWindow<R>, _low: bool) {}
 
 #[cfg(windows)]
 fn set_low_memory<R: Runtime>(webview: &tauri::WebviewWindow<R>, low: bool) {
@@ -65,6 +124,39 @@ fn set_low_memory<R: Runtime>(webview: &tauri::WebviewWindow<R>, low: bool) {
 fn set_low_memory<R: Runtime>(_webview: &tauri::WebviewWindow<R>, _low: bool) {}
 
 // ------------------------------------------------------------------ meter
+
+/// Memory that belongs to this process alone: the private working set, the
+/// figure Task Manager shows. Summing full working sets would count memory the
+/// web view processes share (DLLs, graphics buffers) once per process, which
+/// overstates the total several times over. Falls back to `fallback`.
+#[cfg(windows)]
+fn private_memory(pid: sysinfo::Pid, fallback: u64) -> u64 {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::ProcessStatus::{GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS, PROCESS_MEMORY_COUNTERS_EX2};
+    use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+
+    unsafe {
+        let Ok(handle) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid.as_u32()) else {
+            return fallback;
+        };
+        let mut counters = PROCESS_MEMORY_COUNTERS_EX2 {
+            cb: std::mem::size_of::<PROCESS_MEMORY_COUNTERS_EX2>() as u32,
+            ..Default::default()
+        };
+        let ok = GetProcessMemoryInfo(handle, &mut counters as *mut _ as *mut PROCESS_MEMORY_COUNTERS, counters.cb).is_ok();
+        let _ = CloseHandle(handle);
+        if ok && counters.PrivateWorkingSetSize > 0 {
+            counters.PrivateWorkingSetSize as u64
+        } else {
+            fallback
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn private_memory(_pid: sysinfo::Pid, fallback: u64) -> u64 {
+    fallback
+}
 
 /// How much memory Thought Desk is using right now: this process (the Rust
 /// core) and the web view processes it started (on Windows, WebView2's
@@ -114,7 +206,7 @@ impl MemoryMeter {
         let mut stack = children.get(&me).cloned().unwrap_or_default();
         while let Some(pid) = stack.pop() {
             if let Some(p) = sys.process(pid) {
-                webview += p.memory();
+                webview += private_memory(pid, p.memory());
                 processes += 1;
             }
             if let Some(more) = children.get(&pid) {
@@ -122,7 +214,7 @@ impl MemoryMeter {
             }
         }
         MemoryUsage {
-            app: sys.process(me).map(|p| p.memory()).unwrap_or(0),
+            app: sys.process(me).map(|p| private_memory(me, p.memory())).unwrap_or(0),
             webview,
             processes,
             system_total: sys.total_memory(),

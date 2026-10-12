@@ -22,7 +22,8 @@
         "decorations": false,
         "shadow": true,
         "visible": false,
-        "dragDropEnabled": false
+        "dragDropEnabled": false,
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --force-gpu-mem-available-mb=160 --force-gpu-mem-discardable-limit-mb=32"
       }
     ],
     "security": {

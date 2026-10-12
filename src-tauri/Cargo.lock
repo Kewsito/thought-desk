@@ -3983,6 +3983,7 @@ dependencies = [
  "tauri-plugin-window-state",
  "uuid",
  "webview2-com",
+ "windows 0.62.2",
  "windows-core 0.62.2",
 ]
 
