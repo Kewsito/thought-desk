@@ -28,6 +28,23 @@ export function sheet(_node: Element, { duration = 300 } = {}) {
   return pop(_node, { duration, scale: 0.94, y: 8 });
 }
 
+const cubicOut = (t: number) => 1 - (1 - t) ** 3;
+
+/**
+ * The sidebar sliding in or out: its slot widens or narrows (so the page
+ * beside it glides over), while the panel itself moves with the edge
+ * instead of squashing, and fades a touch at the far end.
+ */
+export function sidebarSlide(node: HTMLElement, { duration = 260 } = {}) {
+  const width = node.offsetWidth;
+  return {
+    duration: reduced() ? 0 : duration,
+    easing: cubicOut,
+    css: (t: number, u: number) =>
+      `overflow: hidden; width: ${(t * width).toFixed(2)}px; --slide: ${(-u * width * 0.35).toFixed(2)}px; --slide-fade: ${(0.4 + 0.6 * t).toFixed(3)};`,
+  };
+}
+
 export function fade(_node: Element, { duration = 200 } = {}) {
   return {
     duration: reduced() ? 0 : duration,

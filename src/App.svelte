@@ -4,6 +4,7 @@
   import { onMount } from 'svelte';
   import { api } from './lib/api';
   import { cssToRgb } from './lib/color-math';
+  import { sidebarSlide } from './lib/motion';
   import { shortcuts, toAccelerator, type ShortcutId } from './lib/shortcuts.svelte';
   import { memory } from './lib/memory.svelte';
   import { prefs } from './lib/prefs.svelte';
@@ -249,7 +250,9 @@
 
 <div class="app">
   {#if prefs.sidebarOpen}
-    <Sidebar />
+    <div class="sidebar-slot" in:sidebarSlide={{ duration: 280 }} out:sidebarSlide={{ duration: 220 }}>
+      <Sidebar />
+    </div>
   {/if}
   <main class="main">
     <TitleBar {words} {scrolled} />
@@ -332,6 +335,17 @@
     display: flex;
     height: 100vh;
     overflow: hidden;
+  }
+  /* While sliding (only then), the slot clips the panel and the panel
+     rides the edge; at rest the resize handle may reach past it. */
+  .sidebar-slot {
+    flex: none;
+    display: flex;
+    height: 100%;
+  }
+  .sidebar-slot > :global(.sidebar) {
+    transform: translateX(var(--slide, 0px));
+    opacity: var(--slide-fade, 1);
   }
   .main {
     flex: 1;
