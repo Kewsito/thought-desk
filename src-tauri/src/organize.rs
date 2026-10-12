@@ -70,13 +70,58 @@ pub(crate) fn inline_text(node: &Value, titles: Option<&HashMap<String, String>>
     }
 }
 
-/// The first paragraph of a to-do item.
-fn item_text(item: &Value, titles: Option<&HashMap<String, String>>) -> String {
+/// Readable text of a block, on one line.
+pub(crate) fn block_text(node: Option<&Value>, titles: Option<&HashMap<String, String>>) -> String {
     let mut out = String::new();
-    if let Some(first) = item.pointer("/content/0") {
-        inline_text(first, titles, &mut out);
+    if let Some(node) = node {
+        inline_text(node, titles, &mut out);
     }
     out.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// The first paragraph of a to-do item.
+fn item_text(item: &Value, titles: Option<&HashMap<String, String>>) -> String {
+    block_text(item.pointer("/content/0"), titles)
+}
+
+/// What Home and Flashcards need from a page body, worked out when it's
+/// saved so they never parse every page (all JSON arrays).
+pub(crate) struct Derived {
+    /// Open to-dos as `[index, first paragraph]`.
+    pub todos: String,
+    /// Flashcards as `[id, front, back]`.
+    pub cards: String,
+    /// Ids of the cards with something on the front (the ones that count).
+    pub card_ids: String,
+}
+
+pub(crate) fn derive(content: &str) -> Derived {
+    let has_todos = content.contains("\"taskItem\"");
+    let has_cards = content.contains("\"flashcard\"");
+    let empty = || Derived { todos: "[]".into(), cards: "[]".into(), card_ids: "[]".into() };
+    if !has_todos && !has_cards {
+        return empty();
+    }
+    let Ok(mut doc) = serde_json::from_str::<Value>(content) else { return empty() };
+    let mut todos = Vec::new();
+    if has_todos {
+        let mut index = 0;
+        walk_todos(&mut doc, &mut |item| {
+            if !item.pointer("/attrs/checked").and_then(Value::as_bool).unwrap_or(false) {
+                let first = item.pointer("/content/0").cloned().unwrap_or(Value::Null);
+                todos.push(Value::Array(vec![index.into(), first]));
+            }
+            index += 1;
+        });
+    }
+    let cards = if has_cards { crate::cards::derive_cards(&doc) } else { Vec::new() };
+    // A link reads as its id here, never empty, just as its title would be.
+    let card_ids: Vec<&Value> = cards.iter().filter(|c| !block_text(c.get(1), None).is_empty()).filter_map(|c| c.get(0)).collect();
+    Derived {
+        todos: Value::Array(todos).to_string(),
+        card_ids: serde_json::to_string(&card_ids).unwrap_or_else(|_| "[]".into()),
+        cards: Value::Array(cards).to_string(),
+    }
 }
 
 /// Visits every to-do item in document order (an item before its nested ones).
@@ -190,8 +235,9 @@ impl Db {
     pub fn backlinks(&self, id: &str) -> Result<Vec<String>> {
         let conn = self.conn();
         let mut stmt = conn.prepare(
-            "SELECT id FROM pages WHERE deleted_at IS NULL AND id != ?1 AND instr(content, ?1) > 0
-             ORDER BY updated_at DESC",
+            "SELECT p.id FROM page_links l JOIN pages p ON p.rid = l.page_rid
+             WHERE l.target = ?1 AND p.deleted_at IS NULL AND p.id != ?1
+             ORDER BY p.updated_at DESC",
         )?;
         let rows = stmt.query_map([id], |r| r.get(0))?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
@@ -222,32 +268,22 @@ impl Db {
         let pages: Vec<(String, String)> = {
             let conn = self.conn();
             let mut stmt = conn.prepare(
-                "SELECT id, content FROM pages
-                 WHERE deleted_at IS NULL AND instr(content, '\"taskItem\"') > 0
-                 ORDER BY updated_at DESC",
+                "SELECT p.id, d.todos FROM page_derived d JOIN pages p ON p.rid = d.rid
+                 WHERE p.deleted_at IS NULL AND d.todos != '[]'
+                 ORDER BY p.updated_at DESC",
             )?;
             let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
             rows.collect::<rusqlite::Result<_>>()?
         };
         let mut out = Vec::new();
-        for (page_id, content) in pages {
-            let Ok(mut doc) = serde_json::from_str::<Value>(&content) else { continue };
-            let mut index = 0;
-            walk_todos(&mut doc, &mut |item| {
-                let checked = item.pointer("/attrs/checked").and_then(Value::as_bool).unwrap_or(false);
-                if !checked {
-                    let text = item_text(item, Some(&titles));
-                    if !text.is_empty() {
-                        out.push(Todo {
-                            page_id: page_id.clone(),
-                            index,
-                            text,
-                            key: item_text(item, None),
-                        });
-                    }
+        for (page_id, raw) in pages {
+            let Ok(items) = serde_json::from_str::<Vec<(usize, Value)>>(&raw) else { continue };
+            for (index, first) in items {
+                let text = block_text(Some(&first), Some(&titles));
+                if !text.is_empty() {
+                    out.push(Todo { page_id: page_id.clone(), index, text, key: block_text(Some(&first), None) });
                 }
-                index += 1;
-            });
+            }
         }
         Ok(out)
     }
@@ -258,10 +294,14 @@ impl Db {
     pub fn set_todo(&self, page_id: &str, index: usize, key: &str, checked: bool) -> Result<i64> {
         let mut conn = self.conn();
         let tx = conn.transaction()?;
-        let content: Option<String> = tx
-            .query_row("SELECT content FROM pages WHERE id = ?1 AND deleted_at IS NULL", [page_id], |r| r.get(0))
+        let row: Option<(i64, String)> = tx
+            .query_row(
+                "SELECT rid, content FROM pages JOIN page_content USING (rid) WHERE id = ?1 AND deleted_at IS NULL",
+                [page_id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
             .optional()?;
-        let Some(content) = content else {
+        let Some((rid, content)) = row else {
             return fail("Page not found");
         };
         let Ok(mut doc) = serde_json::from_str::<Value>(&content) else {
@@ -282,10 +322,10 @@ impl Db {
             return fail("That to-do changed. Refresh and try again.");
         }
         let ts = now();
-        tx.execute(
-            "UPDATE pages SET content = ?1, updated_at = ?2 WHERE id = ?3",
-            params![serde_json::to_string(&doc)?, ts, page_id],
-        )?;
+        let content = serde_json::to_string(&doc)?;
+        tx.execute("UPDATE page_content SET content = ?1 WHERE rid = ?2", params![content, rid])?;
+        tx.execute("UPDATE pages SET updated_at = ?1 WHERE rid = ?2", params![ts, rid])?;
+        crate::db::index_content(&tx, rid, &content)?;
         tx.commit()?;
         Ok(ts)
     }

@@ -152,6 +152,19 @@ export interface CardReview {
   lapses: number;
 }
 
+/** A page's flashcards, counted for today. */
+export interface Deck {
+  pageId: string;
+  /** Cards with something on the front. */
+  count: number;
+  /** Studied before and due today (or earlier). */
+  due: number;
+  /** Never studied. */
+  fresh: number;
+  /** Learned well enough to be shown three weeks apart. */
+  mastered: number;
+}
+
 /** A flashcard block in a page. */
 export interface Card {
   pageId: string;

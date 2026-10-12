@@ -9,6 +9,7 @@ import type {
   Reminder,
   Card,
   CardReview,
+  Deck,
   DataInfo,
   EventPatch,
   FileMeta,
@@ -82,6 +83,7 @@ export const api = {
     invoke<void>('set_occurrence_page', { eventId, date, pageId }),
   setReminders: (list: Reminder[]) => invoke<void>('set_reminders', { list }),
   listCards: () => invoke<Card[]>('list_cards'),
+  listDecks: (today: string) => invoke<Deck[]>('list_decks', { today }),
   saveReview: (pageId: string, cardId: string, review: CardReview) => invoke<void>('save_review', { pageId, cardId, review }),
   resetReviews: (pageId: string) => invoke<void>('reset_reviews', { pageId }),
   /** Saves an exported document to Downloads; returns its path. */

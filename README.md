@@ -18,6 +18,17 @@ A fast, local-first notes workspace in the spirit of Notion: nested pages, a blo
 - **Trims itself when minimized.** The Rust side hides and suspends the WebView and sets WebView2's memory target to *low*. Everything is restored when the window comes back. See `src-tauri/src/memory.rs`.
 - **Size-optimized release profile** (LTO, `opt-level = "s"`, stripped, `panic = "abort"`).
 
+### Built for years of notes
+
+Tested against a workspace of 7,500 pages (a 2 MB book among them), 2,000 files, 3,000 assignments and events, 11,000 open to-dos and 17,000 flashcards:
+
+- **Bodies live apart from the page list.** Listing pages, counting and recent pages never read through page text.
+- **Links, to-dos and flashcards are indexed on save.** Backlinks, file usage, Home and the flashcard counts are lookups, not a parse of every page (file usage went from 92 s to 7 ms).
+- **Storage work never runs on the UI thread,** so a slow query can't freeze the window.
+- **Long lists render as you scroll**: Home, Assignments, Files, Flashcards, tags, Trash and big sidebar folders.
+- **Big media streams in chunks.** Audio, video and PDFs are served as byte ranges instead of being read into memory whole.
+- **The database gives space back** when you delete things for good.
+
 ## Features
 
 - **Block editor:** headings, to-dos, bullets, numbers, toggles, quotes, callouts, code, tables (resizable columns), images, dividers.
@@ -85,6 +96,7 @@ npm run bundle     # release build + Windows installer
 
 ```bash
 cd src-tauri && cargo test   # storage tests
+cd src-tauri && cargo test --release stress -- --ignored --nocapture   # heavy-workspace benchmark
 ```
 
 ## Data
@@ -114,7 +126,9 @@ src-tauri/src/
   library.rs             file library: import, rename, usage (+ tests)
   organize.rs            tags, backlinks, to-dos rolled up from pages (+ tests)
   commands.rs            Tauri commands
-  files.rs               `tdfile://` protocol, stray-file cleanup
+  cards.rs               flashcards: decks, reviews (+ tests)
+  files.rs               `tdfile://` protocol (byte ranges), stray-file cleanup
+  stress.rs              heavy-workspace benchmark (`cargo test --release stress -- --ignored`)
   memory.rs              WebView2 suspend/trim while minimized
 ```
 

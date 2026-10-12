@@ -77,6 +77,11 @@ class Store {
   );
 
   current = $derived(this.currentId ? (this.byId.get(this.currentId) ?? null) : null);
+  /** The open page and its ancestors (rows the sidebar always renders). */
+  openPath = $derived.by(() => {
+    const id = this.currentId;
+    return new Set(id ? [id, ...this.ancestors(id).map((a) => a.id)] : []);
+  });
   canGoBack = $derived(this.#historyIndex > 0);
   canGoForward = $derived(this.#historyIndex < this.#history.length - 1);
 
@@ -129,7 +134,33 @@ class Store {
       const patch = this.#pending.get(p.id);
       if (patch) applyLocal(p, patch);
     }
-    this.pages = pages;
+    this.#merge(pages);
+  }
+
+  /**
+   * Takes a fresh page list but keeps the existing object of every page, only
+   * writing the fields that changed. Adding one page among thousands then
+   * re-renders that page and its reordered siblings, not the whole sidebar.
+   */
+  #merge(next: PageMeta[]) {
+    const byId = this.byId;
+    let same = next.length === this.pages.length;
+    const merged = next.map((p, i) => {
+      const cur = byId.get(p.id);
+      if (!cur) {
+        same = false;
+        return p;
+      }
+      for (const key of Object.keys(p) as (keyof PageMeta)[]) {
+        const a = cur[key];
+        const b = p[key];
+        const equal = Array.isArray(a) && Array.isArray(b) ? a.length === b.length && a.every((x, j) => x === b[j]) : a === b;
+        if (!equal) (cur as unknown as Record<string, unknown>)[key] = b;
+      }
+      if (same && this.pages[i] !== cur) same = false;
+      return cur;
+    });
+    if (!same) this.pages = merged;
   }
 
   // ------------------------------------------------------------- navigation
@@ -298,6 +329,9 @@ class Store {
           const updatedAt = await api.updatePage(id, patch);
           const page = this.byId.get(id);
           if (page) page.updatedAt = updatedAt;
+          if (patch.content !== undefined) {
+            window.dispatchEvent(new CustomEvent('td:page-saved', { detail: { id, content: patch.content } }));
+          }
         } catch (e) {
           // The page may have been deleted meanwhile; nothing to save then.
           if (this.byId.has(id)) ui.error(e);

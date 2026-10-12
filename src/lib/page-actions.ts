@@ -111,7 +111,7 @@ export function pageMenuItems(id: string, opts: { words?: number; sidebar?: bool
   items.push({ label: 'Duplicate', icon: 'copy', action: () => void store.duplicate(id) });
   const deck = cards.deck(id);
   if (deck) {
-    items.push({ label: `Study ${deck.cards.length} Flashcard${deck.cards.length === 1 ? '' : 's'}`, icon: 'cards', action: () => void cards.study([id], page.title || 'Untitled', { all: !(deck.due + deck.fresh) }) });
+    items.push({ label: `Study ${deck.count} Flashcard${deck.count === 1 ? '' : 's'}`, icon: 'cards', action: () => void cards.study([id], page.title || 'Untitled', { all: !(deck.due + deck.fresh) }) });
   }
   if (!opts.sidebar) {
     items.push({

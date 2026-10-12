@@ -104,7 +104,7 @@
         {store.saving ? 'Saving…' : status}
       </span>
       {#if deck}
-        <button class="btn small study" onclick={() => cards.study([deck.pageId], page.title || 'Untitled')} data-tip="Study this page’s {deck.cards.length} flashcard{deck.cards.length === 1 ? '' : 's'}">
+        <button class="btn small study" onclick={() => cards.study([deck.pageId], page.title || 'Untitled')} data-tip="Study this page’s {deck.count} flashcard{deck.count === 1 ? '' : 's'}">
           <Icon name="cards" size={14} stroke={2} /> Study{deck.due + deck.fresh ? ` ${deck.due + deck.fresh}` : ''}
         </button>
       {/if}

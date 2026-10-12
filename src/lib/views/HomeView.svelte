@@ -16,7 +16,8 @@
   import { relativeTime, formatBytes } from '../time';
   import { todos } from '../todos.svelte';
   import { cards } from '../cards.svelte';
-  import type { Todo } from '../types';
+  import { Progressive, takeGrouped } from '../progressive.svelte';
+  import type { PageMeta, Todo } from '../types';
 
   onMount(() => void todos.load());
 
@@ -52,14 +53,23 @@
     }
     return [...groups].map(([pageId, items]) => ({ page: store.byId.get(pageId)!, items }));
   });
-  const openTodos = $derived(todos.items.filter((t) => !todos.isDone(t)).length);
+  const openTodos = $derived(todos.items.length - Object.values(todos.done).filter(Boolean).length);
+  // Thousands of to-dos render as you scroll down to them.
+  const lazyTodos = new Progressive(40);
+  const shownTodos = $derived(takeGrouped(todoGroups, (g) => g.items, lazyTodos.limit));
+  const todoCount = $derived(todoGroups.reduce((n, g) => n + g.items.length, 0));
 
-  const recentPages = $derived(
-    store.pages
-      .filter((p) => !p.deletedAt)
-      .sort((a, b) => b.updatedAt - a.updatedAt)
-      .slice(0, 6),
-  );
+  /** The six most recently edited pages (one pass, no sort of every page). */
+  const recentPages = $derived.by(() => {
+    const top: PageMeta[] = [];
+    for (const p of store.pages) {
+      if (p.deletedAt || (top.length === 6 && p.updatedAt <= top[5].updatedAt)) continue;
+      top.push(p);
+      top.sort((a, b) => b.updatedAt - a.updatedAt);
+      if (top.length > 6) top.pop();
+    }
+    return top;
+  });
   const recentFiles = $derived(library.live.slice(0, 4));
 
   const summary = $derived.by(() => {
@@ -126,13 +136,13 @@
         </h2>
         {#if todoGroups.length}
           <div class="group">
-            {#each todoGroups as g (g.page.id)}
+            {#each shownTodos as { group: g, items } (g.page.id)}
               <button class="group-row compact todo-page" onclick={() => store.open(g.page.id)}>
                 <span class="page-icon">{#if g.page.icon}{g.page.icon}{:else}<Icon name="page" size={14} />{/if}</span>
                 <span class="page-title">{g.page.title || 'Untitled'}</span>
                 <Icon name="chevron-right" size={12} stroke={2.2} />
               </button>
-              {#each g.items as t (`${t.pageId}:${t.index}`)}
+              {#each items as t (`${t.pageId}:${t.index}`)}
                 <div class="group-row compact todo" class:done={todos.isDone(t)}>
                   <button
                     class="box"
@@ -147,6 +157,7 @@
               {/each}
             {/each}
           </div>
+          {#if lazyTodos.limit < todoCount}<div class="more" {@attach lazyTodos.more}></div>{/if}
         {:else if todos.loaded}
           <div class="group">
             <EmptyState compact icon="todo" title="No open to-dos" text="Checkboxes you write in any page collect here." />

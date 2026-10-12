@@ -5,13 +5,11 @@
   import { cards, type Deck } from '../cards.svelte';
   import { colorVar } from '../colors';
   import { planner } from '../planner.svelte';
+  import { Progressive, takeGrouped } from '../progressive.svelte';
   import { store } from '../store.svelte';
   import { ui } from '../ui.svelte';
 
   onMount(() => void cards.load());
-
-  /** Learned well enough to be shown three weeks apart. */
-  const MASTERED_DAYS = 21;
 
   /** Decks under each course's notes folder, then the rest. */
   const groups = $derived.by(() => {
@@ -29,8 +27,12 @@
     return out;
   });
 
-  const total = $derived(cards.items.length);
-  const mastered = (d: Deck) => d.cards.filter((c) => (c.review?.interval ?? 0) >= MASTERED_DAYS).length;
+  // Decks render as you scroll.
+  const lazy = new Progressive(40);
+  const shownGroups = $derived(takeGrouped(groups, (g) => g.decks, lazy.limit));
+  const deckCount = $derived(groups.reduce((n, g) => n + g.decks.length, 0));
+
+  const total = $derived(cards.total);
 
   const summary = $derived.by(() => {
     if (!total) return 'Make cards in any page, then study them here';
@@ -87,7 +89,7 @@
     />
   {/if}
 
-  {#each groups as g (g.key)}
+  {#each shownGroups as { group: g, items } (g.key)}
     {@const due = g.decks.reduce((n, d) => n + d.due + d.fresh, 0)}
     <h2 class="group-title">
       <span class="g-label">
@@ -99,9 +101,9 @@
       {/if}
     </h2>
     <div class="group">
-      {#each g.decks as d (d.pageId)}
+      {#each items as d (d.pageId)}
         {@const page = store.byId.get(d.pageId)}
-        {@const m = mastered(d)}
+        {@const m = d.mastered}
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div class="group-row deck" oncontextmenu={(e) => menu(e, d)}>
           <button class="deck-main" onclick={() => store.open(d.pageId)}>
@@ -109,14 +111,14 @@
             <span class="deck-text">
               <span class="deck-title">{page?.title || 'Untitled'}</span>
               <span class="meta">
-                <span>{d.cards.length} card{d.cards.length === 1 ? '' : 's'}</span>
+                <span>{d.count} card{d.count === 1 ? '' : 's'}</span>
                 {#if d.due}<span class="due">{d.due} due</span>{/if}
                 {#if d.fresh}<span class="new">{d.fresh} new</span>{/if}
-                {#if m}<span>{Math.round((m / d.cards.length) * 100)}% mastered</span>{/if}
+                {#if m}<span>{Math.round((m / d.count) * 100)}% mastered</span>{/if}
               </span>
             </span>
           </button>
-          <div class="mastery" aria-hidden="true"><span style:width="{(m / d.cards.length) * 100}%"></span></div>
+          <div class="mastery" aria-hidden="true"><span style:width="{(m / d.count) * 100}%"></span></div>
           <button class="btn small raised" disabled={!(d.due + d.fresh)} onclick={() => cards.study([d.pageId], page?.title || 'Untitled')}>
             Study{d.due + d.fresh ? ` ${d.due + d.fresh}` : ''}
           </button>
@@ -125,6 +127,7 @@
       {/each}
     </div>
   {/each}
+  {#if lazy.limit < deckCount}<div {@attach lazy.more}></div>{/if}
 </div>
 
 <style>

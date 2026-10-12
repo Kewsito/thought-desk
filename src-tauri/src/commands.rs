@@ -1,6 +1,11 @@
 //! Commands invoked from the frontend.
+//!
+//! Anything that touches the database or the disk is `async`: it runs on a
+//! worker thread, so a slow query never stalls the window (dragging,
+//! resizing, painting). The few left synchronous are instant or must run on
+//! the main thread.
 
-use crate::cards::{Card, Review};
+use crate::cards::{Card, Deck, Review};
 use crate::db::{Db, Error, Page, PageMeta, PagePatch, Result, SearchHit, Table};
 use crate::library::{FileMeta, FilePatch, FileUsage};
 use crate::organize::{Tag, Todo};
@@ -11,17 +16,17 @@ use std::path::{Path, PathBuf};
 use tauri::{ipc::InvokeBody, AppHandle, Manager, State};
 use tauri_plugin_opener::OpenerExt;
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_pages(db: State<Db>) -> Result<Vec<PageMeta>> {
     db.list_pages()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_page(db: State<Db>, id: String) -> Result<Page> {
     db.get_page(&id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn create_page(
     db: State<Db>,
     parent_id: Option<String>,
@@ -37,42 +42,42 @@ pub fn create_page(
     )
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn update_page(db: State<Db>, id: String, patch: PagePatch) -> Result<i64> {
     db.update_page(&id, patch)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn move_page(db: State<Db>, id: String, parent_id: Option<String>, index: usize) -> Result<()> {
     db.move_page(&id, parent_id.as_deref(), index)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn duplicate_page(db: State<Db>, id: String) -> Result<PageMeta> {
     db.duplicate_page(&id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn trash_page(db: State<Db>, id: String) -> Result<i64> {
     db.trash_page(&id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn restore_page(db: State<Db>, id: String) -> Result<()> {
     db.restore_page(&id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_page(db: State<Db>, id: String) -> Result<()> {
     db.delete_page(&id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn empty_trash(db: State<Db>) -> Result<()> {
     db.empty_trash()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn search(db: State<Db>, query: String, limit: Option<usize>) -> Result<Vec<SearchHit>> {
     db.search(&query, limit.unwrap_or(30))
 }
@@ -100,7 +105,7 @@ fn percent_decode(s: &str) -> String {
 
 /// Adds an uploaded file (raw request body) to the library. Its name and
 /// type come in the percent-encoded `x-name` and `x-mime` headers.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_file(db: State<Db>, request: tauri::ipc::Request<'_>) -> Result<FileMeta> {
     let InvokeBody::Raw(bytes) = request.body() else {
         return Err(Error("Expected raw file bytes".into()));
@@ -116,23 +121,23 @@ pub fn save_file(db: State<Db>, request: tauri::ipc::Request<'_>) -> Result<File
     db.import_file(bytes, &header("x-name"), &header("x-mime"))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_files(db: State<Db>) -> Result<Vec<FileMeta>> {
     db.list_files()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn update_file(db: State<Db>, id: String, patch: FilePatch) -> Result<FileMeta> {
     db.update_file(&id, patch)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn file_usage(db: State<Db>) -> Result<Vec<FileUsage>> {
     db.file_usage()
 }
 
 /// Opens a library file in its default app.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn open_file(app: AppHandle, db: State<Db>, id: String) -> Result<()> {
     let (path, _) = db.file_path(&id)?;
     app.opener()
@@ -141,14 +146,14 @@ pub fn open_file(app: AppHandle, db: State<Db>, id: String) -> Result<()> {
 }
 
 /// Shows a library file in Explorer / Finder.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn reveal_file(app: AppHandle, db: State<Db>, id: String) -> Result<()> {
     let (path, _) = db.file_path(&id)?;
     app.opener().reveal_item_in_dir(path).map_err(|e| Error(e.to_string()))
 }
 
 /// Copies a library file into Downloads under its display name.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn export_file(app: AppHandle, db: State<Db>, id: String) -> Result<String> {
     let (path, name) = db.file_path(&id)?;
     let target = unique_path(&app.path().download_dir()?, &safe_file_name(&name), "");
@@ -196,90 +201,90 @@ fn unique_path(dir: &Path, name: &str, ext: &str) -> PathBuf {
 
 // ---------------------------------------------------------- planner commands
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_courses(db: State<Db>) -> Result<Vec<Course>> {
     db.list_courses()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn create_course(db: State<Db>, name: String, color: String) -> Result<Course> {
     db.create_course(&name, &color)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn update_course(db: State<Db>, id: String, patch: CoursePatch) -> Result<Course> {
     db.update_course(&id, patch)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_course(db: State<Db>, id: String) -> Result<()> {
     db.delete_course(&id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_assignments(db: State<Db>) -> Result<Vec<Assignment>> {
     db.list_assignments()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn create_assignment(db: State<Db>, input: AssignmentPatch) -> Result<Assignment> {
     db.create_assignment(input)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn update_assignment(db: State<Db>, id: String, patch: AssignmentPatch) -> Result<Assignment> {
     db.update_assignment(&id, patch)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_events(db: State<Db>) -> Result<Vec<Event>> {
     db.list_events()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn create_event(db: State<Db>, input: EventPatch) -> Result<Event> {
     db.create_event(input)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn update_event(db: State<Db>, id: String, patch: EventPatch) -> Result<Event> {
     db.update_event(&id, patch)
 }
 
 // ---------------------------------------------------- tags, links, to-dos
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_tags(db: State<Db>) -> Result<Vec<Tag>> {
     db.list_tags()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_item_tags(db: State<Db>, table: Table, id: String, tags: Vec<String>) -> Result<Vec<String>> {
     db.set_item_tags(table, &id, &tags)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_tag_color(db: State<Db>, name: String, color: String) -> Result<()> {
     db.set_tag_color(&name, &color)
 }
 
 /// Renames a tag everywhere, or deletes it when `to` is null.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn rename_tag(db: State<Db>, from: String, to: Option<String>) -> Result<()> {
     db.rename_tag(&from, to.as_deref())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn backlinks(db: State<Db>, id: String) -> Result<Vec<String>> {
     db.backlinks(&id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_todos(db: State<Db>) -> Result<Vec<Todo>> {
     db.list_todos()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_todo(db: State<Db>, page_id: String, index: usize, key: String, checked: bool) -> Result<i64> {
     db.set_todo(&page_id, index, &key, checked)
 }
@@ -313,12 +318,12 @@ pub fn memory_usage(meter: State<crate::memory::MemoryMeter>) -> crate::memory::
     meter.read()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_occurrence_pages(db: State<Db>) -> Result<Vec<OccurrencePage>> {
     db.list_occurrence_pages()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_occurrence_page(db: State<Db>, event_id: String, date: String, page_id: String) -> Result<()> {
     db.set_occurrence_page(&event_id, &date, &page_id)
 }
@@ -331,23 +336,23 @@ pub fn set_reminders(reminders: State<Reminders>, list: Vec<Reminder>) {
 
 // ------------------------------------------------------------ trash (items)
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn trash_item(db: State<Db>, table: Table, id: String) -> Result<i64> {
     db.trash_item(table, &id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn restore_item(db: State<Db>, table: Table, id: String) -> Result<()> {
     db.restore_item(table, &id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_item(db: State<Db>, table: Table, id: String) -> Result<()> {
     db.delete_item(table, &id)
 }
 
 /// Writes a Markdown export into the user's Downloads folder.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn export_markdown(app: AppHandle, title: String, markdown: String) -> Result<String> {
     let dir = app.path().download_dir()?;
     let path = unique_path(&dir, &safe_file_name(&title), "md");
@@ -357,7 +362,7 @@ pub fn export_markdown(app: AppHandle, title: String, markdown: String) -> Resul
 
 /// Saves an exported document (raw request body) to Downloads. The title
 /// and extension come in the percent-encoded `x-name` and `x-ext` headers.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn export_document(app: AppHandle, request: tauri::ipc::Request<'_>) -> Result<String> {
     let InvokeBody::Raw(bytes) = request.body() else {
         return Err(Error("Expected raw file bytes".into()));
@@ -386,17 +391,23 @@ pub fn print_page(app: AppHandle) -> Result<()> {
 
 // ---------------------------------------------------------------- flashcards
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_cards(db: State<Db>) -> Result<Vec<Card>> {
     db.list_cards()
 }
 
-#[tauri::command]
+/// Each page's cards, counted for `today` ("YYYY-MM-DD").
+#[tauri::command(async)]
+pub fn list_decks(db: State<Db>, today: String) -> Result<Vec<Deck>> {
+    db.list_decks(&today)
+}
+
+#[tauri::command(async)]
 pub fn save_review(db: State<Db>, page_id: String, card_id: String, review: Review) -> Result<()> {
     db.save_review(&page_id, &card_id, &review)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn reset_reviews(db: State<Db>, page_id: String) -> Result<()> {
     db.reset_reviews(&page_id)
 }
@@ -415,7 +426,7 @@ pub struct DataInfo {
     version: String,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn data_info(app: AppHandle, db: State<Db>) -> Result<DataInfo> {
     let size = |name: &str| {
         std::fs::metadata(db.data_dir.join(name))

@@ -122,6 +122,8 @@ export function buildExtensions(handle: BlockHandleOptions): AnyExtension[] {
     Image.configure({
       inline: false,
       allowBase64: false,
+      // A page of hundreds of photos only loads and decodes what's on screen.
+      HTMLAttributes: { loading: 'lazy', decoding: 'async' },
       resize: { enabled: true, directions: ['left', 'right'], minWidth: 80, minHeight: 40, alwaysPreserveAspectRatio: true },
     }),
     Highlight,

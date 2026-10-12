@@ -9,12 +9,29 @@
   import { store } from '../store.svelte';
   import { tags } from '../tags.svelte';
   import { formatBytes, relativeTime } from '../time';
+  import { Progressive } from '../progressive.svelte';
   import { ui } from '../ui.svelte';
 
   let { name }: { name: string } = $props();
 
   const items = $derived(tags.itemsWith(name));
   const total = $derived(items.pages.length + items.assignments.length + items.events.length + items.files.length);
+
+  // One budget across the sections, so a tag on thousands of items renders as you scroll.
+  const lazy = new Progressive();
+  $effect(() => {
+    void name;
+    lazy.reset();
+  });
+  const shown = $derived.by(() => {
+    let left = lazy.limit;
+    const take = <T,>(list: T[]) => {
+      const out = list.slice(0, Math.max(0, left));
+      left -= out.length;
+      return out;
+    };
+    return { pages: take(items.pages), assignments: take(items.assignments), events: take(items.events), files: take(items.files) };
+  });
 
   function menu(e: MouseEvent) {
     ui.openMenuAt(
@@ -51,10 +68,10 @@
     </div>
   </header>
 
-  {#if items.pages.length}
+  {#if shown.pages.length}
     <h2 class="group-title"><span>Pages</span><span class="count">{items.pages.length}</span></h2>
     <div class="group">
-      {#each items.pages as p (p.id)}
+      {#each shown.pages as p (p.id)}
         <button class="group-row link-row" onclick={() => store.open(p.id)}>
           <span class="icon">{#if p.icon}{p.icon}{:else}<Icon name="page" size={16} />{/if}</span>
           <span class="title">{p.title || 'Untitled'}</span>
@@ -64,28 +81,28 @@
     </div>
   {/if}
 
-  {#if items.assignments.length}
+  {#if shown.assignments.length}
     <h2 class="group-title"><span>Assignments</span><span class="count">{items.assignments.length}</span></h2>
     <div class="group">
-      {#each items.assignments as a (a.id)}
+      {#each shown.assignments as a (a.id)}
         <AssignmentRow {a} />
       {/each}
     </div>
   {/if}
 
-  {#if items.events.length}
+  {#if shown.events.length}
     <h2 class="group-title"><span>Events</span><span class="count">{items.events.length}</span></h2>
     <div class="group">
-      {#each items.events as e (e.id)}
+      {#each shown.events as e (e.id)}
         <EventRow occ={occ(e)} series />
       {/each}
     </div>
   {/if}
 
-  {#if items.files.length}
+  {#if shown.files.length}
     <h2 class="group-title"><span>Files</span><span class="count">{items.files.length}</span></h2>
     <div class="group">
-      {#each items.files as f (f.id)}
+      {#each shown.files as f (f.id)}
         <button class="group-row link-row" onclick={() => library.preview(f.id)}>
           <FileTile file={f} size={28} />
           <span class="title">{f.name}</span>
@@ -94,6 +111,8 @@
       {/each}
     </div>
   {/if}
+
+  {#if lazy.limit < total}<div {@attach lazy.more}></div>{/if}
 
   {#if !total}
     <EmptyState icon="tag" title="Nothing tagged #{name}" text="Add this tag to pages, assignments, events or files from their Tags row." />

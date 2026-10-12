@@ -10,6 +10,8 @@ mod memory;
 mod organize;
 mod planner;
 mod reminders;
+#[cfg(test)]
+mod stress;
 
 use std::path::PathBuf;
 use tauri::{Emitter, Manager};
@@ -134,6 +136,7 @@ fn main() {
             commands::print_page,
             commands::memory_usage,
             commands::list_cards,
+            commands::list_decks,
             commands::save_review,
             commands::reset_reviews,
             commands::trash_item,

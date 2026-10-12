@@ -5,7 +5,7 @@
 
 use crate::db::{fail, now, Db, Result};
 use crate::planner::check_date;
-use crate::organize::inline_text;
+use crate::organize::block_text;
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -36,6 +36,24 @@ pub struct Card {
     pub review: Option<Review>,
 }
 
+/// A page's cards, counted. This is all the sidebar, title bar and course
+/// pages need; the cards themselves are only read when studying.
+#[derive(Serialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Deck {
+    pub page_id: String,
+    /// Cards with something on the front.
+    pub count: usize,
+    /// Studied before and due by today.
+    pub due: usize,
+    /// Never studied.
+    pub fresh: usize,
+    /// Learned well enough to be shown three weeks apart.
+    pub mastered: usize,
+}
+
+const MASTERED_DAYS: i64 = 21;
+
 /// Visits every flashcard block in document order.
 fn walk_cards(node: &Value, f: &mut dyn FnMut(&Value)) {
     if node.get("type").and_then(Value::as_str) == Some("flashcard") {
@@ -47,56 +65,84 @@ fn walk_cards(node: &Value, f: &mut dyn FnMut(&Value)) {
     }
 }
 
-fn side_text(card: &Value, index: usize, titles: &HashMap<String, String>) -> String {
-    let mut out = String::new();
-    if let Some(side) = card.pointer(&format!("/content/{index}")) {
-        inline_text(side, Some(titles), &mut out);
-    }
-    out.split_whitespace().collect::<Vec<_>>().join(" ")
+/// A page's cards as `[id, front, back]`, kept with the page when it's saved.
+pub(crate) fn derive_cards(doc: &Value) -> Vec<Value> {
+    let mut out = Vec::new();
+    walk_cards(doc, &mut |card| {
+        let Some(id) = card.pointer("/attrs/id").and_then(Value::as_str) else { return };
+        let side = |i: usize| card.pointer(&format!("/content/{i}")).cloned().unwrap_or(Value::Null);
+        out.push(Value::Array(vec![id.into(), side(0), side(1)]));
+    });
+    out
 }
 
+type CardRows = (Vec<(String, String)>, HashMap<(String, String), Review>);
+
 impl Db {
+    /// Live pages' `cards` or `card_ids` lists (most recently edited first),
+    /// and every review.
+    fn card_rows(&self, column: &'static str) -> Result<CardRows> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare(&format!(
+            "SELECT p.id, d.{column} FROM page_derived d JOIN pages p ON p.rid = d.rid
+             WHERE p.deleted_at IS NULL AND d.{column} != '[]'
+             ORDER BY p.updated_at DESC"
+        ))?;
+        let pages: Vec<(String, String)> =
+            stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<rusqlite::Result<_>>()?;
+        let mut stmt = conn.prepare("SELECT page_id, card_id, due, interval, ease, reps, lapses FROM card_reviews")?;
+        let reviews: HashMap<(String, String), Review> = stmt
+            .query_map([], |r| {
+                Ok((
+                    (r.get(0)?, r.get(1)?),
+                    Review { due: r.get(2)?, interval: r.get(3)?, ease: r.get(4)?, reps: r.get(5)?, lapses: r.get(6)? },
+                ))
+            })?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok((pages, reviews))
+    }
+
+    /// Every page with cards, counted for `today`.
+    pub fn list_decks(&self, today: &str) -> Result<Vec<Deck>> {
+        check_date(&Some(today.to_string()))?;
+        // Only ids are read: which cards count was settled when each page was saved.
+        let (pages, reviews) = self.card_rows("card_ids")?;
+        let mut out = Vec::new();
+        for (page_id, raw) in pages {
+            let Ok(ids) = serde_json::from_str::<Vec<String>>(&raw) else { continue };
+            let mut deck = Deck { page_id, count: 0, due: 0, fresh: 0, mastered: 0 };
+            for id in ids {
+                deck.count += 1;
+                match reviews.get(&(deck.page_id.clone(), id)) {
+                    None => deck.fresh += 1,
+                    Some(r) => {
+                        deck.due += usize::from(r.due.as_str() <= today);
+                        deck.mastered += usize::from(r.interval >= MASTERED_DAYS);
+                    }
+                }
+            }
+            if deck.count > 0 {
+                out.push(deck);
+            }
+        }
+        Ok(out)
+    }
+
     /// Every card in live pages that has something on its front.
     pub fn list_cards(&self) -> Result<Vec<Card>> {
         let titles = self.titles()?;
-        let (pages, reviews) = {
-            let conn = self.conn();
-            let mut stmt = conn.prepare(
-                "SELECT id, content FROM pages
-                 WHERE deleted_at IS NULL AND instr(content, '\"flashcard\"') > 0
-                 ORDER BY updated_at DESC",
-            )?;
-            let pages: Vec<(String, String)> =
-                stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<rusqlite::Result<_>>()?;
-            let mut stmt =
-                conn.prepare("SELECT page_id, card_id, due, interval, ease, reps, lapses FROM card_reviews")?;
-            let reviews: HashMap<(String, String), Review> = stmt
-                .query_map([], |r| {
-                    Ok((
-                        (r.get(0)?, r.get(1)?),
-                        Review { due: r.get(2)?, interval: r.get(3)?, ease: r.get(4)?, reps: r.get(5)?, lapses: r.get(6)? },
-                    ))
-                })?
-                .collect::<rusqlite::Result<_>>()?;
-            (pages, reviews)
-        };
+        let (pages, reviews) = self.card_rows("cards")?;
         let mut out = Vec::new();
-        for (page_id, content) in pages {
-            let Ok(doc) = serde_json::from_str::<Value>(&content) else { continue };
-            walk_cards(&doc, &mut |card| {
-                let Some(id) = card.pointer("/attrs/id").and_then(Value::as_str) else { return };
-                let front = side_text(card, 0, &titles);
+        for (page_id, raw) in pages {
+            let Ok(list) = serde_json::from_str::<Vec<(String, Value, Value)>>(&raw) else { continue };
+            for (id, front, back) in list {
+                let front = block_text(Some(&front), Some(&titles));
                 if front.is_empty() {
-                    return;
+                    continue;
                 }
-                out.push(Card {
-                    page_id: page_id.clone(),
-                    id: id.to_string(),
-                    front,
-                    back: side_text(card, 1, &titles),
-                    review: reviews.get(&(page_id.clone(), id.to_string())).cloned(),
-                });
-            });
+                let review = reviews.get(&(page_id.clone(), id.clone())).cloned();
+                out.push(Card { page_id: page_id.clone(), id, front, back: block_text(Some(&back), Some(&titles)), review });
+            }
         }
         Ok(out)
     }
@@ -185,6 +231,12 @@ mod tests {
         db.save_review(&page.id, "c1", &Review { reps: 3, ..review.clone() }).unwrap();
         let cards = db.list_cards().unwrap();
         assert_eq!(cards[0].review.as_ref().map(|r| r.reps), Some(3), "upserted");
+
+        // Decks count what's due on a given day without reading every card out.
+        let deck = |today: &str| db.list_decks(today).unwrap().pop().unwrap();
+        assert_eq!(deck("2026-10-14"), Deck { page_id: page.id.clone(), count: 2, due: 0, fresh: 1, mastered: 0 });
+        assert_eq!(deck("2026-10-15").due, 1);
+        assert!(db.list_decks("soon").is_err());
 
         assert!(db.save_review(&page.id, "c1", &Review { ease: 9.0, ..review.clone() }).is_err());
         assert!(db.save_review(&page.id, "c1", &Review { due: "soon".into(), ..review.clone() }).is_err());

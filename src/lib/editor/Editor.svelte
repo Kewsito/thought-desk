@@ -5,7 +5,7 @@
   import { prefs } from '../prefs.svelte';
   import { store } from '../store.svelte';
   import { ui } from '../ui.svelte';
-  import type { Page } from '../types';
+  import type { Page, PagePatch } from '../types';
   import { blockMenuItems } from './blocks';
   import { buildExtensions } from './extensions';
   import BubbleMenu from './BubbleMenu.svelte';
@@ -40,18 +40,18 @@
     }
   }
 
+  /** The search text last sent; re-indexing is skipped when it's unchanged. */
+  let savedText: string | undefined;
+
   function save() {
     clearTimeout(timer);
     if (!dirty || !editor || editor.isDestroyed) return;
     dirty = false;
-    store.update(
-      page.id,
-      {
-        content: JSON.stringify(editor.getJSON()),
-        text: editor.getText({ blockSeparator: '\n' }),
-      },
-      { immediate: true },
-    );
+    const patch: PagePatch = { content: JSON.stringify(editor.getJSON()) };
+    // Formatting, moving blocks and ticking boxes don't change the words.
+    const text = editor.getText({ blockSeparator: '\n' });
+    if (text !== savedText) patch.text = savedText = text;
+    store.update(page.id, patch, { immediate: true });
   }
 
   function stats() {

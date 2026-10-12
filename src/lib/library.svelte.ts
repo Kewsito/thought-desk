@@ -80,13 +80,32 @@ export function pickFiles({ multiple = true, accept = '' } = {}): Promise<File[]
 class Library {
   files = $state<FileMeta[]>([]);
   /** File id → ids of live pages that show or link to it. */
-  usage = $state<Record<string, string[]>>({});
+  usage = $state.raw<Record<string, string[]>>({});
   loaded = $state(false);
 
   byId = $derived(new Map(this.files.map((f) => [f.id, f])));
   /** Live files, newest first. */
   live = $derived(this.files.filter((f) => !f.deletedAt).sort((a, b) => b.createdAt - a.createdAt));
   totalBytes = $derived(this.live.reduce((n, f) => n + f.size, 0));
+
+  /** File id → number of live pages and assignments using it, in one pass. */
+  #useCounts = $derived.by(() => {
+    const counts = new Map<string, number>();
+    for (const [fileId, pageIds] of Object.entries(this.usage)) {
+      const n = pageIds.filter((pid) => {
+        const p = store.byId.get(pid);
+        return p && !p.deletedAt;
+      }).length;
+      if (n) counts.set(fileId, n);
+    }
+    for (const a of planner.live) for (const fileId of a.fileIds) counts.set(fileId, (counts.get(fileId) ?? 0) + 1);
+    return counts;
+  });
+
+  /** How many places use a file (what `usedIn` lists, counted). */
+  useCount(id: string): number {
+    return this.#useCounts.get(id) ?? 0;
+  }
 
   async load() {
     this.files = await api.listFiles();

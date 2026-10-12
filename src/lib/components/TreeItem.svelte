@@ -10,12 +10,16 @@
   import { store } from '../store.svelte';
   import { ui } from '../ui.svelte';
   import { pageMenuItems } from '../page-actions';
+  import { Progressive, sliceKeeping } from '../progressive.svelte';
   import type { PageMeta } from '../types';
 
   let { page, depth = 0, favorite = false }: { page: PageMeta; depth?: number; favorite?: boolean } = $props();
 
   const kids = $derived(favorite ? [] : store.children(page.id));
   const expanded = $derived(!favorite && !!prefs.expanded[page.id]);
+  // A folder of thousands of pages renders its rows as you scroll to them.
+  const lazy = new Progressive(100, 200);
+  const shownKids = $derived(sliceKeeping(kids, lazy.limit, (p) => store.openPath.has(p.id)));
   const active = $derived(store.currentId === page.id);
 
   let zone = $state<'before' | 'inside' | 'after' | null>(null);
@@ -144,9 +148,10 @@
 </div>
 
 {#if expanded}
-  {#each kids as child (child.id)}
+  {#each shownKids as child (child.id)}
     <TreeItem page={child} depth={depth + 1} />
   {/each}
+  {#if shownKids.length < kids.length}<div {@attach lazy.more}></div>{/if}
 {/if}
 
 <style>

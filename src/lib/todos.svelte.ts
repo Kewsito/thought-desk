@@ -8,7 +8,8 @@ import type { Todo } from './types';
 const keyOf = (t: Todo) => `${t.pageId}:${t.index}`;
 
 class Todos {
-  items = $state<Todo[]>([]);
+  // Replaced on every load, never edited in place: no per-item tracking.
+  items = $state.raw<Todo[]>([]);
   loaded = $state(false);
   /** Checked off here since the last refresh; they stay visible, struck through. */
   done = $state<Record<string, boolean>>({});

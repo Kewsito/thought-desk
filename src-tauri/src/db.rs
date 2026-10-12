@@ -281,6 +281,37 @@ CREATE TABLE card_reviews (
 );
 ";
 
+/// Page bodies move out of `pages` into their own table, so listing pages
+/// (sidebar, search, counts) never reads through megabytes of text. Links,
+/// to-dos and flashcards found in each body are kept alongside, refreshed on
+/// every save, so backlinks, file usage, Home and Flashcards are lookups
+/// instead of a parse of every page.
+const SCHEMA_V6: &str = "
+CREATE TABLE page_content (
+  rid     INTEGER PRIMARY KEY,
+  content TEXT NOT NULL DEFAULT ''
+);
+INSERT INTO page_content (rid, content) SELECT rid, content FROM pages;
+ALTER TABLE pages DROP COLUMN content;
+CREATE TABLE page_links (
+  target   TEXT NOT NULL,
+  page_rid INTEGER NOT NULL,
+  PRIMARY KEY (target, page_rid)
+) WITHOUT ROWID;
+CREATE INDEX page_links_page ON page_links(page_rid);
+CREATE TABLE page_derived (
+  rid   INTEGER PRIMARY KEY,
+  todos    TEXT NOT NULL DEFAULT '[]',
+  cards    TEXT NOT NULL DEFAULT '[]',
+  card_ids TEXT NOT NULL DEFAULT '[]'
+);
+CREATE TRIGGER pages_side_delete AFTER DELETE ON pages BEGIN
+  DELETE FROM page_content WHERE rid = old.rid;
+  DELETE FROM page_links WHERE page_rid = old.rid;
+  DELETE FROM page_derived WHERE rid = old.rid;
+END;
+";
+
 const WELCOME_HTML: &str = r#"<p>Thought Desk is a quiet place to write. Everything stays on this computer, in a single local database.</p>
 <h2>The basics</h2>
 <ul data-type="taskList">
@@ -326,12 +357,17 @@ impl Db {
         std::fs::create_dir_all(&files_dir)?;
 
         let conn = Connection::open(data_dir.join("thoughtdesk.db"))?;
+        // auto_vacuum only takes effect on a new database (or after VACUUM):
+        // deleted pages then give their space back instead of leaving holes.
+        // The WAL is trimmed back to 16 MB after big writes.
         conn.execute_batch(
-            "PRAGMA journal_mode = WAL;
+            "PRAGMA auto_vacuum = INCREMENTAL;
+             PRAGMA journal_mode = WAL;
              PRAGMA synchronous = NORMAL;
              PRAGMA foreign_keys = ON;
              PRAGMA temp_store = MEMORY;
-             PRAGMA cache_size = -4000;",
+             PRAGMA cache_size = -4000;
+             PRAGMA journal_size_limit = 16777216;",
         )?;
         let db = Db {
             conn: Mutex::new(conn),
@@ -354,8 +390,16 @@ impl Db {
         if version < 1 {
             let tx = conn.transaction()?;
             tx.execute_batch(SCHEMA_V1)?;
-            let text = strip_tags(WELCOME_HTML);
-            insert_page(&tx, None, "Getting started", "👋", WELCOME_HTML, &text)?;
+            // Bodies still live in `pages` at this version (see SCHEMA_V6).
+            let ts = now();
+            tx.execute(
+                "INSERT INTO pages (id, title, icon, content, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
+                params![new_id(), "Getting started", "👋", WELCOME_HTML, ts],
+            )?;
+            tx.execute(
+                "INSERT INTO pages_fts (rowid, title, body) VALUES (?1, ?2, ?3)",
+                params![tx.last_insert_rowid(), "Getting started", strip_tags(WELCOME_HTML)],
+            )?;
             tx.execute_batch("PRAGMA user_version = 1;")?;
             tx.commit()?;
         }
@@ -385,6 +429,25 @@ impl Db {
             tx.execute_batch("PRAGMA user_version = 5;")?;
             tx.commit()?;
         }
+        if version < 6 {
+            let tx = conn.transaction()?;
+            tx.execute_batch(SCHEMA_V6)?;
+            let rows: Vec<(i64, String)> = {
+                let mut stmt = tx.prepare("SELECT rid, content FROM page_content")?;
+                let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+                rows.collect::<rusqlite::Result<_>>()?
+            };
+            for (rid, content) in rows {
+                index_content(&tx, rid, &content)?;
+            }
+            tx.execute_batch("PRAGMA user_version = 6;")?;
+            tx.commit()?;
+            // Moving the bodies out left the old space unused; hand it back
+            // once, and from now on the file shrinks as things are deleted.
+            if version >= 1 {
+                compact(&conn, true)?;
+            }
+        }
         Ok(())
     }
 
@@ -401,7 +464,7 @@ impl Db {
         let conn = self.conn();
         let page = conn
             .query_row(
-                &format!("SELECT {META_COLS}, content FROM pages WHERE id = ?1"),
+                &format!("SELECT {META_COLS}, content FROM pages JOIN page_content USING (rid) WHERE id = ?1"),
                 [id],
                 |r| {
                     Ok(Page {
@@ -464,7 +527,8 @@ impl Db {
             touched = true;
         }
         if let Some(content) = &patch.content {
-            tx.execute("UPDATE pages SET content = ?1 WHERE rid = ?2", params![content, rid])?;
+            tx.execute("UPDATE page_content SET content = ?1 WHERE rid = ?2", params![content, rid])?;
+            index_content(&tx, rid, content)?;
             touched = true;
         }
         if let Some(text) = &patch.text {
@@ -535,8 +599,8 @@ impl Db {
                SELECT p.id, sub.depth + 1 FROM pages p JOIN sub ON p.parent_id = sub.id
                WHERE p.deleted_at IS NULL
              )
-             SELECT p.rid, p.id, p.parent_id, p.title, p.icon, p.content, p.full_width
-             FROM pages p JOIN sub ON p.id = sub.id
+             SELECT p.rid, p.id, p.parent_id, p.title, p.icon, c.content, p.full_width
+             FROM pages p JOIN sub ON p.id = sub.id JOIN page_content c ON c.rid = p.rid
              ORDER BY sub.depth, p.position",
         )?;
         let rows: Vec<Row> = stmt
@@ -567,24 +631,21 @@ impl Db {
                 row.parent.as_ref().and_then(|p| map.get(p).cloned())
             };
             // Links to duplicated sub-pages should point at the copies.
-            let mut content = row.content.clone();
-            for (old, new) in &map {
-                if content.contains(old.as_str()) {
-                    content = content.replace(old.as_str(), new);
-                }
-            }
+            let content = replace_ids(&row.content, &map);
             let title = if i == 0 && !row.title.is_empty() {
                 format!("{} (copy)", row.title)
             } else {
                 row.title.clone()
             };
             tx.execute(
-                "INSERT INTO pages (id, parent_id, title, icon, content, position, full_width, tags, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, (SELECT position FROM pages WHERE id = ?6), ?7,
-                         (SELECT tags FROM pages WHERE id = ?6), ?8, ?8)",
-                params![new_id, parent, title, row.icon, content, row.id, row.full_width, ts],
+                "INSERT INTO pages (id, parent_id, title, icon, position, full_width, tags, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, (SELECT position FROM pages WHERE id = ?5), ?6,
+                         (SELECT tags FROM pages WHERE id = ?5), ?7, ?7)",
+                params![new_id, parent, title, row.icon, row.id, row.full_width, ts],
             )?;
             let new_rid = tx.last_insert_rowid();
+            tx.execute("INSERT INTO page_content (rid, content) VALUES (?1, ?2)", params![new_rid, content])?;
+            index_content(&tx, new_rid, &content)?;
             tx.execute(
                 "INSERT INTO pages_fts (rowid, title, body)
                  SELECT ?1, ?2, body FROM pages_fts WHERE rowid = ?3",
@@ -666,8 +727,9 @@ impl Db {
 
     /// Permanently deletes a page and everything below it.
     pub fn delete_page(&self, id: &str) -> Result<()> {
-        self.conn().execute("DELETE FROM pages WHERE id = ?1", [id])?;
-        Ok(())
+        let conn = self.conn();
+        conn.execute("DELETE FROM pages WHERE id = ?1", [id])?;
+        compact(&conn, false)
     }
 
     /// Moves an assignment, event or file to the trash. Returns the time.
@@ -732,6 +794,7 @@ impl Db {
             };
             tx.execute("DELETE FROM files WHERE deleted_at IS NOT NULL", [])?;
             tx.commit()?;
+            compact(&conn, false)?;
             stored
         };
         for name in stored {
@@ -794,7 +857,9 @@ impl Db {
         }
 
         // Substring fallback catches what the tokenizer can't (e.g. CJK text,
-        // or a fragment in the middle of a word).
+        // or a fragment in the middle of a word). LIKE already ignores ASCII
+        // case, which is all SQLite's lower() would fold, so the columns are
+        // compared as they are (no copy of every body per query).
         if (hits.len() as i64) < limit {
             let needle = query.trim().to_lowercase();
             let like = format!(
@@ -805,7 +870,7 @@ impl Db {
                 "SELECT p.id, p.title, p.icon, pages_fts.body, p.updated_at
                  FROM pages_fts JOIN pages p ON p.rid = pages_fts.rowid
                  WHERE p.deleted_at IS NULL
-                   AND (lower(pages_fts.title) LIKE ?1 ESCAPE '\\' OR lower(pages_fts.body) LIKE ?1 ESCAPE '\\')
+                   AND (pages_fts.title LIKE ?1 ESCAPE '\\' OR pages_fts.body LIKE ?1 ESCAPE '\\')
                  ORDER BY p.updated_at DESC LIMIT ?2",
             )?;
             let rows = stmt.query_map(params![like, limit], |r| {
@@ -836,16 +901,14 @@ impl Db {
         Ok(hits)
     }
 
-    /// All page bodies concatenated, used to find unreferenced files.
-    pub fn all_content(&self) -> Result<String> {
-        let conn = self.conn();
-        let mut stmt = conn.prepare("SELECT content FROM pages")?;
-        let mut out = String::new();
-        let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
-        for c in rows.flatten() {
-            out.push_str(&c);
-        }
-        Ok(out)
+    /// Whether any page body (trashed ones too) contains `needle`. Used to
+    /// keep stray files a page still points at; reads one body at a time.
+    pub fn content_mentions(&self, needle: &str) -> Result<bool> {
+        Ok(self
+            .conn()
+            .query_row("SELECT 1 FROM page_content WHERE instr(content, ?1) > 0 LIMIT 1", [needle], |_| Ok(()))
+            .optional()?
+            .is_some())
     }
 
     /// Number of live (not trashed) rows in one of the item tables.
@@ -866,16 +929,112 @@ fn insert_page(
     let id = new_id();
     let ts = now();
     tx.execute(
-        "INSERT INTO pages (id, parent_id, title, icon, content, position, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6, ?6)",
-        params![id, parent_id, title, icon, content, ts],
+        "INSERT INTO pages (id, parent_id, title, icon, position, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, 0, ?5, ?5)",
+        params![id, parent_id, title, icon, ts],
     )?;
     let rid = tx.last_insert_rowid();
+    tx.execute("INSERT INTO page_content (rid, content) VALUES (?1, ?2)", params![rid, content])?;
+    index_content(tx, rid, content)?;
     tx.execute(
         "INSERT INTO pages_fts (rowid, title, body) VALUES (?1, ?2, ?3)",
         params![rid, title, text],
     )?;
     Ok(id)
+}
+
+/// Refreshes what's known about a page body: the items it links to (for
+/// backlinks and file usage) and its open to-dos and flashcards.
+pub(crate) fn index_content(conn: &Connection, rid: i64, content: &str) -> Result<()> {
+    conn.execute("DELETE FROM page_links WHERE page_rid = ?1", [rid])?;
+    {
+        let mut stmt = conn.prepare_cached("INSERT OR IGNORE INTO page_links (target, page_rid) VALUES (?1, ?2)")?;
+        for target in link_targets(content) {
+            stmt.execute(params![target, rid])?;
+        }
+    }
+    let d = crate::organize::derive(content);
+    conn.execute(
+        "INSERT INTO page_derived (rid, todos, cards, card_ids) VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT (rid) DO UPDATE SET todos = excluded.todos, cards = excluded.cards, card_ids = excluded.card_ids",
+        params![rid, d.todos, d.cards, d.card_ids],
+    )?;
+    Ok(())
+}
+
+/// Byte offsets of every id in `s` (a lower-case UUID, as `new_id` makes).
+fn id_spans(s: &str) -> impl Iterator<Item = usize> + '_ {
+    const LEN: usize = 36;
+    let b = s.as_bytes();
+    let hex = |c: u8| c.is_ascii_digit() || (b'a'..=b'f').contains(&c);
+    let mut i = 0;
+    std::iter::from_fn(move || {
+        while i + LEN <= b.len() {
+            let at = i;
+            let w = &b[at..at + LEN];
+            let is_id = w[8] == b'-'
+                && w[13] == b'-'
+                && w[18] == b'-'
+                && w[23] == b'-'
+                && w.iter().enumerate().all(|(k, &c)| matches!(k, 8 | 13 | 18 | 23) || hex(c));
+            if is_id {
+                i = at + LEN;
+                return Some(at);
+            }
+            i += 1;
+        }
+        None
+    })
+}
+
+/// Everything a body can point at: ids of pages, assignments, events and
+/// files, and stored file names in image URLs.
+fn link_targets(content: &str) -> std::collections::HashSet<&str> {
+    let mut out: std::collections::HashSet<&str> = id_spans(content).map(|at| &content[at..at + 36]).collect();
+    for prefix in ["tdfile.localhost/", "tdfile://localhost/"] {
+        for (at, _) in content.match_indices(prefix) {
+            let rest = &content[at + prefix.len()..];
+            let end = rest.find(|c: char| !(c.is_ascii_alphanumeric() || c == '.')).unwrap_or(rest.len());
+            if end > 0 {
+                out.insert(&rest[..end]);
+            }
+        }
+    }
+    out
+}
+
+/// `content` with every id found in `map` swapped for its new one.
+fn replace_ids(content: &str, map: &HashMap<String, String>) -> String {
+    let mut out = String::with_capacity(content.len());
+    let mut last = 0;
+    for at in id_spans(content) {
+        if let Some(new) = map.get(&content[at..at + 36]) {
+            out.push_str(&content[last..at]);
+            out.push_str(new);
+            last = at + 36;
+        }
+    }
+    out.push_str(&content[last..]);
+    out
+}
+
+/// Returns unused space to the file system. Databases made before
+/// incremental vacuuming was turned on get one full VACUUM (which turns it
+/// on), when there's space worth winning or right after an upgrade.
+fn compact(conn: &Connection, upgrading: bool) -> Result<()> {
+    let mode: i64 = conn.query_row("PRAGMA auto_vacuum", [], |r| r.get(0))?;
+    let free: i64 = conn.query_row("PRAGMA freelist_count", [], |r| r.get(0))?;
+    if mode == 2 {
+        if free > 0 {
+            conn.execute_batch("PRAGMA incremental_vacuum;")?;
+        }
+        return Ok(());
+    }
+    let page: i64 = conn.query_row("PRAGMA page_size", [], |r| r.get(0))?;
+    if upgrading || free * page >= 4 << 20 {
+        conn.execute_batch("PRAGMA auto_vacuum = INCREMENTAL; VACUUM;")?;
+    }
+    Ok(())
 }
 
 fn meta_by_id(tx: &Transaction, id: &str) -> Result<PageMeta> {
@@ -1078,6 +1237,41 @@ mod tests {
 
         db.trash_page(&p.id).unwrap();
         assert!(db.search("lisbon", 10).unwrap().is_empty(), "trashed pages are hidden");
+    }
+
+    #[test]
+    fn side_tables_follow_pages() {
+        let (db, _) = temp_db();
+        let target = db.create_page(None, None, "Target", "").unwrap();
+        let a = db.create_page(None, None, "A", "").unwrap();
+        let b = db.create_page(Some(&a.id), None, "B", "").unwrap();
+        let body = format!(
+            r#"{{"type":"doc","content":[{{"type":"mention","attrs":{{"id":"{}"}}}},{{"type":"image","attrs":{{"src":"http://tdfile.localhost/abc.png"}}}}]}}"#,
+            target.id
+        );
+        db.update_page(&b.id, PagePatch { content: Some(body), ..Default::default() }).unwrap();
+        assert_eq!(db.backlinks(&target.id).unwrap(), vec![b.id.clone()]);
+        assert!(db.content_mentions("abc.png").unwrap());
+
+        // Deleting a parent takes its sub-pages' bodies and links with it.
+        db.delete_page(&a.id).unwrap();
+        let conn = db.conn();
+        let count = |sql: &str| conn.query_row(sql, [], |r| r.get::<_, i64>(0)).unwrap();
+        let pages = count("SELECT count(*) FROM pages");
+        assert_eq!(count("SELECT count(*) FROM page_content"), pages);
+        assert_eq!(count("SELECT count(*) FROM page_derived"), pages);
+        assert_eq!(count("SELECT count(*) FROM page_links"), 0);
+    }
+
+    #[test]
+    fn finds_and_swaps_ids() {
+        let (a, b) = (new_id(), new_id());
+        let s = format!(r#"{{"id":"{a}","src":"http://tdfile.localhost/0123abcd.png","x":"{b}-tail","n":"not-an-id"}}"#);
+        let found = link_targets(&s);
+        assert_eq!(found.len(), 3);
+        assert!(found.contains(a.as_str()) && found.contains(b.as_str()) && found.contains("0123abcd.png"));
+        let map = HashMap::from([(a.clone(), "NEW".to_string())]);
+        assert_eq!(replace_ids(&s, &map), s.replace(&a, "NEW"));
     }
 
     #[test]

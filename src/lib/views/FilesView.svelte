@@ -8,6 +8,7 @@
   import { fileMenuItems } from '../file-actions';
   import { KINDS, fileKind, library, pickFiles, type FileKind } from '../library.svelte';
   import { prefs, type FilesLayout } from '../prefs.svelte';
+  import { Progressive } from '../progressive.svelte';
   import { formatBytes, relativeTime } from '../time';
   import { ui } from '../ui.svelte';
   import type { FileMeta } from '../types';
@@ -43,10 +44,9 @@
   // Usage changes as pages are edited elsewhere; refresh on the way in.
   onMount(() => void library.refreshUsage());
 
-  const uses = (f: FileMeta) => {
-    const u = library.usedIn(f.id);
-    return u.pages.length + u.assignments.length;
-  };
+  const uses = (f: FileMeta) => library.useCount(f.id);
+  // One collator for the whole sort (localeCompare with options builds one per call).
+  const byName = new Intl.Collator(undefined, { numeric: true }).compare;
 
   const shown = $derived.by(() => {
     const q = query.trim().toLowerCase();
@@ -55,7 +55,7 @@
       if (filter !== 'all' && filter !== 'unused' && !GROUPS[filter].includes(fileKind(f))) return false;
       return !q || f.name.toLowerCase().includes(q);
     });
-    if (sort === 'name') return [...list].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    if (sort === 'name') return [...list].sort((a, b) => byName(a.name, b.name));
     if (sort === 'size') return [...list].sort((a, b) => b.size - a.size);
     return list;
   });
@@ -69,6 +69,14 @@
     }
     return c;
   });
+
+  // Files render as you scroll; a new filter or sort starts at the top.
+  const lazy = new Progressive(80, 200);
+  $effect(() => {
+    void [filter, sort, query];
+    lazy.reset();
+  });
+  const visible = $derived(shown.length > lazy.limit ? shown.slice(0, lazy.limit) : shown);
 
   async function importFiles() {
     const added = await library.add(await pickFiles());
@@ -157,7 +165,7 @@
 
   {#if shown.length && prefs.filesLayout === 'grid'}
     <div class="grid">
-      {#each shown as f (f.id)}
+      {#each visible as f (f.id)}
         {@const n = uses(f)}
         <div
           class="card"
@@ -183,9 +191,10 @@
         </div>
       {/each}
     </div>
+    {#if visible.length < shown.length}<div {@attach lazy.more}></div>{/if}
   {:else if shown.length}
     <div class="group">
-      {#each shown as f (f.id)}
+      {#each visible as f (f.id)}
         {@const n = uses(f)}
         <div
           class="group-row f-row"
@@ -208,6 +217,7 @@
         </div>
       {/each}
     </div>
+    {#if visible.length < shown.length}<div {@attach lazy.more}></div>{/if}
   {:else}
     <EmptyState
       icon="files"

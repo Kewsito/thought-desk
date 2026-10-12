@@ -331,6 +331,32 @@ mockConvertFileSrc('windows');
   const convert = internals.convertFileSrc;
   internals.convertFileSrc = (path: string, protocol: string) => blobs[path] ?? convert(path, protocol);
 }
+/** Every card in live pages (what list_cards returns). */
+function mockCards(): any[] {
+  const out: unknown[] = [];
+  const walk = (n: any, f: (c: any) => void) => {
+    if (n?.type === 'flashcard') return f(n);
+    for (const c of n?.content ?? []) walk(c, f);
+  };
+  for (const r of rows.filter((x) => !x.deletedAt)) {
+    let doc: any;
+    try {
+      doc = JSON.parse(r.content);
+    } catch {
+      continue;
+    }
+    walk(doc, (c) => {
+      const side = (i: number) => (c.content?.[i] ? itemText({ content: [c.content[i]] }, true) : '');
+      const front = side(0);
+      if (!c.attrs?.id || !front) return;
+      const rv = planner.reviews.find((x) => x.pageId === r.id && x.cardId === c.attrs.id);
+      const review = rv ? { due: rv.due, interval: rv.interval, ease: rv.ease, reps: rv.reps, lapses: rv.lapses } : null;
+      out.push({ pageId: r.id, id: c.attrs.id, front, back: side(1), review });
+    });
+  }
+  return out;
+}
+
 mockIPC((cmd, payload) => {
   const a = (payload ?? {}) as Record<string, any>;
   const find = (id: string) => {
@@ -545,29 +571,21 @@ mockIPC((cmd, payload) => {
         planner.sessions = planner.sessions.filter((s) => !(s.eventId === a.eventId && s.date === a.date));
         planner.sessions.push({ eventId: a.eventId, date: a.date, pageId: a.pageId });
         return null;
-      case 'list_cards': {
-        const out: unknown[] = [];
-        const walk = (n: any, f: (c: any) => void) => {
-          if (n?.type === 'flashcard') return f(n);
-          for (const c of n?.content ?? []) walk(c, f);
-        };
-        for (const r of rows.filter((x) => !x.deletedAt)) {
-          let doc: any;
-          try {
-            doc = JSON.parse(r.content);
-          } catch {
-            continue;
+      case 'list_cards':
+        return mockCards();
+      case 'list_decks': {
+        const decks = new Map<string, any>();
+        for (const c of mockCards()) {
+          let d = decks.get(c.pageId);
+          if (!d) decks.set(c.pageId, (d = { pageId: c.pageId, count: 0, due: 0, fresh: 0, mastered: 0 }));
+          d.count++;
+          if (!c.review) d.fresh++;
+          else {
+            if (c.review.due <= a.today) d.due++;
+            if (c.review.interval >= 21) d.mastered++;
           }
-          walk(doc, (c) => {
-            const side = (i: number) => (c.content?.[i] ? itemText({ content: [c.content[i]] }, true) : '');
-            const front = side(0);
-            if (!c.attrs?.id || !front) return;
-            const rv = planner.reviews.find((x) => x.pageId === r.id && x.cardId === c.attrs.id);
-            const review = rv ? { due: rv.due, interval: rv.interval, ease: rv.ease, reps: rv.reps, lapses: rv.lapses } : null;
-            out.push({ pageId: r.id, id: c.attrs.id, front, back: side(1), review });
-          });
         }
-        return out;
+        return [...decks.values()];
       }
       case 'save_review':
         planner.reviews = planner.reviews.filter((x) => !(x.pageId === a.pageId && x.cardId === a.cardId));

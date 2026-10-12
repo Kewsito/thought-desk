@@ -7,6 +7,7 @@
   import { TABLE_LABELS, deleteItem, emptyTrash, restoreItem, trashItems } from '../trash.svelte';
   import { ui } from '../ui.svelte';
   import { relativeTime } from '../time';
+  import { Progressive } from '../progressive.svelte';
   import type { TrashTable } from '../types';
 
   let filter = $state('');
@@ -22,6 +23,14 @@
     ),
   );
   const tables: TrashTable[] = ['pages', 'assignments', 'events', 'files'];
+
+  // A big trash renders as you scroll; a new filter starts at the top.
+  const lazy = new Progressive();
+  $effect(() => {
+    void [filter, kind];
+    lazy.reset();
+  });
+  const shown = $derived(items.length > lazy.limit ? items.slice(0, lazy.limit) : items);
 
   // Don't strand the user on an empty filter after restoring its last item.
   $effect(() => {
@@ -56,7 +65,7 @@
 
     {#if items.length}
       <div class="group">
-        {#each items as it (`${it.table}:${it.id}`)}
+        {#each shown as it (`${it.table}:${it.id}`)}
           <div class="group-row item">
             <span class="icon" style:color={it.color}>
               {#if it.file}<FileTile file={it.file} size={28} />
@@ -76,6 +85,7 @@
           </div>
         {/each}
       </div>
+      {#if shown.length < items.length}<div {@attach lazy.more}></div>{/if}
     {:else}
       <EmptyState
         icon="trash"

@@ -41,7 +41,7 @@
 
   const decks = $derived(folder ? cards.decksUnder(folder.id) : []);
   const studyCount = $derived(decks.reduce((n, d) => n + d.due + d.fresh, 0));
-  const deckCards = $derived(decks.reduce((n, d) => n + d.cards.length, 0));
+  const deckCards = $derived(decks.reduce((n, d) => n + d.count, 0));
   const grade = $derived(course ? courseGrade(course, planner.assignments) : null);
   const weightSum = $derived(Object.values(course?.weights ?? {}).reduce((n, w) => n + w, 0));
 

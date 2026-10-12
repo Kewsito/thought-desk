@@ -9,6 +9,7 @@
   import { diffDays, dueState } from '../dates';
   import { planner } from '../planner.svelte';
   import { prefs, type AssignmentScope } from '../prefs.svelte';
+  import { Progressive, takeGrouped } from '../progressive.svelte';
   import { ui } from '../ui.svelte';
   import type { Assignment } from '../types';
 
@@ -27,6 +28,13 @@
   // A course that was deleted can't stay selected.
   $effect(() => {
     if (courseFilter !== 'all' && courseFilter !== 'none' && !planner.courseById.has(courseFilter)) courseFilter = 'all';
+  });
+
+  // Rows render as you scroll; a new filter starts from the top again.
+  const lazy = new Progressive();
+  $effect(() => {
+    void [query, courseFilter, prefs.assignmentScope];
+    lazy.reset();
   });
 
   const filtered = $derived.by(() => {
@@ -72,6 +80,8 @@
     ];
     return labels.filter(([k]) => buckets[k].length).map(([key, label]) => ({ key, label, items: buckets[key] }));
   });
+
+  const shownGroups = $derived(takeGrouped(groups, (g) => g.items, lazy.limit));
 
   const summary = $derived.by(() => {
     const open = planner.live.filter((a) => a.status !== 'done');
@@ -207,13 +217,13 @@
     </form>
   {/if}
 
-  {#each groups as g (g.key)}
+  {#each shownGroups as { group: g, items } (g.key)}
     <h2 class="group-title" class:overdue={g.key === 'overdue'}>
       <span>{g.label}</span>
       <span class="count">{g.items.length}</span>
     </h2>
     <div class="group">
-      {#each g.items as a (a.id)}
+      {#each items as a (a.id)}
         <AssignmentRow {a} showCourse={courseFilter === 'all' || courseFilter === 'none'} />
       {/each}
     </div>
@@ -228,7 +238,7 @@
       {/if}
     </EmptyState>
   {/each}
-
+  {#if lazy.limit < filtered.length}<div {@attach lazy.more}></div>{/if}
 </div>
 
 <style>

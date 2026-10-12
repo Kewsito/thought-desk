@@ -242,22 +242,19 @@ impl Db {
     /// it (images by stored name, file blocks and mentions by id).
     pub fn file_usage(&self) -> Result<Vec<FileUsage>> {
         let conn = self.conn();
-        let pages: Vec<(String, String)> = {
-            let mut stmt = conn.prepare("SELECT id, content FROM pages WHERE deleted_at IS NULL")?;
-            let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
-            rows.collect::<rusqlite::Result<_>>()?
-        };
-        let mut stmt = conn.prepare("SELECT id, stored FROM files WHERE deleted_at IS NULL")?;
-        let files = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
-        let mut out = Vec::new();
-        for (id, stored) in files.flatten() {
-            let page_ids: Vec<String> = pages
-                .iter()
-                .filter(|(_, content)| content.contains(&stored) || content.contains(&id))
-                .map(|(pid, _)| pid.clone())
-                .collect();
-            if !page_ids.is_empty() {
-                out.push(FileUsage { file_id: id, page_ids });
+        let mut stmt = conn.prepare(
+            "SELECT DISTINCT f.id, p.id FROM files f
+             JOIN page_links l ON l.target IN (f.id, f.stored)
+             JOIN pages p ON p.rid = l.page_rid
+             WHERE f.deleted_at IS NULL AND p.deleted_at IS NULL
+             ORDER BY f.rowid, p.rid",
+        )?;
+        let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
+        let mut out: Vec<FileUsage> = Vec::new();
+        for (file_id, page_id) in rows.flatten() {
+            match out.last_mut() {
+                Some(last) if last.file_id == file_id => last.page_ids.push(page_id),
+                _ => out.push(FileUsage { file_id, page_ids: vec![page_id] }),
             }
         }
         Ok(out)
@@ -353,5 +350,8 @@ mod tests {
         names.sort();
         assert_eq!(names, vec!["Beach.png", "Image.jpg"]);
         assert_eq!(db.list_pages().unwrap().len(), 1, "no welcome page is added on upgrade");
+        // Bodies moved to their own table on the way up, and were indexed.
+        assert!(db.get_page("p1").unwrap().content.contains("abc123.png"));
+        assert_eq!(db.file_usage().unwrap()[0].page_ids, vec!["p1"]);
     }
 }

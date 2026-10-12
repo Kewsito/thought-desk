@@ -13,6 +13,7 @@
   import { colorVar } from '../colors';
   import { comboKeys, shortcuts, type ShortcutId } from '../shortcuts.svelte';
   import { memory } from '../memory.svelte';
+  import { Progressive, sliceKeeping } from '../progressive.svelte';
   import { ui } from '../ui.svelte';
 
   const MIN = 208;
@@ -21,6 +22,10 @@
 
   let resizing = $state(false);
   let rootDrop = $state(false);
+
+  // Thousands of top-level pages render as you scroll to them.
+  const lazyRoots = new Progressive(100, 200);
+  const roots = $derived(sliceKeeping(store.roots, lazyRoots.limit, (p) => store.openPath.has(p.id)));
 
   function startResize(e: PointerEvent) {
     e.preventDefault();
@@ -238,9 +243,10 @@
       </div>
       {#if !prefs.sections.pages}
         <div role="tree" aria-label="Pages">
-          {#each store.roots as p (p.id)}
+          {#each roots as p (p.id)}
             <TreeItem page={p} />
           {/each}
+          {#if roots.length < store.roots.length}<div {@attach lazyRoots.more}></div>{/if}
         </div>
         {#if store.loaded && store.roots.length === 0}
           <button class="row-btn muted" onclick={() => void store.create(null)}>

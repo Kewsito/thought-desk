@@ -48,15 +48,33 @@
     void run('');
   });
 
+  // One search at a time: typing while one runs only remembers the latest
+  // query, so fast typing in a big workspace never queues up stale searches.
+  let busy = false;
+  let next: string | null = null;
+
   async function run(q: string) {
+    if (busy) {
+      next = q;
+      return;
+    }
+    busy = true;
     const mine = ++seq;
     try {
       const result = await api.search(q, 40);
-      if (mine !== seq) return;
-      hits = result;
-      selected = 0;
+      if (mine === seq && next === null) {
+        hits = result;
+        selected = 0;
+      }
     } catch (e) {
       ui.error(e);
+    } finally {
+      busy = false;
+      if (next !== null) {
+        const q2 = next;
+        next = null;
+        void run(q2);
+      }
     }
   }
 
