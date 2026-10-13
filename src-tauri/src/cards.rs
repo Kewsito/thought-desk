@@ -30,8 +30,13 @@ pub struct Review {
 pub struct Card {
     pub page_id: String,
     pub id: String,
+    /// Plain text of each side (links read as their titles).
     pub front: String,
     pub back: String,
+    /// Each side's inline content as the editor stores it (text with its
+    /// marks, line breaks and links), so studying shows the formatting.
+    pub front_content: Value,
+    pub back_content: Value,
     /// None until it's first studied.
     pub review: Option<Review>,
 }
@@ -135,13 +140,21 @@ impl Db {
         let mut out = Vec::new();
         for (page_id, raw) in pages {
             let Ok(list) = serde_json::from_str::<Vec<(String, Value, Value)>>(&raw) else { continue };
-            for (id, front, back) in list {
-                let front = block_text(Some(&front), Some(&titles));
+            for (id, front_side, back_side) in list {
+                let front = block_text(Some(&front_side), Some(&titles));
                 if front.is_empty() {
                     continue;
                 }
-                let review = reviews.get(&(page_id.clone(), id.clone())).cloned();
-                out.push(Card { page_id: page_id.clone(), id, front, back: block_text(Some(&back), Some(&titles)), review });
+                let content = |side: &Value| side.get("content").cloned().unwrap_or_else(|| Value::Array(Vec::new()));
+                out.push(Card {
+                    page_id: page_id.clone(),
+                    review: reviews.get(&(page_id.clone(), id.clone())).cloned(),
+                    id,
+                    front,
+                    back: block_text(Some(&back_side), Some(&titles)),
+                    front_content: content(&front_side),
+                    back_content: content(&back_side),
+                });
             }
         }
         Ok(out)
@@ -174,6 +187,13 @@ impl Db {
                reps = excluded.reps, lapses = excluded.lapses, reviewed_at = excluded.reviewed_at",
             params![page_id, card_id, review.due, review.interval, review.ease, review.reps, review.lapses, now()],
         )?;
+        Ok(())
+    }
+
+    /// Forgets one card's progress (undoing its first review makes it new).
+    pub fn forget_review(&self, page_id: &str, card_id: &str) -> Result<()> {
+        self.conn()
+            .execute("DELETE FROM card_reviews WHERE page_id = ?1 AND card_id = ?2", [page_id, card_id])?;
         Ok(())
     }
 
@@ -241,6 +261,10 @@ mod tests {
         assert!(db.save_review(&page.id, "c1", &Review { ease: 9.0, ..review.clone() }).is_err());
         assert!(db.save_review(&page.id, "c1", &Review { due: "soon".into(), ..review.clone() }).is_err());
         assert!(db.save_review("nope", "c1", &review).is_err());
+
+        db.forget_review(&page.id, "c1").unwrap();
+        assert!(db.list_cards().unwrap()[0].review.is_none(), "one card forgotten");
+        assert_eq!(db.list_cards().unwrap()[1].front_content[0]["text"], "Osmosis", "content keeps its nodes");
 
         db.reset_reviews(&page.id).unwrap();
         assert!(db.list_cards().unwrap()[0].review.is_none());

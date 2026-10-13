@@ -85,6 +85,8 @@ export const api = {
   listCards: () => invoke<Card[]>('list_cards'),
   listDecks: (today: string) => invoke<Deck[]>('list_decks', { today }),
   saveReview: (pageId: string, cardId: string, review: CardReview) => invoke<void>('save_review', { pageId, cardId, review }),
+  /** Undoes a card's only review (it's new again). */
+  forgetReview: (pageId: string, cardId: string) => invoke<void>('forget_review', { pageId, cardId }),
   resetReviews: (pageId: string) => invoke<void>('reset_reviews', { pageId }),
   /** Saves an exported document to Downloads; returns its path. */
   exportDocument: (name: string, ext: 'docx' | 'md' | 'html', bytes: Uint8Array) =>

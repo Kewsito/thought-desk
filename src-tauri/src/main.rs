@@ -138,6 +138,7 @@ fn main() {
             commands::list_cards,
             commands::list_decks,
             commands::save_review,
+            commands::forget_review,
             commands::reset_reviews,
             commands::trash_item,
             commands::restore_item,

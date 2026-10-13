@@ -96,6 +96,17 @@ class Cards {
     return review;
   }
 
+  /** Undoes an answer: `card` is the card as it was before (its old progress). */
+  async restore(card: Card) {
+    try {
+      if (card.review) await api.saveReview(card.pageId, card.id, card.review);
+      else await api.forgetReview(card.pageId, card.id);
+    } catch (e) {
+      ui.error(e);
+    }
+    reloadSoon(300);
+  }
+
   async reset(pageId: string) {
     const page = store.byId.get(pageId);
     const ok = await ui.confirm({

@@ -165,12 +165,24 @@ export interface Deck {
   mastered: number;
 }
 
+/** Inline editor content (text with marks, line breaks, links), read only. */
+export interface RichNode {
+  type: string;
+  text?: string;
+  marks?: { type: string; attrs?: Record<string, unknown> }[];
+  attrs?: Record<string, unknown>;
+  content?: RichNode[];
+}
+
 /** A flashcard block in a page. */
 export interface Card {
   pageId: string;
   id: string;
   front: string;
   back: string;
+  /** Each side as written, with its formatting. */
+  frontContent: RichNode[];
+  backContent: RichNode[];
   review: CardReview | null;
 }
 

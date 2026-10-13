@@ -49,6 +49,10 @@ interface Stored {
   calendarMode: CalendarMode;
   filesLayout: FilesLayout;
   assignmentScope: AssignmentScope;
+  /** Study cards in a random order. */
+  studyShuffle: boolean;
+  /** Study answer first: show the back, recall the front. */
+  studyReverse: boolean;
   /** System-wide Quick Capture shortcut (Ctrl+Shift+Space). */
   globalCapture: boolean;
   /** The page captured notes and to-dos go to. */
@@ -93,6 +97,8 @@ const defaults: Stored = {
   calendarMode: 'month',
   filesLayout: 'grid',
   assignmentScope: 'upcoming',
+  studyShuffle: false,
+  studyReverse: false,
   globalCapture: true,
   inboxId: null,
   remindAssignments: 'evening',
@@ -137,6 +143,8 @@ class Prefs {
   calendarMode = $state<CalendarMode>(this.#initial.calendarMode);
   filesLayout = $state<FilesLayout>(this.#initial.filesLayout);
   assignmentScope = $state<AssignmentScope>(this.#initial.assignmentScope);
+  studyShuffle = $state(this.#initial.studyShuffle);
+  studyReverse = $state(this.#initial.studyReverse);
   globalCapture = $state(this.#initial.globalCapture);
   inboxId = $state<string | null>(this.#initial.inboxId);
   remindAssignments = $state<RemindAssignments>(this.#initial.remindAssignments);
@@ -172,6 +180,8 @@ class Prefs {
       calendarMode: this.calendarMode,
       filesLayout: this.filesLayout,
       assignmentScope: this.assignmentScope,
+      studyShuffle: this.studyShuffle,
+      studyReverse: this.studyReverse,
       globalCapture: this.globalCapture,
       inboxId: this.inboxId,
       remindAssignments: this.remindAssignments,

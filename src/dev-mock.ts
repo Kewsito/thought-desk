@@ -351,7 +351,8 @@ function mockCards(): any[] {
       if (!c.attrs?.id || !front) return;
       const rv = planner.reviews.find((x) => x.pageId === r.id && x.cardId === c.attrs.id);
       const review = rv ? { due: rv.due, interval: rv.interval, ease: rv.ease, reps: rv.reps, lapses: rv.lapses } : null;
-      out.push({ pageId: r.id, id: c.attrs.id, front, back: side(1), review });
+      const content = (i: number) => c.content?.[i]?.content ?? [];
+      out.push({ pageId: r.id, id: c.attrs.id, front, back: side(1), frontContent: content(0), backContent: content(1), review });
     });
   }
   return out;
@@ -590,6 +591,9 @@ mockIPC((cmd, payload) => {
       case 'save_review':
         planner.reviews = planner.reviews.filter((x) => !(x.pageId === a.pageId && x.cardId === a.cardId));
         planner.reviews.push({ pageId: a.pageId, cardId: a.cardId, ...a.review });
+        return null;
+      case 'forget_review':
+        planner.reviews = planner.reviews.filter((x) => !(x.pageId === a.pageId && x.cardId === a.cardId));
         return null;
       case 'reset_reviews':
         planner.reviews = planner.reviews.filter((x) => x.pageId !== a.pageId);

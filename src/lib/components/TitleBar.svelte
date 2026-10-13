@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import Icon from './Icon.svelte';
   import WindowControls from './WindowControls.svelte';
+  import { drag } from './TreeItem.svelte';
   import { prefs } from '../prefs.svelte';
   import { store } from '../store.svelte';
   import { ui } from '../ui.svelte';
@@ -63,6 +64,24 @@
       planner.events.filter((e) => e.deletedAt).length +
       library.files.filter((f) => f.deletedAt).length,
   );
+
+  // Drag a page from the sidebar onto Trash to delete it (with Undo, as
+  // from its menu). While a page is dragged, the button shows it's a target.
+  let trashHover = $state(false);
+  function onTrashDragOver(e: DragEvent) {
+    if (!drag.id) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    trashHover = true;
+  }
+  function onTrashDrop(e: DragEvent) {
+    const id = drag.id;
+    trashHover = false;
+    if (!id) return;
+    e.preventDefault();
+    drag.id = null;
+    void store.trashPage(id);
+  }
 
   let moreOpen = $state(false);
   function openMore(e: MouseEvent) {
@@ -143,7 +162,12 @@
     <button
       class="icon-btn trash"
       class:open={ui.trashOpen}
+      class:armed={!!drag.id}
+      class:target={trashHover}
       onclick={() => (ui.trashOpen = true)}
+      ondragover={onTrashDragOver}
+      ondragleave={() => (trashHover = false)}
+      ondrop={onTrashDrop}
       data-tip={trashCount ? `Trash · ${trashCount} item${trashCount === 1 ? '' : 's'}` : 'Trash'}
       aria-label="Trash"
     >
@@ -287,6 +311,20 @@
   /* The Trash count sits on the can's shoulder, like a Dock badge. */
   .trash {
     position: relative;
+    transition:
+      background-color var(--dur-fast) var(--ease),
+      color var(--dur-fast) var(--ease),
+      transform var(--dur-fast) var(--ease);
+  }
+  /* A page is being dragged: Trash is a place to drop it. */
+  .trash.armed {
+    background: var(--fill);
+    color: var(--text);
+  }
+  .trash.target {
+    background: color-mix(in srgb, var(--danger) 16%, transparent);
+    color: var(--danger);
+    transform: scale(1.12);
   }
   .badge {
     position: absolute;

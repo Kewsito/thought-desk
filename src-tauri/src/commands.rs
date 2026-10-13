@@ -407,6 +407,12 @@ pub fn save_review(db: State<Db>, page_id: String, card_id: String, review: Revi
     db.save_review(&page_id, &card_id, &review)
 }
 
+/// Undoes a card's only review: it's new again.
+#[tauri::command(async)]
+pub fn forget_review(db: State<Db>, page_id: String, card_id: String) -> Result<()> {
+    db.forget_review(&page_id, &card_id)
+}
+
 #[tauri::command(async)]
 pub fn reset_reviews(db: State<Db>, page_id: String) -> Result<()> {
     db.reset_reviews(&page_id)
