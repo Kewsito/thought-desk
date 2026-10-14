@@ -1,6 +1,6 @@
 # Thought Desk
 
-A fast, local-first notes workspace in the spirit of Notion: nested pages, a block editor, full-text search, plus assignments, a calendar and a file library that all link together. It has a custom title bar, a vertical sidebar and a black-and-white look with optional accent colors. Built with **Rust + Tauri 2 + TypeScript** (Svelte 5 components).
+A fast, local-first notes workspace in the spirit of Notion: nested pages, a block editor, full-text search, databases, plus assignments, a calendar and a file library that all link together. It has a custom title bar, a vertical sidebar and a black-and-white look with optional accent colors. Built with **Rust + Tauri 2 + TypeScript** (Svelte 5 components).
 
 ## Why it's light
 
@@ -36,7 +36,12 @@ Tested against a workspace of 7,500 pages (a 2 MB book among them), 2,000 files,
 - **Block handle:** hover a block, drag `⋮⋮` to move it, click it for *Turn into / Duplicate / Move / Delete*, or press `+` to insert below.
 - **Formatting bubble** on selection: bold, italic, underline, strike, code, highlight, links, and turn into.
 - **Pages:** nested pages, sub-page blocks (`/page`), and inline page links (`@`) that stay in sync when pages are renamed.
-- **Sidebar:** drag pages to reorder or nest, favorites, collapsible sections, resizable width (double-click the edge to reset).
+- **Sidebar:** drag pages to reorder or nest, favorites, a Databases section, collapsible sections, resizable width (double-click the edge to reset).
+- **Databases:** rows you can see as a **table, board, gallery, list, calendar or chart**, each view with its own filters, sorts, groups and shown properties. Start empty or from nine templates (Tasks, Projects, Reading list, Habit tracker, Study log, Budget, Applications, People, Recipes), import a `.csv` (column types are guessed: numbers, dates, checkboxes, choices, links), or paste rows straight from a spreadsheet. Every row is also a page, with room for notes under its properties; the first picture in it becomes its gallery cover.
+- **Properties:** text, number (plain, commas, percent, five currencies; shown as a figure, a bar or a ring), select, multi-select, status (to do / in progress / done stages), date (ranges and times, typed as "Friday" or "tomorrow 3pm"), checkbox, URL, email, phone, **course**, **tags**, **files** from the library, auto ID, created and edited times, **relations** (two-way, to the same or another database) and **rollups** (sum, average, count, percent done…). Changing a property's type converts its values.
+- **Formulas:** `{Price} * {Qty}` or `if({Done}, "✓", "")`, with 53 functions for logic, math, text, dates and lists. The editor autocompletes properties and functions, explains each one, and shows the result for a real row as you type; renaming a property updates the formulas that use it.
+- **Fast to work in:** a spreadsheet-like table (arrow keys, `Enter` or just start typing to edit, `Tab`, `Shift`+arrows to select, `Ctrl+C` / `Ctrl+V`, `Ctrl+D` fills down, `Delete` clears, `Ctrl+Enter` opens the row), column summaries (sum, average, count, percent checked…), drag cards between board columns, drag rows to reorder, filters for every type, with dates like "this week" or "within the next 7 days", and its own undo and redo.
+- **Databases fit in:** `/database` puts a new one inside a page and `/linked database` shows an existing one there, with its own view. Rows with a date show on the Calendar and can be dragged to another day, `Ctrl+K` finds rows by any value, course, tag and file properties use the app's own courses, tags and library, and databases share Trash, Favorites, Duplicate and CSV export with pages.
 - **Home:** the start screen: today's events, what's due soon, open to-dos from every page, recent pages and files, and your tags.
 - **Quick Capture:** `Ctrl+Shift+Space` (even while the app is in the background) or the box on Home. Save a to-do or a note to your Inbox page, or an assignment or event straight to the planner.
 - **Tags** on pages, assignments, events and files, with colors, a sidebar section, a page per tag, and `#tag` search.
@@ -69,8 +74,6 @@ Tested against a workspace of 7,500 pages (a 2 MB book among them), 2,000 files,
 | `Ctrl+N` | New page |
 | `Ctrl+Shift+Space` | Quick Capture (system-wide when enabled in Settings) |
 | `Ctrl+1` … `Ctrl+5` | Home / Assignments / Calendar / Files / Flashcards |
-
-These are the defaults; every app shortcut can be changed in Settings → Keyboard Shortcuts.
 | `←` / `→`, `T` | Calendar: previous or next month or week, today |
 | `Ctrl+\` | Toggle sidebar |
 | `Alt+←` / `Alt+→`, mouse back/forward | Navigate history |
@@ -78,6 +81,9 @@ These are the defaults; every app shortcut can be changed in Settings → Keyboa
 | `Ctrl+,` | Settings |
 | `Ctrl+D` | Duplicate block |
 | `Ctrl+Click` on a link | Open in browser |
+| `Ctrl+Z` / `Ctrl+Y` in a database | Undo / redo database edits |
+
+These are the defaults; every app shortcut can be changed in Settings → Keyboard Shortcuts.
 
 ## Develop
 
@@ -104,6 +110,8 @@ Everything lives in one SQLite database (`thoughtdesk.db`, WAL mode) plus a `fil
 
 Set `THOUGHTDESK_DATA_DIR` to use a different folder, e.g. a portable copy on a USB drive.
 
+**Ready for sync.** Databases are stored so that two copies can later be merged without a server deciding who wins. Each install has a device id; every edit to a cell, property, view or row's title, icon, place or deletion carries a hybrid logical clock stamp, and changed records are queued in an outbox. Merging keeps the newest stamp per cell, so two people editing different cells of the same row both keep their edits; deleted properties and views stay as tombstones so a deletion can't be undone by an older copy. Row order uses fractional keys, so moving a row never renumbers the others. The `sync_pending` / `sync_apply` / `sync_sent` commands are the hooks an online service will use (`src-tauri/src/sync.rs`, `databases.rs`). Page bodies and the rest of the workspace aren't stamped yet.
+
 ## Layout
 
 ```
@@ -113,6 +121,9 @@ src/                     TypeScript + Svelte UI
   lib/planner.svelte.ts  courses, assignments and events
   lib/library.svelte.ts  the file library
   lib/tags.svelte.ts     tags; lib/todos.svelte.ts to-dos rolled up from pages; lib/capture.ts Quick Capture
+  lib/databases.svelte.ts databases: rows, values, saving, undo, import and export
+  lib/db/                database views (table, board, gallery, list, calendar, chart), pickers, formula
+                         language, query engine (filters, sorts, groups), templates, CSV, order keys
   lib/editor/            TipTap editor: slash menu, @-links, block handle, callouts, file blocks…
   lib/views/             Home, Assignments, Calendar (month and week), Files and tag pages
   lib/sheets/            assignment and event editors, file preview
@@ -126,6 +137,8 @@ src-tauri/src/
   organize.rs            tags, backlinks, to-dos rolled up from pages (+ tests)
   commands.rs            Tauri commands
   cards.rs               flashcards: decks, reviews (+ tests)
+  databases.rs           database schemas, properties, views, rows, merging copies (+ tests)
+  sync.rs                device id, hybrid logical clocks, outbox
   files.rs               `tdfile://` protocol (byte ranges), stray-file cleanup
   stress.rs              heavy-workspace benchmark (`cargo test --release stress -- --ignored`)
   memory.rs              WebView2 suspend/trim while minimized, idle, or after Settings

@@ -1401,8 +1401,9 @@ export function firstImage(content: string): string | null {
 }
 
 if (typeof window !== 'undefined') {
-  // Pages copied elsewhere (a row duplicated from its menu) bring their values.
-  window.addEventListener('td:pages-copied', () => void databases.reloadRows());
+  // Pages copied elsewhere (a row, or a whole database, duplicated from its
+  // menu) bring their values and schema.
+  window.addEventListener('td:pages-copied', () => void databases.flush().then(() => databases.load()));
   // A row's page saved: its first image may have changed.
   window.addEventListener('td:page-saved', (e) => {
     const { id, content } = (e as CustomEvent<{ id: string; content: string }>).detail;

@@ -44,7 +44,7 @@
     align-items: center;
     justify-content: center;
     gap: 6px;
-    min-height: 120px;
+    min-height: 72px;
     border-radius: var(--r-md);
     font-size: var(--fs-ui);
     color: var(--text-3);

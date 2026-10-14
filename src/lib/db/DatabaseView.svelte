@@ -5,7 +5,7 @@
    * a page of its own, or inside another page (embedded: a smaller header,
    * and the view choice belongs to the block).
    */
-  import { onMount, tick } from 'svelte';
+  import { tick } from 'svelte';
   import Icon from '../components/Icon.svelte';
   import Popover from './Popover.svelte';
   import TableView from './TableView.svelte';
@@ -60,9 +60,16 @@
   let titleEl = $state<HTMLHeadingElement>();
   let descEl = $state<HTMLParagraphElement>();
 
-  onMount(() => {
-    if (titleEl) titleEl.textContent = meta?.title ?? '';
-    if (descEl) descEl.textContent = schema?.description ?? '';
+  // Fill the title and description as soon as they're on screen (a fresh
+  // copy's schema arrives just after its page), and follow changes made
+  // elsewhere, but never while they're being typed here.
+  $effect(() => {
+    const text = meta?.title ?? '';
+    if (titleEl && document.activeElement !== titleEl && titleEl.textContent !== text) titleEl.textContent = text;
+  });
+  $effect(() => {
+    const text = schema?.description ?? '';
+    if (descEl && document.activeElement !== descEl && descEl.textContent !== text) descEl.textContent = text;
   });
 
   $effect(() => {
