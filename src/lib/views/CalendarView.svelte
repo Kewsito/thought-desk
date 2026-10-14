@@ -234,7 +234,7 @@
     padding-right: clamp(24px, 4vw, 48px);
   }
   .year {
-    font-weight: 400;
+    font-weight: var(--fw-400);
     color: var(--text-3);
   }
   .nav {

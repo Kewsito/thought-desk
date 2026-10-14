@@ -76,6 +76,7 @@
 
   /* Weights. Light-on-dark text renders optically heavier, so dark mode
      trims each step a little (Inter is variable, so any value works). */
+  --fw-400: 450;
   --fw-500: 500;
   --fw-550: 550;
   --fw-600: 600;
@@ -92,7 +93,7 @@
 
   --text: #1d1d1f;
   --text-2: #6e6e73;
-  --text-3: #a1a1a6;
+  --text-3: #808085;
   --text-4: #c7c7cc;
   --text-sidebar: #2c2c2e;
 
@@ -172,6 +173,7 @@
 }
 
 :root[data-theme='dark'] {
+  --fw-400: 400;
   --fw-500: 470;
   --fw-550: 520;
   --fw-600: 570;
@@ -238,7 +240,7 @@
   --bg-grouped: #f4efe6;
   --text: #2b2620;
   --text-2: #6f665b;
-  --text-3: #a3998b;
+  --text-3: #847a6e;
   --text-4: #cdc3b4;
   --text-sidebar: #3a342c;
   --separator: #e8e1d5;
@@ -264,7 +266,7 @@
   --bg-grouped: #eef2f7;
   --text: #1b2333;
   --text-2: #5c6a80;
-  --text-3: #93a0b3;
+  --text-3: #717f93;
   --text-4: #c2cad7;
   --text-sidebar: #263042;
   --separator: #dee4ed;
@@ -290,7 +292,7 @@
   --bg-grouped: #edf2e9;
   --text: #1e291d;
   --text-2: #5e6e5a;
-  --text-3: #94a28f;
+  --text-3: #73826e;
   --text-4: #c3cebd;
   --text-sidebar: #2a3628;
   --separator: #dee6d7;
@@ -316,7 +318,7 @@
   --bg-grouped: #f7eded;
   --text: #2c1f22;
   --text-2: #775f64;
-  --text-3: #ad959a;
+  --text-3: #8f777c;
   --text-4: #d7c4c7;
   --text-sidebar: #3b2b2e;
   --separator: #eddcde;
@@ -342,7 +344,7 @@
   --bg-grouped: #efedf9;
   --text: #211e34;
   --text-2: #67618b;
-  --text-3: #9d97bd;
+  --text-3: #7d779f;
   --text-4: #cbc7df;
   --text-sidebar: #2d2944;
   --separator: #e1ddf2;
@@ -372,7 +374,7 @@
   --bg-grouped: oklch(0.957 calc(0.036 * var(--tc)) var(--th));
   --text: oklch(0.25 calc(0.045 * var(--tc)) var(--th));
   --text-2: oklch(0.5 calc(0.05 * var(--tc)) var(--th));
-  --text-3: oklch(0.69 calc(0.045 * var(--tc)) var(--th));
+  --text-3: oklch(0.6 calc(0.045 * var(--tc)) var(--th));
   --text-4: oklch(0.83 calc(0.035 * var(--tc)) var(--th));
   --text-sidebar: oklch(0.31 calc(0.045 * var(--tc)) var(--th));
   --separator: oklch(0.915 calc(0.03 * var(--tc)) var(--th));
@@ -459,6 +461,7 @@ body {
   color: var(--text);
   font-family: var(--font-ui);
   font-size: var(--fs-body-ui);
+  font-weight: var(--fw-400);
   line-height: 1.45;
   font-optical-sizing: auto;
   -webkit-font-smoothing: antialiased;
@@ -770,7 +773,7 @@ kbd {
 }
 .row-label small {
   font-size: var(--fs-footnote);
-  font-weight: 400;
+  font-weight: var(--fw-400);
   color: var(--text-3);
 }
 .group-note {
@@ -1011,6 +1014,7 @@ input[type='time']::-webkit-calendar-picker-indicator {
 .prose {
   font-family: var(--font-page);
   font-size: 16px;
+  font-weight: 400;
   line-height: 1.625;
   letter-spacing: -0.006em;
   color: var(--text);

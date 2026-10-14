@@ -190,7 +190,7 @@
     color: var(--text-4);
   }
   .missing .chip-title {
-    font-weight: 400;
+    font-weight: var(--fw-400);
     text-decoration-line: line-through;
   }
   .missing:hover {
