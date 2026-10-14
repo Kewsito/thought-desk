@@ -6,6 +6,7 @@
 //! the main thread.
 
 use crate::cards::{Card, Deck, Review};
+use crate::databases::{Change, CreatedDatabase, CreatedRow, Database, DatabaseInput, NewRow, Row, RowChange, SchemaItem};
 use crate::db::{Db, Error, Page, PageMeta, PagePatch, Result, SearchHit, Table};
 use crate::library::{FileMeta, FilePatch, FileUsage};
 use crate::organize::{Tag, Todo};
@@ -371,7 +372,7 @@ pub fn export_document(app: AppHandle, request: tauri::ipc::Request<'_>) -> Resu
         request.headers().get(key).and_then(|v| v.to_str().ok()).map(percent_decode).unwrap_or_default()
     };
     let ext = header("x-ext");
-    if !matches!(ext.as_str(), "docx" | "md" | "html") {
+    if !matches!(ext.as_str(), "docx" | "md" | "html" | "csv") {
         return Err(Error("Unsupported export format".into()));
     }
     let dir = app.path().download_dir()?;
@@ -416,6 +417,81 @@ pub fn forget_review(db: State<Db>, page_id: String, card_id: String) -> Result<
 #[tauri::command(async)]
 pub fn reset_reviews(db: State<Db>, page_id: String) -> Result<()> {
     db.reset_reviews(&page_id)
+}
+
+// ----------------------------------------------------------------- databases
+
+#[tauri::command(async)]
+pub fn list_databases(db: State<Db>) -> Result<Vec<Database>> {
+    db.list_databases()
+}
+
+#[tauri::command(async)]
+pub fn list_rows(db: State<Db>) -> Result<Vec<Row>> {
+    db.list_rows()
+}
+
+#[tauri::command(async)]
+pub fn create_database(
+    db: State<Db>,
+    parent_id: Option<String>,
+    title: String,
+    icon: String,
+    input: DatabaseInput,
+) -> Result<CreatedDatabase> {
+    db.create_database(parent_id.as_deref(), &title, &icon, input)
+}
+
+#[tauri::command(async)]
+pub fn update_database(db: State<Db>, id: String, description: String) -> Result<()> {
+    db.update_database(&id, &description)
+}
+
+#[tauri::command(async)]
+pub fn save_property(db: State<Db>, db_id: String, property: SchemaItem) -> Result<()> {
+    db.save_property(&db_id, property)
+}
+
+#[tauri::command(async)]
+pub fn delete_property(db: State<Db>, db_id: String, id: String) -> Result<()> {
+    db.delete_property(&db_id, &id)
+}
+
+#[tauri::command(async)]
+pub fn save_view(db: State<Db>, db_id: String, view: SchemaItem) -> Result<()> {
+    db.save_view(&db_id, view)
+}
+
+#[tauri::command(async)]
+pub fn delete_view(db: State<Db>, db_id: String, id: String) -> Result<()> {
+    db.delete_view(&db_id, &id)
+}
+
+#[tauri::command(async)]
+pub fn create_rows(db: State<Db>, db_id: String, rows: Vec<NewRow>) -> Result<Vec<CreatedRow>> {
+    db.create_rows(&db_id, rows)
+}
+
+/// Sets row values and order; returns the rows' new "last edited" time.
+#[tauri::command(async)]
+pub fn update_rows(db: State<Db>, changes: Vec<RowChange>) -> Result<i64> {
+    db.update_rows(changes)
+}
+
+/// What changed since the last sync (for the sync service, when there is one).
+#[tauri::command(async)]
+pub fn sync_pending(db: State<Db>) -> Result<Vec<Change>> {
+    db.sync_pending()
+}
+
+#[tauri::command(async)]
+pub fn sync_sent(db: State<Db>, clock: String) -> Result<()> {
+    db.sync_sent(&clock)
+}
+
+#[tauri::command(async)]
+pub fn sync_apply(db: State<Db>, changes: Vec<Change>) -> Result<()> {
+    db.sync_apply(changes)
 }
 
 #[derive(Serialize)]

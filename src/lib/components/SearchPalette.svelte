@@ -2,6 +2,7 @@
   import { colorVar } from '../colors';
   import { importCalendar } from '../ics-import.svelte';
   import { cards } from '../cards.svelte';
+  import { databases } from '../databases.svelte';
   import { onMount } from 'svelte';
   import Icon from './Icon.svelte';
   import Modal from './Modal.svelte';
@@ -116,6 +117,8 @@
     { title: 'Study Flashcards', icon: 'cards', keywords: 'review due cards learn', run: () => void cards.study(null, 'All Decks') },
     { title: 'Import Calendar', icon: 'download', keywords: 'ics canvas google outlook schedule timetable', run: () => void importCalendar() },
     { title: 'Files', icon: 'files', keywords: 'library attachments documents', run: () => store.go('files') },
+    { title: 'New Database', icon: 'database', keywords: 'table board tracker spreadsheet template kanban list', run: () => (ui.newDatabase = { parentId: null }) },
+    { title: 'Import a Spreadsheet', icon: 'upload', keywords: 'csv excel sheets database table import', run: () => (ui.newDatabase = { parentId: null }) },
     { title: 'Settings', icon: 'settings', keywords: 'preferences theme accent color', run: () => (ui.settingsOpen = true) },
     { title: 'Trash', icon: 'trash', keywords: 'deleted restore', run: () => (ui.trashOpen = true) },
   ];
@@ -129,7 +132,7 @@
         group: q ? 'Pages' : 'Recently Edited',
         title: hit.title || 'Untitled',
         emoji: hit.icon || undefined,
-        icon: hit.icon ? undefined : 'page',
+        icon: hit.icon ? undefined : store.byId.get(hit.id)?.kind === 'database' ? 'database' : 'page',
         path: pathOf(hit.id) || undefined,
         snippet: hit.snippet || undefined,
         meta: relativeTime(hit.updatedAt),
@@ -194,6 +197,23 @@
       ),
     );
     out.push(...pages);
+    // Rows found by their values ("Tolkien" finds the book by its author).
+    out.push(
+      ...databases
+        .findRows(q, 5)
+        .filter(({ row }) => !hits.some((h) => h.id === row.id))
+        .map(
+          ({ row, prop, text }): Row => ({
+            key: `r:${row.id}`,
+            group: 'Database Rows',
+            title: store.byId.get(row.id)?.title || 'Untitled',
+            emoji: store.byId.get(row.id)?.icon || undefined,
+            icon: store.byId.get(row.id)?.icon ? undefined : 'page',
+            path: `${store.byId.get(row.dbId)?.title || 'Untitled database'} · ${prop.name}: ${text}`,
+            run: () => store.open(row.id),
+          }),
+        ),
+    );
     const tagWords = (list: string[]) => list.map((t) => `#${t} ${t}`).join(' ');
     const assignments = planner.live.map((a) => ({
       a,
@@ -237,6 +257,7 @@
     out.push(...rank(GOTO, q, 3).map((g): Row => ({ key: `g:${g.title}`, group: 'Go To', title: g.title, icon: g.icon, run: g.run })));
     out.push(
       { key: 'new-page', group: 'Create', title: `New page “${q}”`, icon: 'page-plus', meta: 'Page', run: () => void store.create(null, { title: q }) },
+      { key: 'new-database', group: 'Create', title: `New database “${q}”`, icon: 'database', meta: 'Database', run: () => void databases.create({ title: q }) },
       {
         key: 'new-assignment',
         group: 'Create',

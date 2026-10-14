@@ -5,6 +5,7 @@ import { clock } from '../clock.svelte';
 import { planner } from '../planner.svelte';
 import { store } from '../store.svelte';
 import { ui } from '../ui.svelte';
+import { databases } from '../databases.svelte';
 import { insertFiles, insertImage, pickImageFile } from './images';
 import { rank, suggestionRenderer, type MenuEntry } from './suggestion.svelte';
 
@@ -223,6 +224,53 @@ export const SLASH_ITEMS: MenuEntry[] = [
         e.chain().focus().insertContent({ type: 'pageLink', attrs: { id: meta.id } }).run();
         store.open(meta.id);
         ui.focusTitle = meta.id;
+      });
+    },
+  },
+  {
+    id: 'database',
+    group: 'Pages',
+    title: 'Database',
+    description: 'A table, board or tracker right here',
+    icon: 'database',
+    keywords: 'table board kanban tracker list gallery spreadsheet template notion inline',
+    run: (e, r) => {
+      clear(e, r).run();
+      ui.newDatabase = {
+        parentId: store.currentId,
+        onCreated: (id) => {
+          if (!e.isDestroyed) e.chain().focus().insertContent([{ type: 'databaseBlock', attrs: { id } }, { type: 'paragraph' }]).run();
+        },
+      };
+    },
+  },
+  {
+    id: 'linked-database',
+    group: 'Pages',
+    title: 'Linked Database',
+    description: 'Show a database you already have',
+    icon: 'database',
+    keywords: 'existing embed view linked table board',
+    run: (e, r) => {
+      clear(e, r).run();
+      const rect = caretRect(e);
+      const list = databases.list;
+      ui.openMenu({
+        x: rect.left,
+        y: rect.bottom + 6,
+        items: list.length
+          ? [
+              { header: 'Show a database' },
+              ...list.map((d) => ({
+                label: d.title || 'Untitled database',
+                icon: d.icon ? undefined : 'database',
+                hint: d.icon || undefined,
+                action: () => {
+                  if (!e.isDestroyed) e.chain().focus().insertContent([{ type: 'databaseBlock', attrs: { id: d.id } }, { type: 'paragraph' }]).run();
+                },
+              })),
+            ]
+          : [{ label: 'No databases yet: make one', icon: 'plus', action: () => (ui.newDatabase = { parentId: null }) }],
       });
     },
   },

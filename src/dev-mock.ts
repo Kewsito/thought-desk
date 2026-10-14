@@ -4,7 +4,8 @@
  */
 
 import { mockConvertFileSrc, mockIPC, mockWindows } from '@tauri-apps/api/mocks';
-import type { Assignment, CalEvent, CardReview, Course, FileMeta, OccurrencePage, PageMeta, Tag } from './lib/types';
+import type { Assignment, CalEvent, CardReview, CellValue, Course, DatabaseSchema, DbRow, FileMeta, OccurrencePage, PageMeta, Tag } from './lib/types';
+import { TEMPLATES } from './lib/db/templates';
 
 type Row = PageMeta & { content: string; text: string };
 
@@ -17,7 +18,7 @@ const load = (): Row[] => {
   }
 };
 // Data saved by older previews has no tags yet.
-let rows: Row[] = load().map((r) => ({ ...r, tags: r.tags ?? [] }));
+let rows: Row[] = load().map((r) => ({ ...r, tags: r.tags ?? [], kind: r.kind ?? '' }));
 const persist = () => localStorage.setItem(KEY, JSON.stringify(rows));
 
 function make(parentId: string | null, title = '', icon = '', content = ''): Row {
@@ -34,6 +35,7 @@ function make(parentId: string | null, title = '', icon = '', content = ''): Row
     updatedAt: ts,
     deletedAt: null,
     tags: [],
+    kind: '',
     content,
     text: '',
   };
@@ -358,6 +360,79 @@ function mockCards(): any[] {
   return out;
 }
 
+// ------------------------------------------------------------------ databases
+
+interface MockDb {
+  schemas: Record<string, DatabaseSchema & { nextNumber: number }>;
+  rows: Record<string, { sortKey: string; number: number; cells: Record<string, CellValue> }>;
+}
+const DB_KEY = 'thoughtdesk.devmock.databases.v1';
+const dbData: MockDb = (() => {
+  try {
+    return JSON.parse(localStorage.getItem(DB_KEY) ?? '') as MockDb;
+  } catch {
+    return { schemas: {}, rows: {} };
+  }
+})();
+const persistDb = () => localStorage.setItem(DB_KEY, JSON.stringify(dbData));
+const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
+const mockRow = (id: string): DbRow => {
+  const r = dbData.rows[id];
+  const page = rows.find((x) => x.id === id);
+  let cover: string | null = null;
+  try {
+    const walk = (n: any): string | null => (n?.type === 'image' ? n.attrs?.src : (n?.content ?? []).map(walk).find(Boolean)) ?? null;
+    if (page?.content.includes('"image"')) cover = walk(JSON.parse(page.content));
+  } catch {
+    /* an HTML page */
+  }
+  return { id, dbId: page?.parentId ?? '', sortKey: r.sortKey, number: r.number, cells: clone(r.cells), cover };
+};
+function mockCreateRows(dbId: string, list: { title: string; icon?: string; sortKey: string; cells: Record<string, CellValue> }[]) {
+  const schema = dbData.schemas[dbId];
+  if (!schema) throw 'Database not found';
+  return list.map((n) => {
+    const page = make(dbId, n.title, n.icon ?? '');
+    rows.push(page);
+    dbData.rows[page.id] = { sortKey: n.sortKey, number: schema.nextNumber++, cells: clone(n.cells ?? {}) };
+    return { page: meta(page), row: mockRow(page.id) };
+  });
+}
+function mockCreateDatabase(parentId: string | null, title: string, icon: string, input: any) {
+  const page = make(parentId, title, icon);
+  page.kind = 'database';
+  rows.push(page);
+  place(page.id, parentId, null);
+  const properties = clone(input.properties ?? []);
+  if (!properties.some((p: any) => p.id === 'title')) properties.unshift({ id: 'title', name: 'Name', type: 'title', config: {}, sortKey: 'a0' });
+  const views = clone(input.views?.length ? input.views : [{ id: 'table', name: 'Table', type: 'table', config: {}, sortKey: 'a0' }]);
+  dbData.schemas[page.id] = { id: page.id, description: input.description ?? '', properties, views, nextNumber: 1 };
+  const created = mockCreateRows(page.id, input.rows ?? []);
+  const { nextNumber: _n, ...database } = dbData.schemas[page.id];
+  return { page: meta(page), database: clone(database), rows: created };
+}
+
+// A database to look at in the preview.
+if (!Object.keys(dbData.schemas).length && !localStorage.getItem(DB_KEY)) {
+  const t = TEMPLATES.find((x) => x.key === 'reading')!;
+  const books: [string, string, string, string[], number, string?][] = [
+    ['The Left Hand of Darkness', 'Ursula K. Le Guin', 'finished', ['fiction'], 304, 'r5'],
+    ['Sapiens', 'Yuval Noah Harari', 'reading', ['history', 'science'], 443],
+    ['The Selfish Gene', 'Richard Dawkins', 'want', ['science', 'course'], 360],
+    ['Middlemarch', 'George Eliot', 'want', ['fiction', 'course'], 880],
+  ];
+  mockCreateDatabase(null, 'Reading list', '📚', {
+    properties: t.properties,
+    views: t.views,
+    rows: books.map(([title, author, status, genre, pages, rating], i) => ({
+      title,
+      sortKey: `a${i}`,
+      cells: { author, status, genre, pages, ...(rating ? { rating } : {}) },
+    })),
+  });
+  persistDb();
+}
+
 mockIPC((cmd, payload) => {
   const a = (payload ?? {}) as Record<string, any>;
   const find = (id: string) => {
@@ -367,11 +442,58 @@ mockIPC((cmd, payload) => {
   };
   try {
     switch (cmd) {
+      case 'list_databases':
+        return Object.values(dbData.schemas).map(({ nextNumber: _n, ...d }) => clone(d));
+      case 'list_rows':
+        return Object.keys(dbData.rows).filter((id) => rows.some((r) => r.id === id)).map(mockRow);
+      case 'create_database':
+        return mockCreateDatabase(a.parentId ?? null, a.title ?? '', a.icon ?? '', a.input ?? {});
+      case 'update_database':
+        dbData.schemas[a.id].description = a.description;
+        return null;
+      case 'save_property':
+      case 'save_view': {
+        const s = dbData.schemas[a.dbId];
+        const list = (cmd === 'save_property' ? s.properties : s.views) as any[];
+        const item = clone(cmd === 'save_property' ? a.property : a.view);
+        const i = list.findIndex((x) => x.id === item.id);
+        if (i >= 0) list[i] = item;
+        else list.push(item);
+        list.sort((x, y) => (x.sortKey < y.sortKey ? -1 : x.sortKey > y.sortKey ? 1 : 0));
+        return null;
+      }
+      case 'delete_property':
+      case 'delete_view': {
+        const s = dbData.schemas[a.dbId];
+        if (cmd === 'delete_property') s.properties = s.properties.filter((x) => x.id !== a.id);
+        else if (s.views.length > 1) s.views = s.views.filter((x) => x.id !== a.id);
+        return null;
+      }
+      case 'create_rows':
+        return mockCreateRows(a.dbId, a.rows ?? []);
+      case 'update_rows': {
+        const ts = Date.now();
+        for (const ch of a.changes ?? []) {
+          const r = dbData.rows[ch.id];
+          if (!r) continue;
+          if (ch.cells) {
+            for (const [k, v] of Object.entries(ch.cells)) {
+              if (v === null) delete r.cells[k];
+              else r.cells[k] = v as CellValue;
+            }
+            const page = rows.find((x) => x.id === ch.id);
+            if (page) page.updatedAt = ts;
+          }
+          if (ch.sortKey) r.sortKey = ch.sortKey;
+        }
+        return ts;
+      }
       case 'list_pages':
         return rows.map(meta);
       case 'get_page':
         return { ...find(a.id) };
       case 'create_page': {
+        if (a.parentId && dbData.schemas[a.parentId]) throw 'Add rows to a database with its New button';
         const r = make(a.parentId ?? null, a.title ?? '', a.icon ?? '');
         rows.push(r);
         place(r.id, r.parentId, a.index ?? null);
@@ -402,6 +524,20 @@ mockIPC((cmd, payload) => {
         const copy = { ...src, id: crypto.randomUUID(), title: src.title ? `${src.title} (copy)` : '', favorite: 0 };
         rows.push(copy);
         place(copy.id, copy.parentId, src.position + 1);
+        const row = dbData.rows[src.id];
+        if (row) {
+          const s = dbData.schemas[src.parentId ?? ''];
+          dbData.rows[copy.id] = { sortKey: `${row.sortKey}V`, number: s ? s.nextNumber++ : 0, cells: clone(row.cells) };
+        }
+        const schema = dbData.schemas[src.id];
+        if (schema) {
+          dbData.schemas[copy.id] = { ...clone(schema), id: copy.id };
+          for (const child of rows.filter((x) => x.parentId === src.id && !x.deletedAt)) {
+            const c = { ...child, id: crypto.randomUUID(), parentId: copy.id };
+            rows.push(c);
+            dbData.rows[c.id] = clone(dbData.rows[child.id]);
+          }
+        }
         return meta(copy);
       }
       case 'trash_page': {
@@ -411,6 +547,12 @@ mockIPC((cmd, payload) => {
       }
       case 'restore_page': {
         const r = find(a.id);
+        // A row brings its trashed database back with it.
+        const dbPage = r.parentId ? rows.find((x) => x.id === r.parentId && x.kind === 'database' && x.deletedAt) : undefined;
+        if (dbPage) {
+          const t = dbPage.deletedAt;
+          for (const x of subtree(dbPage.id, (y) => y.deletedAt === t)) x.deletedAt = null;
+        }
         const ts = r.deletedAt;
         for (const x of subtree(a.id, (y) => y.deletedAt === ts)) x.deletedAt = null;
         const parent = rows.find((x) => x.id === r.parentId);
@@ -660,6 +802,7 @@ mockIPC((cmd, payload) => {
   } finally {
     persist();
     persistPlanner();
+    persistDb();
   }
 });
 

@@ -1701,3 +1701,163 @@ input[type='time']::-webkit-calendar-picker-indicator {
     print-color-adjust: exact;
   }
 }
+
+/* ---------------------------------------------------------------- databases
+   Pills for choices, and the rows, fields and headings inside database
+   popovers (they match the menus). */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  max-width: 100%;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 5px;
+  font-size: var(--fs-footnote);
+  font-weight: var(--fw-500);
+  line-height: 20px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: color-mix(in srgb, var(--pill, var(--c-gray)) 16%, transparent);
+  color: color-mix(in srgb, var(--pill, var(--c-gray)) 58%, var(--text));
+}
+:root[data-theme='dark'] .pill {
+  background: color-mix(in srgb, var(--pill, var(--c-gray)) 24%, transparent);
+  color: color-mix(in srgb, var(--pill, var(--c-gray)) 45%, var(--text));
+}
+/* Status: a rounded pill led by a dot. */
+.pill.status {
+  border-radius: 10px;
+  corner-shape: round;
+  padding-left: 6px;
+}
+.pill.status::before {
+  content: '';
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  corner-shape: round;
+  background: var(--pill, var(--c-gray));
+}
+.pill > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pop-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: var(--h-sm);
+  padding: 0 8px;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-body-ui);
+  color: var(--text);
+  text-align: left;
+  transition: background-color var(--dur-fast) var(--ease);
+}
+.pop-item:hover:not(:disabled),
+.pop-item.active {
+  background: var(--fill-2);
+}
+.pop-item:disabled {
+  color: var(--text-4);
+}
+.pop-item > .icon {
+  flex: none;
+  color: var(--text-2);
+}
+.pop-item .grow {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pop-item .hint {
+  flex: none;
+  font-size: var(--fs-footnote);
+  color: var(--text-3);
+}
+.pop-item.danger,
+.pop-item.danger > .icon {
+  color: var(--danger);
+}
+.pop-sep {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--hairline);
+}
+.pop-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 8px 4px;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-600);
+  letter-spacing: 0.01em;
+  color: var(--text-3);
+}
+.pop-input {
+  width: 100%;
+  height: var(--h-sm);
+  padding: 0 8px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: var(--fill);
+  box-shadow: inset 0 0 0 0.5px var(--hairline);
+  font-size: var(--fs-body-ui);
+  color: var(--text);
+  outline: none;
+  transition:
+    background-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease);
+}
+.pop-input:focus {
+  background: var(--bg-elevated);
+  box-shadow: 0 0 0 1.5px var(--focus);
+}
+.pop-input::placeholder {
+  color: var(--text-3);
+}
+select.pop-input {
+  padding-right: 4px;
+}
+.pop-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--h-sm);
+  padding: 2px 8px;
+  font-size: var(--fs-body-ui);
+}
+.pop-row > .label {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-2);
+}
+
+/* A database inside a page: the app's own type, not the page's prose. */
+.prose .database-block {
+  margin: 12px 0 16px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-body-ui);
+  line-height: normal;
+  white-space: normal;
+  cursor: default;
+}
+.prose .database-block p {
+  margin: 0;
+  line-height: inherit;
+}
+.prose .database-block.ProseMirror-selectednode {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+  border-radius: var(--r-md);
+}

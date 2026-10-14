@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { calendar, itemsByDay, type DayItems } from '../calendar.svelte';
+  import { calendar, itemsByDay, type DayItems, type RowItem } from '../calendar.svelte';
+  import { store } from '../store.svelte';
   import { clock } from '../clock.svelte';
   import { formatTime, parseDate, weekdayNames } from '../dates';
   import { assignmentMenuItems, eventMenuItems } from '../item-actions';
@@ -14,25 +15,26 @@
   const MAX = 3;
   const names = $derived(weekdayNames(prefs.weekStart, 'short'));
   const days = $derived(itemsByDay(weeks[0][0], weeks[weeks.length - 1][6]));
-  const empty: DayItems = { allDay: [], timed: [], due: [] };
+  const empty: DayItems = { allDay: [], timed: [], due: [], rows: [] };
   let over = $state<string | null>(null);
 
-  type Entry = { kind: 'allDay' | 'timed'; occ: Occurrence } | { kind: 'due'; a: Assignment };
+  type Entry = { kind: 'allDay' | 'timed'; occ: Occurrence } | { kind: 'due'; a: Assignment } | { kind: 'row'; r: RowItem };
   function entries(day: string): Entry[] {
     const d = days.get(day) ?? empty;
     return [
       ...d.allDay.map((occ) => ({ kind: 'allDay' as const, occ })),
       ...d.due.map((a) => ({ kind: 'due' as const, a })),
+      ...d.rows.map((r) => ({ kind: 'row' as const, r })),
       ...d.timed.map((occ) => ({ kind: 'timed' as const, occ })),
     ];
   }
 
-  function dragStart(e: DragEvent, kind: 'event' | 'assignment', id: string, from: string, session?: string) {
+  function dragStart(e: DragEvent, kind: 'event' | 'assignment' | 'row', id: string, from: string, session?: string, prop?: string) {
     if (!e.dataTransfer) {
       e.preventDefault();
       return;
     }
-    calendar.drag = { kind, id, from, session };
+    calendar.drag = { kind, id, from, session, prop };
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', id);
   }
@@ -81,8 +83,26 @@
           }}
         >
           <span class="num round" class:today={day === clock.today}>{parseDate(day).getDate()}</span>
-          {#each list.slice(0, list.length > MAX ? MAX - 1 : MAX) as it (it.kind === 'due' ? `a:${it.a.id}` : `${it.kind}:${it.occ.key}`)}
-            {#if it.kind === 'due'}
+          {#each list.slice(0, list.length > MAX ? MAX - 1 : MAX) as it (it.kind === 'due' ? `a:${it.a.id}` : it.kind === 'row' ? `r:${it.r.key}` : `${it.kind}:${it.occ.key}`)}
+            {#if it.kind === 'row'}
+              {@const page = store.byId.get(it.r.row.id)}
+              <button
+                class="item row"
+                style:--c={it.r.color}
+                draggable="true"
+                ondragstart={(e) => dragStart(e, 'row', it.r.row.id, day, undefined, it.r.propId)}
+                ondragend={() => (calendar.drag = null)}
+                onclick={(e) => {
+                  e.stopPropagation();
+                  store.open(it.r.row.id);
+                }}
+                data-tip={store.byId.get(it.r.dbId)?.title}
+              >
+                <span class="square"></span>
+                <span class="label">{page?.icon ? `${page.icon} ` : ''}{page?.title || 'Untitled'}</span>
+                {#if it.r.time}<span class="time">{formatTime(it.r.time)}</span>{/if}
+              </button>
+            {:else if it.kind === 'due'}
               <button
                 class="item due"
                 class:done={it.a.status === 'done'}
@@ -296,6 +316,13 @@
     height: 10px;
     border-radius: 50%;
     box-shadow: inset 0 0 0 1.5px var(--c);
+  }
+  .square {
+    flex: none;
+    width: 7px;
+    height: 7px;
+    border-radius: 2px;
+    background: var(--c);
   }
   .due.done .ring {
     background: var(--c);

@@ -100,6 +100,10 @@ class UI {
   importSheet = $state<{ name: string; items: IcsItem[] } | null>(null);
   /** A flashcard study session. */
   study = $state<{ title: string; cards: Card[] } | null>(null);
+  /** A database formula being written. */
+  formula = $state<{ dbId: string; propId: string } | null>(null);
+  /** Choosing how to start a new database (inside `parentId`, or on its own). */
+  newDatabase = $state<{ parentId: string | null; onCreated?: (id: string) => void } | null>(null);
   toasts = $state<Toast[]>([]);
   /** Page whose title should take focus once shown (new page, "Rename"). */
   focusTitle = $state<string | null>(null);
@@ -116,6 +120,8 @@ class UI {
       this.filePreview !== null ||
       this.importSheet !== null ||
       this.study !== null ||
+      this.formula !== null ||
+      this.newDatabase !== null ||
       this.capture !== null
     );
   }

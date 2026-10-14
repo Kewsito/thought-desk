@@ -5,9 +5,11 @@ import { toMarkdown, type JNode } from './markdown';
 import { titleOf } from './editor/page-link';
 import { store } from './store.svelte';
 import { ui, type MenuItem } from './ui.svelte';
+import { prefs } from './prefs.svelte';
 import { toDocx } from './docx';
 import { exportImage } from './export-images';
 import { cards } from './cards.svelte';
+import { databases } from './databases.svelte';
 
 /** Saves the open editor and returns the page's document. */
 async function pageDoc(id: string): Promise<{ title: string; doc: JNode }> {
@@ -23,7 +25,18 @@ async function pageDoc(id: string): Promise<{ title: string; doc: JNode }> {
     div.innerHTML = page.content;
     doc = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: div.textContent ?? '' }] }] };
   }
-  return { title: page.title || 'Untitled', doc };
+  return { title: page.title || 'Untitled', doc: expandDatabases(doc) };
+}
+
+/** Databases inside a page export as their title and a table of their rows. */
+function expandDatabases(node: JNode): JNode {
+  if (!node.content) return node;
+  const content: JNode[] = [];
+  for (const child of node.content) {
+    if (child.type === 'databaseBlock' && child.attrs?.id) content.push(...databases.asTable(child.attrs.id, child.attrs.view ?? null));
+    else content.push(expandDatabases(child));
+  }
+  return { ...node, content };
 }
 
 async function pageMarkdown(id: string): Promise<{ title: string; markdown: string }> {
@@ -78,9 +91,38 @@ export async function exportPdf(id: string) {
   }
 }
 
+/** A database's menu: no sub-pages or document exports, but CSV. */
+function databaseMenuItems(id: string, sidebar: boolean): MenuItem[] {
+  const page = store.byId.get(id)!;
+  const view = databases.view(id, prefs.dbViews[id]);
+  return [
+    { label: page.favorite ? 'Remove from Favorites' : 'Add to Favorites', icon: 'star', action: () => store.toggleFavorite(id) },
+    ...(sidebar
+      ? [
+          {
+            label: 'Rename',
+            icon: 'pencil',
+            action: () => {
+              store.open(id);
+              ui.focusTitle = id;
+            },
+          },
+        ]
+      : []),
+    { label: 'Duplicate', icon: 'copy', hint: 'with its rows', action: () => void store.duplicate(id) },
+    { separator: true },
+    { label: 'Export as CSV', icon: 'download', hint: view?.name, action: () => view && void databases.exportCsv(id, view.id) },
+    { separator: true },
+    { label: 'Move to Trash', icon: 'trash', danger: true, action: () => void store.trashPage(id) },
+    { separator: true },
+    { header: `${databases.rowsOf(id).length.toLocaleString()} rows · created ${new Date(page.createdAt).toLocaleDateString()}` },
+  ];
+}
+
 export function pageMenuItems(id: string, opts: { words?: number; sidebar?: boolean } = {}): MenuItem[] {
   const page = store.byId.get(id);
   if (!page) return [];
+  if (page.kind === 'database') return databaseMenuItems(id, !!opts.sidebar);
   const items: MenuItem[] = [
     {
       label: page.favorite ? 'Remove from Favorites' : 'Add to Favorites',

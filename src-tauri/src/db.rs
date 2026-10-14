@@ -90,6 +90,8 @@ pub struct PageMeta {
     pub updated_at: i64,
     pub deleted_at: Option<i64>,
     pub tags: Vec<String>,
+    /// "database" for a database page (its sub-pages are its rows), else "".
+    pub kind: String,
 }
 
 #[derive(Serialize)]
@@ -124,7 +126,7 @@ pub struct SearchHit {
 }
 
 const META_COLS: &str =
-    "id, parent_id, title, icon, position, favorite, full_width, created_at, updated_at, deleted_at, tags";
+    "id, parent_id, title, icon, position, favorite, full_width, created_at, updated_at, deleted_at, tags, kind";
 
 fn meta_from_row(r: &rusqlite::Row) -> rusqlite::Result<PageMeta> {
     Ok(PageMeta {
@@ -139,6 +141,7 @@ fn meta_from_row(r: &rusqlite::Row) -> rusqlite::Result<PageMeta> {
         updated_at: r.get(8)?,
         deleted_at: r.get(9)?,
         tags: crate::organize::parse_tags(&r.get::<_, String>(10)?),
+        kind: r.get(11)?,
     })
 }
 
@@ -312,6 +315,61 @@ CREATE TRIGGER pages_side_delete AFTER DELETE ON pages BEGIN
 END;
 ";
 
+/// Databases: a page of kind "database" whose sub-pages are its rows. The
+/// schema (typed properties and saved views) and each row's values live in
+/// their own tables (see databases.rs). Every record is shaped to merge
+/// between devices later: stable ids, fractional order keys, a clock stamp
+/// on each field, tombstones for deletes, and an outbox of what changed
+/// (see sync.rs).
+const SCHEMA_V7: &str = "
+ALTER TABLE pages ADD COLUMN kind TEXT NOT NULL DEFAULT '';
+CREATE TABLE databases (
+  page_id     TEXT PRIMARY KEY REFERENCES pages(id) ON DELETE CASCADE,
+  description TEXT NOT NULL DEFAULT '',
+  next_number INTEGER NOT NULL DEFAULT 1,
+  clock       TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE db_properties (
+  db_id    TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+  id       TEXT NOT NULL,
+  name     TEXT NOT NULL DEFAULT '',
+  type     TEXT NOT NULL,
+  config   TEXT NOT NULL DEFAULT '{}',
+  sort_key TEXT NOT NULL,
+  deleted  INTEGER NOT NULL DEFAULT 0,
+  clock    TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY (db_id, id)
+) WITHOUT ROWID;
+CREATE TABLE db_views (
+  db_id    TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+  id       TEXT NOT NULL,
+  name     TEXT NOT NULL DEFAULT '',
+  type     TEXT NOT NULL,
+  config   TEXT NOT NULL DEFAULT '{}',
+  sort_key TEXT NOT NULL,
+  deleted  INTEGER NOT NULL DEFAULT 0,
+  clock    TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY (db_id, id)
+) WITHOUT ROWID;
+CREATE TABLE db_rows (
+  page_id  TEXT PRIMARY KEY REFERENCES pages(id) ON DELETE CASCADE,
+  sort_key TEXT NOT NULL,
+  number   INTEGER NOT NULL DEFAULT 0,
+  cells    TEXT NOT NULL DEFAULT '{}',
+  clocks   TEXT NOT NULL DEFAULT '{}'
+);
+CREATE TABLE sync_meta (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+) WITHOUT ROWID;
+CREATE TABLE sync_outbox (
+  entity TEXT NOT NULL,
+  id     TEXT NOT NULL,
+  clock  TEXT NOT NULL,
+  PRIMARY KEY (entity, id)
+) WITHOUT ROWID;
+";
+
 const WELCOME_HTML: &str = r#"<p>Thought Desk is a quiet place to write. Everything stays on this computer, in a single local database.</p>
 <h2>The basics</h2>
 <ul data-type="taskList">
@@ -448,6 +506,14 @@ impl Db {
                 compact(&conn, true)?;
             }
         }
+        if version < 7 {
+            let tx = conn.transaction()?;
+            tx.execute_batch(SCHEMA_V7)?;
+            // This copy's name in the clocks of everything it writes.
+            tx.execute("INSERT INTO sync_meta (key, value) VALUES ('device', ?1)", [new_id()])?;
+            tx.execute_batch("PRAGMA user_version = 7;")?;
+            tx.commit()?;
+        }
         Ok(())
     }
 
@@ -469,7 +535,7 @@ impl Db {
                 |r| {
                     Ok(Page {
                         meta: meta_from_row(r)?,
-                        content: r.get(11)?,
+                        content: r.get(12)?,
                     })
                 },
             )
@@ -495,6 +561,9 @@ impl Db {
                 .optional()?;
             if !matches!(alive, Some(None)) {
                 return err("Parent page no longer exists");
+            }
+            if is_database(&tx, pid)? {
+                return err("Add rows to a database with its New button");
             }
         }
         let id = insert_page(&tx, parent_id, title, icon, "", "")?;
@@ -544,6 +613,7 @@ impl Db {
         if touched {
             tx.execute("UPDATE pages SET updated_at = ?1 WHERE rid = ?2", params![ts, rid])?;
         }
+        crate::databases::page_edited(&tx, id, patch.title.is_some(), patch.icon.is_some())?;
         let updated: i64 =
             tx.query_row("SELECT updated_at FROM pages WHERE rid = ?1", [rid], |r| r.get(0))?;
         tx.commit()?;
@@ -554,6 +624,22 @@ impl Db {
     pub fn move_page(&self, id: &str, parent_id: Option<&str>, index: usize) -> Result<()> {
         let mut conn = self.conn();
         let tx = conn.transaction()?;
+        // Rows stay in their database, and only rows go in one.
+        let old_parent: Option<String> = tx
+            .query_row("SELECT parent_id FROM pages WHERE id = ?1", [id], |r| r.get(0))
+            .optional()?
+            .flatten();
+        let into_db = match parent_id {
+            Some(pid) => is_database(&tx, pid)?,
+            None => false,
+        };
+        let is_row = match &old_parent {
+            Some(pid) => is_database(&tx, pid)?,
+            None => false,
+        };
+        if (into_db || is_row) && old_parent.as_deref() != parent_id {
+            return err("Rows can only be moved within their database");
+        }
         // Refuse to move a page into itself or one of its descendants.
         let mut cursor = parent_id.map(str::to_string);
         while let Some(cur) = cursor {
@@ -565,10 +651,6 @@ impl Db {
                 .optional()?
                 .flatten();
         }
-        let old_parent: Option<String> = tx
-            .query_row("SELECT parent_id FROM pages WHERE id = ?1", [id], |r| r.get(0))
-            .optional()?
-            .flatten();
         tx.execute("UPDATE pages SET parent_id = ?1 WHERE id = ?2", params![parent_id, id])?;
         place(&tx, id, parent_id, Some(index))?;
         if old_parent.as_deref() != parent_id {
@@ -638,9 +720,9 @@ impl Db {
                 row.title.clone()
             };
             tx.execute(
-                "INSERT INTO pages (id, parent_id, title, icon, position, full_width, tags, created_at, updated_at)
+                "INSERT INTO pages (id, parent_id, title, icon, position, full_width, tags, kind, created_at, updated_at)
                  VALUES (?1, ?2, ?3, ?4, (SELECT position FROM pages WHERE id = ?5), ?6,
-                         (SELECT tags FROM pages WHERE id = ?5), ?7, ?7)",
+                         (SELECT tags FROM pages WHERE id = ?5), (SELECT kind FROM pages WHERE id = ?5), ?7, ?7)",
                 params![new_id, parent, title, row.icon, row.id, row.full_width, ts],
             )?;
             let new_rid = tx.last_insert_rowid();
@@ -652,6 +734,9 @@ impl Db {
                 params![new_rid, title, row.rid],
             )?;
         }
+
+        // A copied database brings its schema; copied rows their values.
+        crate::databases::duplicated(&tx, &map)?;
 
         // Put the copy right after the original.
         let root = &rows[0];
@@ -678,6 +763,7 @@ impl Db {
              UPDATE pages SET deleted_at = ?2 WHERE id IN sub AND deleted_at IS NULL",
             params![id, ts],
         )?;
+        crate::databases::trashed(&tx, ts)?;
         let parent: Option<String> = tx
             .query_row("SELECT parent_id FROM pages WHERE id = ?1", [id], |r| r.get(0))
             .optional()?
@@ -691,36 +777,7 @@ impl Db {
     pub fn restore_page(&self, id: &str) -> Result<()> {
         let mut conn = self.conn();
         let tx = conn.transaction()?;
-        let row: Option<(Option<String>, Option<i64>)> = tx
-            .query_row("SELECT parent_id, deleted_at FROM pages WHERE id = ?1", [id], |r| {
-                Ok((r.get(0)?, r.get(1)?))
-            })
-            .optional()?;
-        let Some((parent, Some(deleted_at))) = row else {
-            return Ok(());
-        };
-        tx.execute(
-            "WITH RECURSIVE sub(id) AS (
-               SELECT id FROM pages WHERE id = ?1
-               UNION ALL
-               SELECT p.id FROM pages p JOIN sub ON p.parent_id = sub.id WHERE p.deleted_at = ?2
-             )
-             UPDATE pages SET deleted_at = NULL WHERE id IN sub",
-            params![id, deleted_at],
-        )?;
-        // If the old parent is itself in the trash, restore to the top level.
-        let parent_alive = match &parent {
-            Some(pid) => tx
-                .query_row("SELECT deleted_at IS NULL FROM pages WHERE id = ?1", [pid], |r| {
-                    r.get::<_, bool>(0)
-                })
-                .optional()?
-                .unwrap_or(false),
-            None => true,
-        };
-        let parent = if parent_alive { parent } else { None };
-        tx.execute("UPDATE pages SET parent_id = ?1 WHERE id = ?2", params![parent, id])?;
-        place(&tx, id, parent.as_deref(), None)?;
+        restore_in(&tx, id)?;
         tx.commit()?;
         Ok(())
     }
@@ -728,6 +785,7 @@ impl Db {
     /// Permanently deletes a page and everything below it.
     pub fn delete_page(&self, id: &str) -> Result<()> {
         let conn = self.conn();
+        crate::databases::forget_subtree(&conn, id)?;
         conn.execute("DELETE FROM pages WHERE id = ?1", [id])?;
         compact(&conn, false)
     }
@@ -784,6 +842,7 @@ impl Db {
         let stored = {
             let mut conn = self.conn();
             let tx = conn.transaction()?;
+            crate::databases::forget_trashed(&tx)?;
             tx.execute("DELETE FROM pages WHERE deleted_at IS NOT NULL", [])?;
             tx.execute("DELETE FROM assignments WHERE deleted_at IS NOT NULL", [])?;
             tx.execute("DELETE FROM events WHERE deleted_at IS NOT NULL", [])?;
@@ -918,7 +977,67 @@ impl Db {
     }
 }
 
-fn insert_page(
+/// Restores a trashed page and the sub-pages trashed with it. A row whose
+/// database is in the trash brings its database back too (a row can't live
+/// anywhere else); any other page whose parent is trashed goes to the top.
+fn restore_in(tx: &Transaction, id: &str) -> Result<()> {
+    let row: Option<(Option<String>, Option<i64>)> = tx
+        .query_row("SELECT parent_id, deleted_at FROM pages WHERE id = ?1", [id], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })
+        .optional()?;
+    let Some((parent, Some(deleted_at))) = row else {
+        return Ok(());
+    };
+    if let Some(pid) = &parent {
+        if is_database(tx, pid)? {
+            restore_in(tx, pid)?;
+        }
+    }
+    let ids: Vec<String> = {
+        let mut stmt = tx.prepare(
+            "WITH RECURSIVE sub(id) AS (
+               SELECT id FROM pages WHERE id = ?1
+               UNION ALL
+               SELECT p.id FROM pages p JOIN sub ON p.parent_id = sub.id WHERE p.deleted_at = ?2
+             )
+             SELECT id FROM sub",
+        )?;
+        let rows = stmt.query_map(params![id, deleted_at], |r| r.get(0))?;
+        rows.collect::<rusqlite::Result<_>>()?
+    };
+    {
+        let mut stmt = tx.prepare("UPDATE pages SET deleted_at = NULL WHERE id = ?1")?;
+        for sid in &ids {
+            stmt.execute([sid])?;
+        }
+    }
+    crate::databases::restored(tx, &ids)?;
+    // If the old parent is itself in the trash, restore to the top level.
+    let parent_alive = match &parent {
+        Some(pid) => tx
+            .query_row("SELECT deleted_at IS NULL FROM pages WHERE id = ?1", [pid], |r| {
+                r.get::<_, bool>(0)
+            })
+            .optional()?
+            .unwrap_or(false),
+        None => true,
+    };
+    let parent = if parent_alive { parent } else { None };
+    tx.execute("UPDATE pages SET parent_id = ?1 WHERE id = ?2", params![parent, id])?;
+    place(tx, id, parent.as_deref(), None)?;
+    Ok(())
+}
+
+/// Whether a page is a database (its sub-pages are rows).
+pub(crate) fn is_database(conn: &Connection, id: &str) -> Result<bool> {
+    Ok(conn
+        .query_row("SELECT kind = 'database' FROM pages WHERE id = ?1", [id], |r| r.get(0))
+        .optional()?
+        .unwrap_or(false))
+}
+
+pub(crate) fn insert_page(
     tx: &Transaction,
     parent_id: Option<&str>,
     title: &str,
@@ -927,6 +1046,20 @@ fn insert_page(
     text: &str,
 ) -> Result<String> {
     let id = new_id();
+    insert_page_as(tx, &id, parent_id, title, icon, content, text)?;
+    Ok(id)
+}
+
+/// Inserts a page with a known id (a new one, or one made on another copy).
+pub(crate) fn insert_page_as(
+    tx: &Transaction,
+    id: &str,
+    parent_id: Option<&str>,
+    title: &str,
+    icon: &str,
+    content: &str,
+    text: &str,
+) -> Result<()> {
     let ts = now();
     tx.execute(
         "INSERT INTO pages (id, parent_id, title, icon, position, created_at, updated_at)
@@ -940,7 +1073,7 @@ fn insert_page(
         "INSERT INTO pages_fts (rowid, title, body) VALUES (?1, ?2, ?3)",
         params![rid, title, text],
     )?;
-    Ok(id)
+    Ok(())
 }
 
 /// Refreshes what's known about a page body: the items it links to (for
@@ -1004,7 +1137,7 @@ fn link_targets(content: &str) -> std::collections::HashSet<&str> {
 }
 
 /// `content` with every id found in `map` swapped for its new one.
-fn replace_ids(content: &str, map: &HashMap<String, String>) -> String {
+pub(crate) fn replace_ids(content: &str, map: &HashMap<String, String>) -> String {
     let mut out = String::with_capacity(content.len());
     let mut last = 0;
     for at in id_spans(content) {
@@ -1037,7 +1170,7 @@ fn compact(conn: &Connection, upgrading: bool) -> Result<()> {
     Ok(())
 }
 
-fn meta_by_id(tx: &Transaction, id: &str) -> Result<PageMeta> {
+pub(crate) fn meta_by_id(tx: &Transaction, id: &str) -> Result<PageMeta> {
     Ok(tx.query_row(
         &format!("SELECT {META_COLS} FROM pages WHERE id = ?1"),
         [id],
@@ -1047,7 +1180,7 @@ fn meta_by_id(tx: &Transaction, id: &str) -> Result<PageMeta> {
 
 /// Puts `id` at `index` among the live children of `parent` (end if None)
 /// and rewrites sibling positions as 0..n.
-fn place(tx: &Transaction, id: &str, parent: Option<&str>, index: Option<usize>) -> Result<()> {
+pub(crate) fn place(tx: &Transaction, id: &str, parent: Option<&str>, index: Option<usize>) -> Result<()> {
     let mut ids: Vec<String> = {
         let mut stmt = tx.prepare(
             "SELECT id FROM pages WHERE parent_id IS ?1 AND id != ?2 AND deleted_at IS NULL

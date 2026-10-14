@@ -3,22 +3,39 @@
 import { addDays, diffDays, minutes, occurrences, todayISO, fromMinutes, type Occurrence } from './dates';
 import { planner } from './planner.svelte';
 import { store } from './store.svelte';
-import type { Assignment } from './types';
+import { databases } from './databases.svelte';
+import { colorVar } from './colors';
+import { option } from './db/schema';
+import type { Assignment, DbRow } from './types';
+
+/** A database row placed on the calendar by a date property shown there. */
+export interface RowItem {
+  key: string;
+  row: DbRow;
+  dbId: string;
+  propId: string;
+  /** "HH:MM" on its first day, if it has a time. */
+  time: string | null;
+  color: string;
+}
 
 export interface DayItems {
   allDay: Occurrence[];
   timed: Occurrence[];
   due: Assignment[];
+  rows: RowItem[];
 }
 
 /** What's being dragged between days (or onto the week's time grid). */
 export interface DragItem {
-  kind: 'event' | 'assignment';
+  kind: 'event' | 'assignment' | 'row';
   id: string;
   /** The day it was picked up from; dropping shifts the item by the difference. */
   from: string;
   /** For events: the start of the session picked up (repeats move just that one). */
   session?: string;
+  /** For database rows: the date property that placed it. */
+  prop?: string;
 }
 
 class CalendarState {
@@ -42,6 +59,10 @@ class CalendarState {
     if (!d) return;
     if (d.kind === 'assignment') {
       planner.updateAssignment(d.id, { dueDate: day, ...(time ? { dueTime: time } : {}) }, { immediate: true });
+      return;
+    }
+    if (d.kind === 'row') {
+      if (d.prop) databases.shiftDate(d.id, d.prop, diffDays(d.from, day));
       return;
     }
     const e = planner.eventById.get(d.id);
@@ -78,7 +99,7 @@ export function itemsByDay(from: string, to: string): Map<string, DayItems> {
   const map = new Map<string, DayItems>();
   const at = (day: string) => {
     let items = map.get(day);
-    if (!items) map.set(day, (items = { allDay: [], timed: [], due: [] }));
+    if (!items) map.set(day, (items = { allDay: [], timed: [], due: [], rows: [] }));
     return items;
   };
   for (const e of planner.liveEvents) {
@@ -95,7 +116,26 @@ export function itemsByDay(from: string, to: string): Map<string, DayItems> {
   for (const [day, list] of planner.dueByDate) {
     if (day >= from && day <= to) at(day).due.push(...list);
   }
+  for (const it of databases.calendarItems) {
+    if (it.end < from || it.start > to) continue;
+    const page = store.byId.get(it.row.id);
+    if (!page || page.deletedAt) continue;
+    // A row takes the colour of its first choice (a status, a select).
+    let color = 'var(--text-3)';
+    for (const p of databases.props(it.dbId)) {
+      if (p.type !== 'select' && p.type !== 'status') continue;
+      const o = option(p, it.row.cells[p.id]);
+      if (o) {
+        color = colorVar(o.color);
+        break;
+      }
+    }
+    for (let day = it.start < from ? from : it.start; day <= it.end && day <= to; day = addDays(day, 1)) {
+      at(day).rows.push({ key: `${it.row.id}:${it.prop.id}`, row: it.row, dbId: it.dbId, propId: it.prop.id, time: day === it.start ? it.time : null, color });
+    }
+  }
   for (const items of map.values()) {
+    items.rows.sort((a, b) => (a.time ?? '').localeCompare(b.time ?? ''));
     items.timed.sort((a, b) => (a.event.startTime ?? '').localeCompare(b.event.startTime ?? ''));
     items.allDay.sort((a, b) => a.start.localeCompare(b.start) || b.end.localeCompare(a.end));
     items.due.sort((a, b) => Number(a.status === 'done') - Number(b.status === 'done') || (a.dueTime ?? '24').localeCompare(b.dueTime ?? '24'));

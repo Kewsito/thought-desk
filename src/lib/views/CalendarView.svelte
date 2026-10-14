@@ -11,6 +11,7 @@
   import { calendar, itemsByDay } from '../calendar.svelte';
   import { clock } from '../clock.svelte';
   import {
+    formatTime,
     addDays,
     addMonths,
     formatMonth,
@@ -81,13 +82,13 @@
   const day = $derived(itemsByDay(calendar.selected, calendar.selected).get(calendar.selected));
   const dayPages = $derived(
     store.pages
-      .filter((p) => !p.deletedAt)
+      .filter((p) => !p.deletedAt && p.kind !== 'database' && !store.isRow(p))
       .filter((p) => toISODate(new Date(p.createdAt)) === calendar.selected || toISODate(new Date(p.updatedAt)) === calendar.selected)
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .slice(0, 8),
   );
   const occurrencesForDay = $derived(day ? [...day.allDay, ...day.timed] : []);
-  const isEmptyDay = $derived(!occurrencesForDay.length && !day?.due.length && !dayPages.length);
+  const isEmptyDay = $derived(!occurrencesForDay.length && !day?.due.length && !day?.rows.length && !dayPages.length);
 
   function step(dir: 1 | -1) {
     if (prefs.calendarMode === 'month') {
@@ -198,6 +199,20 @@
           </div>
         {/if}
 
+        {#if day?.rows.length}
+          <h3 class="group-title">From Databases</h3>
+          <div class="group">
+            {#each day.rows as r (r.key)}
+              {@const p = store.byId.get(r.row.id)}
+              <button class="group-row page-row" onclick={() => store.open(r.row.id)}>
+                <span class="page-icon">{#if p?.icon}{p.icon}{:else}<span class="square" style:--c={r.color}></span>{/if}</span>
+                <span class="page-title">{p?.title || 'Untitled'}</span>
+                <span class="page-meta">{r.time ? `${formatTime(r.time)} · ` : ''}{store.byId.get(r.dbId)?.title || 'Database'}</span>
+              </button>
+            {/each}
+          </div>
+        {/if}
+
         {#if dayPages.length}
           <h3 class="group-title">Pages</h3>
           <div class="group">
@@ -300,6 +315,12 @@
     width: 20px;
     font-size: 15px;
     color: var(--text-3);
+  }
+  .square {
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    background: var(--c);
   }
   .page-title {
     flex: 1;

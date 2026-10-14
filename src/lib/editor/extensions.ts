@@ -1,3 +1,4 @@
+import { TextSelection } from '@tiptap/pm/state';
 import { Extension, type AnyExtension } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { TaskItem, TaskList } from '@tiptap/extension-list';
@@ -16,6 +17,7 @@ import { MentionSuggest } from './mention';
 import { BlockHandle, type BlockHandleOptions } from './block-handle';
 import { ImageDrop } from './images';
 import { FileBlock } from './file-block';
+import { DatabaseNode } from './database-block.svelte';
 import { Flashcard, FlashcardBack, FlashcardFront } from './flashcard';
 import { ui } from '../ui.svelte';
 
@@ -27,7 +29,9 @@ const Shortcuts = Extension.create({
   addKeyboardShortcuts() {
     return {
       'Mod-k': ({ editor }) => {
-        if (editor.state.selection.empty) return false;
+        // Only selected text gets a link; otherwise Ctrl+K is search.
+        const sel = editor.state.selection;
+        if (sel.empty || !(sel instanceof TextSelection)) return false;
         window.dispatchEvent(new CustomEvent('td:edit-link'));
         return true;
       },
@@ -151,6 +155,7 @@ export function buildExtensions(handle: BlockHandleOptions): AnyExtension[] {
     PageLink,
     Mention,
     FileBlock,
+    DatabaseNode,
     Flashcard,
     FlashcardFront,
     FlashcardBack,

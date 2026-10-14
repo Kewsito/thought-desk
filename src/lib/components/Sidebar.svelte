@@ -7,6 +7,8 @@
   import { planner } from '../planner.svelte';
   import { library } from '../library.svelte';
   import { cards } from '../cards.svelte';
+  import { databases } from '../databases.svelte';
+  import { pageMenuItems } from '../page-actions';
   import { itemsByDay } from '../calendar.svelte';
   import { clock } from '../clock.svelte';
   import { dueState } from '../dates';
@@ -100,6 +102,20 @@
     return map;
   });
 
+  /** The database open, or the one whose row is open. */
+  const openDb = $derived(store.current?.kind === 'database' ? store.current.id : databases.dbOf(store.currentId));
+  let dbMenuFor = $state<string | null>(null);
+
+  function dbMenu(e: MouseEvent, id: string, anchor?: Element) {
+    e.preventDefault();
+    e.stopPropagation();
+    dbMenuFor = id;
+    const items = pageMenuItems(id, { sidebar: true });
+    const onClose = () => (dbMenuFor = null);
+    if (anchor) ui.openMenuAt(anchor, items, { onClose });
+    else ui.openMenu({ x: e.clientX, y: e.clientY, items, onClose });
+  }
+
   async function addCourse() {
     const c = await planner.promptCourse();
     if (c) store.openCourse(c.id);
@@ -190,6 +206,48 @@
               <button class="row-btn muted" onclick={addCourse}>
                 <span class="lead"><Icon name="plus" /></span>
                 <span class="label">Add a course</span>
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </section>
+    {/if}
+
+    {#if databases.loaded}
+      <section>
+        <div class="section-head">
+          <button class="section-title" onclick={() => toggleSection('databases')} aria-expanded={!prefs.sections.databases}>
+            Databases
+            <span class="caret" class:closed={prefs.sections.databases}><Icon name="chevron-down" size={11} stroke={2.4} /></span>
+          </button>
+          <button class="section-add" onclick={() => (ui.newDatabase = { parentId: null })} data-tip="New database"><Icon name="plus" size={14} stroke={2} /></button>
+        </div>
+        {#if !prefs.sections.databases}
+          <div class="tag-list">
+            {#each databases.list as d (d.id)}
+              {@const n = databases.rowsOf(d.id).length}
+              <div class="nav-row db-row" class:active={openDb === d.id} class:menu-open={dbMenuFor === d.id}>
+                <button
+                  class="nav-main"
+                  draggable="true"
+                  onclick={() => store.open(d.id)}
+                  oncontextmenu={(e) => dbMenu(e, d.id)}
+                  ondragstart={(e) => {
+                    drag.id = d.id;
+                    e.dataTransfer?.setData('text/plain', d.title || 'Untitled database');
+                  }}
+                  ondragend={() => (drag.id = null)}
+                >
+                  <span class="lead">{#if d.icon}<span class="emoji">{d.icon}</span>{:else}<Icon name="database" />{/if}</span>
+                  <span class="label">{d.title || 'Untitled database'}</span>
+                </button>
+                <button class="row-more" onclick={(e) => dbMenu(e, d.id, e.currentTarget as Element)} aria-label="More" data-tip="More"><Icon name="more" size={15} /></button>
+                {#if n}<span class="count" data-tip="{n} row{n === 1 ? '' : 's'}">{n}</span>{/if}
+              </div>
+            {:else}
+              <button class="row-btn muted" onclick={() => (ui.newDatabase = { parentId: null })}>
+                <span class="lead"><Icon name="plus" /></span>
+                <span class="label">Add a database</span>
               </button>
             {/each}
           </div>
@@ -466,6 +524,34 @@
   }
   .nav-row .count {
     margin-right: 12px;
+  }
+  .emoji {
+    font-size: 15px;
+    line-height: 1;
+  }
+  .row-more {
+    display: none;
+    place-items: center;
+    width: var(--h-xs);
+    height: var(--h-xs);
+    margin-right: 4px;
+    border-radius: var(--r-xs);
+    color: var(--text-3);
+  }
+  .db-row:hover .row-more,
+  .db-row.menu-open .row-more {
+    display: grid;
+  }
+  .db-row:hover .count,
+  .db-row.menu-open .count {
+    display: none;
+  }
+  .row-more:hover {
+    background: var(--fill-2);
+    color: var(--text);
+  }
+  .db-row.menu-open {
+    background: var(--fill);
   }
   .count.alert {
     color: var(--danger);

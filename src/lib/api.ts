@@ -21,6 +21,13 @@ import type {
   PagePatch,
   SearchHit,
   TrashTable,
+  CreatedRow,
+  DatabaseSchema,
+  DbRow,
+  DbView,
+  NewRow,
+  Property,
+  CellValue,
 } from './types';
 
 export const api = {
@@ -89,7 +96,7 @@ export const api = {
   forgetReview: (pageId: string, cardId: string) => invoke<void>('forget_review', { pageId, cardId }),
   resetReviews: (pageId: string) => invoke<void>('reset_reviews', { pageId }),
   /** Saves an exported document to Downloads; returns its path. */
-  exportDocument: (name: string, ext: 'docx' | 'md' | 'html', bytes: Uint8Array) =>
+  exportDocument: (name: string, ext: 'docx' | 'md' | 'html' | 'csv', bytes: Uint8Array) =>
     invoke<string>('export_document', bytes, {
       headers: { 'x-name': encodeURIComponent(name), 'x-ext': ext },
     }),
@@ -99,6 +106,24 @@ export const api = {
   trimMemory: () => invoke<void>('trim_memory'),
   /** `accelerator` like "CmdOrCtrl+Shift+Space". */
   setCaptureShortcut: (enabled: boolean, accelerator: string) => invoke<void>('set_capture_shortcut', { enabled, accelerator }),
+
+  listDatabases: () => invoke<DatabaseSchema[]>('list_databases'),
+  listRows: () => invoke<DbRow[]>('list_rows'),
+  createDatabase: (
+    parentId: string | null,
+    title: string,
+    icon: string,
+    input: { description?: string; properties: Property[]; views: DbView[]; rows?: NewRow[] },
+  ) => invoke<{ page: PageMeta; database: DatabaseSchema; rows: CreatedRow[] }>('create_database', { parentId, title, icon, input }),
+  updateDatabase: (id: string, description: string) => invoke<void>('update_database', { id, description }),
+  saveProperty: (dbId: string, property: Property) => invoke<void>('save_property', { dbId, property }),
+  deleteProperty: (dbId: string, id: string) => invoke<void>('delete_property', { dbId, id }),
+  saveView: (dbId: string, view: DbView) => invoke<void>('save_view', { dbId, view }),
+  deleteView: (dbId: string, id: string) => invoke<void>('delete_view', { dbId, id }),
+  createRows: (dbId: string, rows: NewRow[]) => invoke<CreatedRow[]>('create_rows', { dbId, rows }),
+  /** Sets row values (null clears one) and order; returns the time edited. */
+  updateRows: (changes: { id: string; cells?: Record<string, CellValue>; sortKey?: string }[]) =>
+    invoke<number>('update_rows', { changes }),
 
   trashItem: (table: TrashTable, id: string) => invoke<number>('trash_item', { table, id }),
   restoreItem: (table: TrashTable, id: string) => invoke<void>('restore_item', { table, id }),

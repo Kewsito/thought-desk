@@ -45,11 +45,14 @@ class Store {
 
   byId = $derived(new Map(this.pages.map((p) => [p.id, p])));
 
-  /** Live pages grouped by parent id ('' = top level), in sibling order. */
+  /** Live pages grouped by parent id ('' = top level), in sibling order.
+   * Databases and their rows aren't part of the tree (the sidebar lists
+   * databases on their own). */
   childrenMap = $derived.by(() => {
     const map = new Map<string, PageMeta[]>();
+    const databases = new Set(this.pages.filter((p) => p.kind === 'database').map((p) => p.id));
     for (const p of this.pages) {
-      if (p.deletedAt) continue;
+      if (p.deletedAt || p.kind === 'database' || (p.parentId && databases.has(p.parentId))) continue;
       const key = p.parentId ?? '';
       let list = map.get(key);
       if (!list) map.set(key, (list = []));
@@ -84,6 +87,11 @@ class Store {
   });
   canGoBack = $derived(this.#historyIndex > 0);
   canGoForward = $derived(this.#historyIndex < this.#history.length - 1);
+
+  /** Whether a page is a database row (its parent is a database). */
+  isRow(p: PageMeta): boolean {
+    return !!p.parentId && this.byId.get(p.parentId)?.kind === 'database';
+  }
 
   children(id: string | null): PageMeta[] {
     return this.childrenMap.get(id ?? '') ?? [];
@@ -161,6 +169,12 @@ class Store {
       return cur;
     });
     if (!same) this.pages = merged;
+  }
+
+  /** Takes pages made elsewhere (database rows) without reloading the list. */
+  adopt(metas: PageMeta[]) {
+    const fresh = metas.filter((m) => !this.byId.has(m.id));
+    if (fresh.length) this.pages.push(...fresh);
   }
 
   // ------------------------------------------------------------- navigation
@@ -359,6 +373,8 @@ class Store {
       await this.flush();
       const meta = await api.duplicatePage(id);
       await this.refresh();
+      // A copied database or row brings its values along (databases.svelte.ts).
+      window.dispatchEvent(new CustomEvent('td:pages-copied', { detail: meta.id }));
       this.open(meta.id);
     } catch (e) {
       ui.error(e);

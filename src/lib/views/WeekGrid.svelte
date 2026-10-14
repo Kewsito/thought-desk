@@ -5,13 +5,14 @@
   import { formatHour, formatTime, fromMinutes, minutes, parseDate, type Occurrence } from '../dates';
   import { assignmentMenuItems, eventMenuItems } from '../item-actions';
   import { planner } from '../planner.svelte';
+  import { store } from '../store.svelte';
   import { ui } from '../ui.svelte';
 
   let { days, onnew }: { days: string[]; onnew: (day: string, time?: string) => void } = $props();
 
   const HOUR = 48;
   const items = $derived(itemsByDay(days[0], days[6]));
-  const empty: DayItems = { allDay: [], timed: [], due: [] };
+  const empty: DayItems = { allDay: [], timed: [], due: [], rows: [] };
   let scroller: HTMLDivElement;
   let overDay = $state<string | null>(null);
 
@@ -79,12 +80,12 @@
     ui.openMenu({ x: e.clientX, y: e.clientY, items: list });
   }
 
-  function start(e: DragEvent, kind: 'event' | 'assignment', id: string, from: string, session?: string) {
+  function start(e: DragEvent, kind: 'event' | 'assignment' | 'row', id: string, from: string, session?: string, prop?: string) {
     if (!e.dataTransfer) {
       e.preventDefault();
       return;
     }
-    calendar.drag = { kind, id, from, session };
+    calendar.drag = { kind, id, from, session, prop };
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', id);
   }
@@ -133,6 +134,22 @@
             onclick={() => planner.openEvent(occ.event.id, occ.start)}
             oncontextmenu={(e) => menu(e, eventMenuItems(occ.event.id, occ.start))}>{occ.event.title || 'New Event'}</button
           >
+        {/each}
+        {#each d.rows as r (r.key)}
+          {@const page = store.byId.get(r.row.id)}
+          <button
+            class="chip-ev row"
+            style:--c={r.color}
+            draggable="true"
+            ondragstart={(e) => start(e, 'row', r.row.id, day, undefined, r.propId)}
+            ondragend={() => (calendar.drag = null)}
+            onclick={() => store.open(r.row.id)}
+            data-tip={store.byId.get(r.dbId)?.title}
+          >
+            <span class="square"></span>
+            <span class="label">{page?.icon ? `${page.icon} ` : ''}{page?.title || 'Untitled'}</span>
+            {#if r.time}<span class="t">{formatTime(r.time)}</span>{/if}
+          </button>
         {/each}
         {#each d.due as a (a.id)}
           <button
@@ -321,6 +338,13 @@
     height: 10px;
     border-radius: 50%;
     box-shadow: inset 0 0 0 1.5px var(--c);
+  }
+  .square {
+    flex: none;
+    width: 7px;
+    height: 7px;
+    border-radius: 2px;
+    background: var(--c);
   }
   .due.done .ring {
     background: var(--c);

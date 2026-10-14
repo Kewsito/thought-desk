@@ -3,6 +3,7 @@
 
 mod cards;
 mod commands;
+mod databases;
 mod db;
 mod files;
 mod library;
@@ -11,6 +12,7 @@ mod organize;
 mod pdf;
 mod planner;
 mod reminders;
+mod sync;
 #[cfg(test)]
 mod stress;
 
@@ -140,6 +142,19 @@ fn main() {
             commands::save_review,
             commands::forget_review,
             commands::reset_reviews,
+            commands::list_databases,
+            commands::list_rows,
+            commands::create_database,
+            commands::update_database,
+            commands::save_property,
+            commands::delete_property,
+            commands::save_view,
+            commands::delete_view,
+            commands::create_rows,
+            commands::update_rows,
+            commands::sync_pending,
+            commands::sync_sent,
+            commands::sync_apply,
             commands::trash_item,
             commands::restore_item,
             commands::delete_item,

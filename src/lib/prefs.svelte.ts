@@ -63,6 +63,8 @@ interface Stored {
   shortcuts: Partial<Record<ShortcutId, string | null>>;
   customTheme: CustomTheme;
   customAccent: CustomAccent;
+  /** The view last shown for each database. */
+  dbViews: Record<string, string>;
 }
 
 /** Monday in most of the world, Sunday where the locale says so. */
@@ -106,6 +108,7 @@ const defaults: Stored = {
   shortcuts: {},
   customTheme: { hue: 250, tint: 0.5 },
   customAccent: { hue: 265, chroma: 0.2, lightness: 0.58 },
+  dbViews: {},
 };
 
 function read(): Stored {
@@ -136,6 +139,7 @@ class Prefs {
   sidebarOpen = $state(this.#initial.sidebarOpen);
   sidebarWidth = $state(this.#initial.sidebarWidth);
   expanded = $state<Record<string, boolean>>(this.#initial.expanded);
+  dbViews = $state<Record<string, string>>(this.#initial.dbViews);
   sections = $state<Record<string, boolean>>(this.#initial.sections);
   lastPageId = $state<string | null>(this.#initial.lastPageId);
   lastView = $state(this.#initial.lastView);
@@ -189,6 +193,7 @@ class Prefs {
       shortcuts: $state.snapshot(this.shortcuts),
       customTheme: $state.snapshot(this.customTheme),
       customAccent: $state.snapshot(this.customAccent),
+      dbViews: $state.snapshot(this.dbViews),
     };
   }
 }

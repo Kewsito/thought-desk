@@ -11,6 +11,8 @@ export interface PageMeta {
   updatedAt: number;
   deletedAt: number | null;
   tags: string[];
+  /** "database" for a database (its sub-pages are its rows), else "". */
+  kind: string;
 }
 
 export interface Page extends PageMeta {
@@ -251,3 +253,204 @@ export interface FileUsage {
 
 /** Everything that can sit in the trash. */
 export type TrashTable = 'pages' | 'assignments' | 'events' | 'files';
+
+// ------------------------------------------------------------------ databases
+
+export type PropertyType =
+  | 'title'
+  | 'text'
+  | 'number'
+  | 'select'
+  | 'multiSelect'
+  | 'status'
+  | 'date'
+  | 'checkbox'
+  | 'url'
+  | 'email'
+  | 'phone'
+  | 'files'
+  | 'relation'
+  | 'rollup'
+  | 'formula'
+  | 'created'
+  | 'edited'
+  | 'tags'
+  | 'course'
+  | 'id';
+
+/** A choice of a select, multi-select or status property. */
+export interface SelectOption {
+  id: string;
+  name: string;
+  /** Palette key (see colors.ts). */
+  color: string;
+  /** Status options only: which stage it belongs to. */
+  group?: 'todo' | 'doing' | 'done';
+}
+
+export type NumberFormat = 'number' | 'comma' | 'percent' | 'dollar' | 'euro' | 'pound' | 'yen' | 'rupee';
+
+export type RollupFn =
+  | 'show'
+  | 'count'
+  | 'countValues'
+  | 'sum'
+  | 'average'
+  | 'min'
+  | 'max'
+  | 'percentChecked'
+  | 'percentDone'
+  | 'earliest'
+  | 'latest';
+
+export interface PropertyConfig {
+  /** Shown as a tooltip on the column. */
+  description?: string;
+  /** Select, multi-select and status. */
+  options?: SelectOption[];
+  /** Number. */
+  format?: NumberFormat;
+  decimals?: number | null;
+  display?: 'number' | 'bar' | 'ring';
+  /** The value that fills a bar or ring (default 100). */
+  max?: number;
+  /** Date: also show these dates on the Calendar. */
+  onCalendar?: boolean;
+  /** Formula. */
+  expression?: string;
+  /** Relation: the database it links to, and its twin property there. */
+  database?: string;
+  back?: string | null;
+  /** Rollup: a relation property, a property of the linked rows, and how to sum them up. */
+  relation?: string;
+  target?: string;
+  fn?: RollupFn;
+  /** ID: text before the number ("TASK-12"). */
+  prefix?: string;
+}
+
+export interface Property {
+  id: string;
+  name: string;
+  type: PropertyType;
+  config: PropertyConfig;
+  sortKey: string;
+}
+
+export type ViewType = 'table' | 'board' | 'gallery' | 'list' | 'calendar' | 'chart';
+
+export type CalcFn =
+  | 'none'
+  | 'count'
+  | 'countValues'
+  | 'countEmpty'
+  | 'countUnique'
+  | 'percentFilled'
+  | 'percentEmpty'
+  | 'sum'
+  | 'average'
+  | 'median'
+  | 'min'
+  | 'max'
+  | 'range'
+  | 'checked'
+  | 'unchecked'
+  | 'percentChecked'
+  | 'earliest'
+  | 'latest';
+
+export interface FilterRule {
+  id: string;
+  prop: string;
+  op: string;
+  value?: unknown;
+}
+
+export interface SortRule {
+  prop: string;
+  dir: 'asc' | 'desc';
+}
+
+export interface ViewConfig {
+  filters?: FilterRule[];
+  /** Whether rows must match every filter or any of them. */
+  match?: 'all' | 'any';
+  sorts?: SortRule[];
+  /** Property to group by (a board's columns). */
+  group?: string | null;
+  /** Group keys folded away (table) or hidden (board). */
+  collapsed?: string[];
+  hideEmptyGroups?: boolean;
+  /** Properties not shown in this view. */
+  hidden?: string[];
+  /** Properties shown on cards (board, gallery, list), when not all. */
+  shown?: string[];
+  /** Table column widths. */
+  widths?: Record<string, number>;
+  /** Wrap long text in table cells. */
+  wrap?: boolean;
+  /** The summary under each table column. */
+  calc?: Record<string, CalcFn>;
+  /** Gallery and board cards. */
+  cardSize?: 'small' | 'medium' | 'large';
+  /** Gallery: what fills a card's top ("page": the first image in it, or a files property). */
+  cover?: string;
+  /** Calendar: which date property places rows. */
+  dateProp?: string;
+  /** Chart: what to count. */
+  chart?: {
+    kind: 'bar' | 'donut' | 'line';
+    /** Property along the bottom (or the slices). */
+    x: string;
+    /** Count rows, or sum/average a number property. */
+    agg: 'count' | 'sum' | 'average';
+    y?: string;
+  };
+}
+
+export interface DbView {
+  id: string;
+  name: string;
+  type: ViewType;
+  config: ViewConfig;
+  sortKey: string;
+}
+
+/** A database's schema; its title and icon are its page's. */
+export interface DatabaseSchema {
+  id: string;
+  description: string;
+  properties: Property[];
+  views: DbView[];
+}
+
+/** A date property's value: "YYYY-MM-DD", or "YYYY-MM-DDTHH:MM" with a time. */
+export interface DateValue {
+  start: string;
+  end?: string;
+}
+
+export type CellValue = string | number | boolean | string[] | DateValue | null;
+
+export interface DbRow {
+  /** The row's page id. */
+  id: string;
+  dbId: string;
+  sortKey: string;
+  number: number;
+  cells: Record<string, CellValue>;
+  /** The first image in the row's page (a gallery card's picture). */
+  cover?: string | null;
+}
+
+export interface NewRow {
+  title: string;
+  icon?: string;
+  sortKey: string;
+  cells: Record<string, CellValue>;
+}
+
+export interface CreatedRow {
+  page: PageMeta;
+  row: DbRow;
+}

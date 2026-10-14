@@ -43,6 +43,10 @@
   import StudySheet from './lib/sheets/StudySheet.svelte';
   import FlashcardsView from './lib/views/FlashcardsView.svelte';
   import { cards } from './lib/cards.svelte';
+  import { databases } from './lib/databases.svelte';
+  import DatabaseView from './lib/db/DatabaseView.svelte';
+  import FormulaEditor from './lib/db/FormulaEditor.svelte';
+  import NewDatabaseSheet from './lib/db/NewDatabaseSheet.svelte';
 
   const win = getCurrentWindow();
   const webviewWin = getCurrentWebviewWindow();
@@ -110,12 +114,13 @@
   });
 
   /** Saves everything that's waiting to be written. */
-  const flushAll = () => Promise.all([store.flush(), planner.flush()]);
+  const flushAll = () => Promise.all([store.flush(), planner.flush(), databases.flush()]);
 
   // Load the full page (with content) whenever the selection changes.
   $effect(() => {
     const id = store.currentId;
-    if (!id) {
+    // A database shows its rows, not a body.
+    if (!id || store.current?.kind === 'database') {
       page = null;
       return;
     }
@@ -144,7 +149,7 @@
     void (async () => {
       try {
         // Pages decide where to start, so the planner and files load alongside.
-        await Promise.all([planner.load(), library.load(), tags.load(), store.load()]);
+        await Promise.all([planner.load(), library.load(), tags.load(), databases.load(), store.load()]);
         void cards.load();
       } catch (e) {
         ui.error(e);
@@ -189,6 +194,13 @@
     if (action) {
       e.preventDefault();
       ACTIONS[action]!();
+    } else if (mod && key === 'z' && databaseUndo(e)) {
+      e.preventDefault();
+      if (e.shiftKey) void databases.redo();
+      else void databases.undo();
+    } else if (mod && key === 'y' && databaseUndo(e)) {
+      e.preventDefault();
+      void databases.redo();
     } else if (mod && key === 's') {
       // Everything autosaves; just flush now instead of "Save page as…".
       e.preventDefault();
@@ -201,6 +213,15 @@
       // A reload would only interrupt typing; data is already saved.
       e.preventDefault();
     }
+  }
+
+  /** Ctrl+Z belongs to databases when focus is in one (not in a text box)
+   * or nowhere in particular on a database page. */
+  function databaseUndo(e: KeyboardEvent): boolean {
+    const t = e.target as HTMLElement;
+    if (t.closest('input, textarea, [contenteditable="true"], [contenteditable="plaintext-only"]')) return false;
+    if (ui.anyModalOpen) return false;
+    return !!t.closest('.dbv') || (t === document.body && store.current?.kind === 'database');
   }
 
   // Mouse back/forward buttons.
@@ -267,6 +288,10 @@
         {#if library.loaded}<FilesView />{/if}
       {:else if store.view === 'cards'}
         <FlashcardsView />
+      {:else if store.view === 'page' && store.current?.kind === 'database'}
+        {#if databases.loaded}
+          {#key store.currentId}<DatabaseView id={store.current.id} />{/key}
+        {/if}
       {:else if page && store.currentId === page.id}
         {#key page.id}
           <PageView {page} onstats={(w) => (words = w)} />
@@ -309,6 +334,12 @@
 {/if}
 {#if ui.study}
   {#key ui.study}<StudySheet title={ui.study.title} deck={ui.study.cards} />{/key}
+{/if}
+{#if ui.newDatabase}<NewDatabaseSheet parentId={ui.newDatabase.parentId} onCreated={ui.newDatabase.onCreated} />{/if}
+{#if ui.formula}
+  {@const f = ui.formula}
+  {@const fp = databases.prop(f.dbId, f.propId)}
+  {#if fp}<FormulaEditor dbId={f.dbId} prop={fp} onclose={() => (ui.formula = null)} />{/if}
 {/if}
 {#if ui.importSheet}
   {#key ui.importSheet}<ImportSheet name={ui.importSheet.name} items={ui.importSheet.items} />{/key}

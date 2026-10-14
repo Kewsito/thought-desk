@@ -12,6 +12,7 @@
   import { cards } from '../cards.svelte';
   import { library } from '../library.svelte';
   import { shortcuts } from '../shortcuts.svelte';
+  import { databases } from '../databases.svelte';
 
   let { words = 0, scrolled = false }: { words?: number; scrolled?: boolean } = $props();
 
@@ -48,6 +49,10 @@
   // A page nobody has typed in yet reads "Created", not "Edited".
   const status = $derived.by(() => {
     if (!page) return '';
+    if (page.kind === 'database') {
+      const n = databases.rowsOf(page.id).length;
+      return `${n.toLocaleString()} row${n === 1 ? '' : 's'}`;
+    }
     const untouched = page.updatedAt - page.createdAt < 1500;
     return untouched ? `Created ${relativeTime(page.createdAt, now)}` : `Edited ${relativeTime(page.updatedAt, now)}`;
   });
@@ -122,8 +127,8 @@
         <span class="gap" data-tauri-drag-region>…</span>
       {:else}
         <button class="crumb" class:current={i === crumbs.length - 1} onclick={() => store.open(c.id)}>
-          {#if c.icon}<span class="emoji">{c.icon}</span>{/if}
-          <span class="crumb-title">{c.title || 'Untitled'}</span>
+          {#if c.icon}<span class="emoji">{c.icon}</span>{:else if c.kind === 'database'}<Icon name="database" size={13} />{/if}
+          <span class="crumb-title">{c.title || (c.kind === 'database' ? 'Untitled database' : 'Untitled')}</span>
         </button>
       {/if}
     {/each}

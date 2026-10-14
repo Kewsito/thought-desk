@@ -4,6 +4,8 @@
   import Editor from '../editor/Editor.svelte';
   import Backlinks from '../ui/Backlinks.svelte';
   import TagRow from '../ui/TagRow.svelte';
+  import RowProperties from '../db/RowProperties.svelte';
+  import { databases } from '../databases.svelte';
   import { randomEmoji } from '../emoji';
   import { store } from '../store.svelte';
   import { ui } from '../ui.svelte';
@@ -103,6 +105,10 @@
 
   {#if meta?.tags.length}
     <div class="page-tags"><TagRow table="pages" id={page.id} /></div>
+  {/if}
+
+  {#if databases.rows[page.id]}
+    <RowProperties rowId={page.id} />
   {/if}
 
   <Editor bind:this={editor} {page} {onstats} />
