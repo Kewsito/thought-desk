@@ -22,6 +22,7 @@
   import SettingsModal from './lib/components/SettingsModal.svelte';
   import ShortcutsHelp from './lib/components/ShortcutsHelp.svelte';
   import Welcome from './lib/components/Welcome.svelte';
+  import { changeLook } from './lib/look-transition';
   import TrashModal from './lib/components/TrashModal.svelte';
   import Menu from './lib/components/Menu.svelte';
   import IconPicker from './lib/components/IconPicker.svelte';
@@ -94,7 +95,7 @@
       if (!ui.capture) ui.capture = { text: '' };
     },
     sidebar: () => (prefs.sidebarOpen = !prefs.sidebarOpen),
-    theme: () => prefs.toggleTheme(),
+    theme: () => changeLook(() => prefs.toggleTheme(), 'keyboard'),
     settings: () => (ui.settingsOpen = true),
     help: () => (ui.shortcutsHelp = !ui.shortcutsHelp),
     back: () => store.back(),

@@ -429,6 +429,22 @@
   --font-page: var(--font-mono);
 }
 
+/* Changing the look (look-transition.ts): cross-fade, or for light/dark a
+   circle of the new theme spreading out from the click. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 280ms;
+  animation-timing-function: var(--ease);
+}
+:root[data-look-change='reveal']::view-transition-old(root),
+:root[data-look-change='reveal']::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+:root[data-look-change='reveal']::view-transition-new(root) {
+  z-index: 1;
+}
+
 @media (prefers-reduced-motion: reduce) {
   :root {
     --dur-fast: 0ms;

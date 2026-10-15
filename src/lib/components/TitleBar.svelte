@@ -3,6 +3,7 @@
   import { onMount } from 'svelte';
   import Icon from './Icon.svelte';
   import WindowControls from './WindowControls.svelte';
+  import { changeLook } from '../look-transition';
   import { drag } from './TreeItem.svelte';
   import { prefs } from '../prefs.svelte';
   import { store } from '../store.svelte';
@@ -62,7 +63,7 @@
   const themeIcon = $derived(prefs.theme === 'system' ? 'monitor' : prefs.theme === 'dark' ? 'moon' : 'sun');
   const themeLabel = $derived(prefs.theme === 'system' ? 'System' : prefs.theme === 'dark' ? 'Dark' : 'Light');
   function cycleTheme() {
-    prefs.theme = prefs.theme === 'system' ? 'light' : prefs.theme === 'light' ? 'dark' : 'system';
+    changeLook(() => (prefs.theme = prefs.theme === 'system' ? 'light' : prefs.theme === 'light' ? 'dark' : 'system'));
   }
   const trashCount = $derived(
     store.trash.length +

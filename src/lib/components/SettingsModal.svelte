@@ -14,6 +14,7 @@
   import { planner } from '../planner.svelte';
   import { prefs, type Font, type RemindAssignments, type RemindEvents, type Theme, type WeekStart } from '../prefs.svelte';
   import { importCalendar } from '../ics-import.svelte';
+  import { changeLook } from '../look-transition';
   import { ui } from '../ui.svelte';
   import { formatBytes } from '../time';
   import type { DataInfo } from '../types';
@@ -169,7 +170,7 @@
     <div class="group">
       <div class="group-row">
         <div class="row-label">Theme</div>
-        <Segmented options={themes} value={prefs.theme} onchange={(v) => (prefs.theme = v)} label="Theme" />
+        <Segmented options={themes} value={prefs.theme} onchange={(v) => changeLook(() => (prefs.theme = v))} label="Theme" />
       </div>
       <div class="group-row stack">
         <div class="row-label">

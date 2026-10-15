@@ -11,6 +11,7 @@
   import { ACCENTS, type Accent } from '../colors';
   import { prefs, type Font, type Theme } from '../prefs.svelte';
   import { store } from '../store.svelte';
+  import { changeLook } from '../look-transition';
 
   const STEPS = ['welcome', 'look', 'tour', 'done'] as const;
   let step = $state(0);
@@ -64,20 +65,40 @@
     else void go(step + 1);
   }
 
-  /** Steps slide in from the side they come from. */
-  function slide(_node: Element, { from }: { from: number }) {
+  const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
+
+  /** Steps slide in from the side they come from… */
+  function slideIn(_node: Element, { from }: { from: number }) {
     return {
-      duration: reduced ? 0 : 320,
-      css: (t: number) => {
-        const e = 1 - Math.pow(1 - t, 3);
-        return `opacity:${e}; transform: translateX(${(1 - e) * 24 * from}px)`;
-      },
+      // Starts as the old step is nearly gone, so the two never read on top of each other.
+      delay: reduced ? 0 : 140,
+      duration: reduced ? 0 : 420,
+      css: (t: number) => `opacity:${easeOut(t)}; transform: translateX(${(1 - easeOut(t)) * 40 * from}px)`,
     };
   }
+
+  /** …while the one being left drifts out the other way. */
+  function slideOut(_node: Element, { to }: { to: number }) {
+    return {
+      duration: reduced ? 0 : 170,
+      css: (t: number) => `opacity:${t * t * t}; transform: translateX(${(1 - t) * 28 * to}px) scale(${0.985 + 0.015 * t})`,
+    };
+  }
+
+  /** At the end the whole screen lifts away, showing Home underneath. */
+  function leave(_node: Element) {
+    return {
+      duration: reduced ? 0 : 520,
+      css: (t: number) => `opacity:${easeOut(t)}; transform: scale(${1 + (1 - t) * 0.04}); filter: blur(${(1 - t) * 6}px)`,
+    };
+  }
+
+  /** The little burst of dots around the finished check mark. */
+  const BURST = Array.from({ length: 12 }, (_, i) => ({ angle: (i / 12) * 360 + (i % 2 ? 8 : -8), far: i % 3 === 0 ? 62 : i % 3 === 1 ? 52 : 44, size: i % 2 ? 6 : 8 }));
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div class="welcome" role="dialog" aria-modal="true" aria-label="Welcome to Thought Desk" tabindex="-1" {onkeydown}>
+<div class="welcome" class:still={reduced} role="dialog" aria-modal="true" aria-label="Welcome to Thought Desk" tabindex="-1" {onkeydown} out:leave|global>
   <header class="bar" data-tauri-drag-region>
     <div class="grow" data-tauri-drag-region></div>
     <WindowControls />
@@ -85,7 +106,7 @@
 
   <div class="stage">
     {#key step}
-      <section class="step" in:slide={{ from: dir }}>
+      <section class="step" in:slideIn={{ from: dir }} out:slideOut={{ to: -dir }}>
         {#if STEPS[step] === 'welcome'}
           <svg class="logo" width="64" height="64" viewBox="0 0 1024 1024" aria-hidden="true">
             <rect x="64" y="64" width="896" height="896" rx="230" fill="var(--text)" />
@@ -105,7 +126,7 @@
           <div class="field-label">Appearance</div>
           <div class="choices three" role="radiogroup" aria-label="Appearance">
             {#each themes as t (t.value)}
-              <button class="choice" class:on={prefs.theme === t.value} role="radio" aria-checked={prefs.theme === t.value} onclick={() => (prefs.theme = t.value)}>
+              <button class="choice" class:on={prefs.theme === t.value} role="radio" aria-checked={prefs.theme === t.value} onclick={() => changeLook(() => (prefs.theme = t.value))}>
                 <span class="window {t.value}" aria-hidden="true">
                   <span class="half light"><i class="side"></i><i class="line"></i><i class="line short"></i></span>
                   <span class="half dark"><i class="side"></i><i class="line"></i><i class="line short"></i></span>
@@ -117,13 +138,13 @@
 
           <div class="field-label">Accent color</div>
           <div class="accent">
-            <Swatches keys={[...ACCENTS]} value={prefs.accent === 'custom' ? 'graphite' : prefs.accent} onchange={(k) => (prefs.accent = k as Accent)} label="Accent color" />
+            <Swatches keys={[...ACCENTS]} value={prefs.accent === 'custom' ? 'graphite' : prefs.accent} onchange={(k) => changeLook(() => (prefs.accent = k as Accent))} label="Accent color" />
           </div>
 
           <div class="field-label">Writing font</div>
           <div class="choices three" role="radiogroup" aria-label="Writing font">
             {#each fonts as f (f.value)}
-              <button class="choice font" class:on={prefs.font === f.value} role="radio" aria-checked={prefs.font === f.value} onclick={() => (prefs.font = f.value)}>
+              <button class="choice font" class:on={prefs.font === f.value} role="radio" aria-checked={prefs.font === f.value} onclick={() => changeLook(() => (prefs.font = f.value))}>
                 <span class="sample {f.value}" aria-hidden="true">Aa</span>
                 <span class="choice-label">{f.label}</span>
                 <span class="note">{f.note}</span>
@@ -134,22 +155,27 @@
           <h1>Three things to know</h1>
           <p class="lead">That's all you need to get going.</p>
           <ul class="tips">
-            <li>
+            <li style:--n={0}>
               <span class="keys"><kbd>/</kbd></span>
               <span class="tip"><strong>Type / for anything</strong>Headings, to-dos, tables, math and databases: type / on an empty line and pick one.</span>
             </li>
-            <li>
+            <li style:--n={1}>
               <span class="keys"><kbd>Ctrl</kbd><kbd>K</kbd></span>
               <span class="tip"><strong>Find anything</strong>Pages, assignments, events and files, as fast as you can type.</span>
             </li>
-            <li>
+            <li style:--n={2}>
               <span class="keys"><span class="home-ico"><Icon name="home" size={16} /></span></span>
               <span class="tip"><strong>Home has your day</strong>Today's classes, what's due soon and every open to-do, in one place.</span>
             </li>
           </ul>
           <p class="aside">Forgot a shortcut? <kbd>Ctrl</kbd><kbd>/</kbd> shows them all.</p>
         {:else}
-          <div class="done-mark" aria-hidden="true"><Icon name="check" size={30} stroke={2.4} /></div>
+          <div class="done-mark" aria-hidden="true">
+            {#each BURST as b, i (i)}<i class="spark" style:--a="{b.angle}deg" style:--far="{b.far}px" style:--s="{b.size}px"></i>{/each}
+            <span class="disc">
+              <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path class="tick" d="M5 12.5l4.2 4.2L19 7" /></svg>
+            </span>
+          </div>
           <h1>{first ? `You're all set, ${first}.` : "You're all set."}</h1>
           <p class="lead">Home will help you add your courses and class schedule next. Start whenever you're ready.</p>
         {/if}
@@ -185,11 +211,75 @@
     z-index: 300;
     display: flex;
     flex-direction: column;
-    background:
-      radial-gradient(1400px 520px at 50% -24%, color-mix(in srgb, var(--accent) 5%, transparent), transparent 72%),
-      var(--bg);
+    background: var(--bg);
     color: var(--text);
     outline: none;
+    overflow: hidden;
+    transform-origin: 50% 40%;
+  }
+  /* A soft glow of the accent colour that drifts slowly behind everything. */
+  .welcome::before {
+    content: '';
+    position: absolute;
+    inset: -30% -10% auto;
+    height: 80%;
+    background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 8%, transparent), transparent);
+    pointer-events: none;
+    animation: drift 18s ease-in-out infinite alternate;
+  }
+  /* Graphite would make a grey haze rather than a glow. */
+  :global(:root[data-accent='graphite']) .welcome::before {
+    opacity: 0.35;
+  }
+  @keyframes drift {
+    from {
+      transform: translate(-6%, -4%) scale(1);
+    }
+    to {
+      transform: translate(6%, 3%) scale(1.12);
+    }
+  }
+  .bar,
+  .stage,
+  .nav {
+    position: relative;
+  }
+
+  /* Each step's parts arrive one after another. */
+  .step > :global(*) {
+    animation: rise 560ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  .step > :global(:nth-child(2)) { animation-delay: 60ms; }
+  .step > :global(:nth-child(3)) { animation-delay: 120ms; }
+  .step > :global(:nth-child(4)) { animation-delay: 180ms; }
+  .step > :global(:nth-child(5)) { animation-delay: 220ms; }
+  .step > :global(:nth-child(6)) { animation-delay: 260ms; }
+  .step > :global(:nth-child(7)) { animation-delay: 300ms; }
+  .step > :global(:nth-child(8)) { animation-delay: 340ms; }
+  .step > :global(:nth-child(n + 9)) { animation-delay: 380ms; }
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+  }
+  /* The logo springs in first. */
+  .step > .logo {
+    animation: spring 760ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+  @keyframes spring {
+    from {
+      opacity: 0;
+      transform: scale(0.6) rotate(-8deg);
+    }
+  }
+  .welcome.still .tick {
+    stroke-dashoffset: 0;
+  }
+  .welcome.still::before,
+  .welcome.still .step > :global(*),
+  .welcome.still :global(*) {
+    animation: none !important;
   }
   .bar {
     display: flex;
@@ -296,6 +386,20 @@
   }
   .choice.on {
     box-shadow: inset 0 0 0 2px var(--accent);
+    animation: pick 360ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  @keyframes pick {
+    40% {
+      transform: scale(0.96);
+    }
+  }
+  .choice.on .sample {
+    animation: bob 420ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  @keyframes bob {
+    40% {
+      transform: translateY(-4px) scale(1.08);
+    }
   }
   .choice-label {
     font-size: var(--fs-ui);
@@ -390,6 +494,8 @@
     text-align: left;
   }
   .tips li {
+    animation: rise 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    animation-delay: calc(140ms + var(--n, 0) * 90ms);
     display: flex;
     align-items: center;
     gap: 16px;
@@ -405,7 +511,10 @@
     width: 76px;
     flex: none;
   }
+  /* Each tip's keys are pressed once, as if typed. */
   .keys kbd {
+    animation: press 300ms ease-in-out both;
+    animation-delay: calc(560ms + var(--n, 0) * 160ms);
     min-width: 26px;
     height: 26px;
     justify-content: center;
@@ -446,15 +555,69 @@
   .aside kbd {
     margin: 0 1px;
   }
+  @keyframes press {
+    50% {
+      transform: translateY(2px);
+      box-shadow: 0 0 0 0.5px var(--hairline);
+      background: var(--fill-2);
+    }
+  }
   .done-mark {
+    position: relative;
     display: grid;
     place-items: center;
-    width: 64px;
-    height: 64px;
+    width: 72px;
+    height: 72px;
     margin-bottom: 22px;
+  }
+  .disc {
+    display: grid;
+    place-items: center;
+    width: 72px;
+    height: 72px;
     border-radius: 50%;
     background: var(--accent);
     color: var(--on-accent);
+    animation: spring 640ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+  /* The tick draws itself once the disc has landed. */
+  .tick {
+    stroke-dasharray: 24;
+    stroke-dashoffset: 24;
+    animation: draw 420ms 300ms cubic-bezier(0.65, 0, 0.35, 1) forwards;
+  }
+  @keyframes draw {
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+  .spark {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: var(--s);
+    height: var(--s);
+    margin: calc(var(--s) / -2) 0 0 calc(var(--s) / -2);
+    border-radius: 50%;
+    background: var(--accent);
+    opacity: 0;
+    animation: burst 760ms 360ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  .spark:nth-child(3n) {
+    background: color-mix(in srgb, var(--accent) 55%, var(--bg));
+  }
+  @keyframes burst {
+    0% {
+      opacity: 0;
+      transform: rotate(var(--a)) translateX(20px) scale(0.4);
+    }
+    25% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: rotate(var(--a)) translateX(var(--far)) scale(1);
+    }
   }
 
   .nav {
