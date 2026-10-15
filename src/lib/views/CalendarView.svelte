@@ -155,10 +155,22 @@
           <Icon name="chevron-right" />
         </button>
       </div>
-      <button class="icon-btn" onclick={importCalendar} data-tip="Import a calendar (.ics)" aria-label="Import a calendar"><Icon name="download" /></button>
+      <button class="btn raised import-btn" onclick={importCalendar} data-tip="Your class schedule from Canvas, Google Calendar or Outlook (.ics)"><Icon name="download" size={15} /> Import</button>
       <button class="btn primary" onclick={() => newEvent()}><Icon name="plus" size={15} stroke={2.2} /> New Event</button>
     </div>
   </header>
+
+  {#if !planner.events.some((e) => !e.deletedAt)}
+    <div class="first-run">
+      <Icon name="calendar" size={18} />
+      <div class="grow">
+        <strong>Bring in your class schedule</strong>
+        <span>In Canvas, Google Calendar or Outlook, export or download the calendar as an .ics file, then import it here. Classes, deadlines and repeats come along.</span>
+      </div>
+      <button class="btn primary" onclick={importCalendar}><Icon name="download" size={15} /> Import .ics</button>
+      <button class="btn raised" onclick={() => newEvent()}>Add a class</button>
+    </div>
+  {/if}
 
   <div class="body" class:week={prefs.calendarMode === 'week'}>
     <div class="grid-wrap">
@@ -259,6 +271,35 @@
   }
   .today-btn {
     background: var(--fill);
+  }
+  .first-run {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 14px;
+    padding: 12px 16px;
+    border-radius: var(--r-md);
+    background: var(--bg-grouped);
+    box-shadow: inset 0 0 0 1px var(--hairline);
+    font-size: var(--fs-ui);
+  }
+  .first-run :global(.icon) {
+    flex: none;
+    color: var(--text-2);
+  }
+  .first-run .grow {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .first-run span {
+    font-size: var(--fs-footnote);
+    color: var(--text-3);
+  }
+  .first-run .btn {
+    flex: none;
   }
   .body {
     flex: 1;

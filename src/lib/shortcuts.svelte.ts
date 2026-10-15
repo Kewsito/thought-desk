@@ -19,6 +19,7 @@ export type ShortcutId =
   | 'sidebar'
   | 'theme'
   | 'settings'
+  | 'help'
   | 'back'
   | 'forward'
   | 'calendarPrev'
@@ -43,6 +44,7 @@ export const SHORTCUTS: ShortcutDef[] = [
   { id: 'sidebar', label: 'Show or hide the sidebar', group: 'General', defaults: ['Mod+Backslash'] },
   { id: 'theme', label: 'Light or dark', group: 'General', defaults: ['Mod+Shift+KeyL'] },
   { id: 'settings', label: 'Settings', group: 'General', defaults: ['Mod+Comma'] },
+  { id: 'help', label: 'Keyboard shortcuts', group: 'General', defaults: ['Mod+Slash'] },
   { id: 'back', label: 'Back', group: 'General', defaults: ['Alt+ArrowLeft'] },
   { id: 'forward', label: 'Forward', group: 'General', defaults: ['Alt+ArrowRight'] },
   { id: 'goHome', label: 'Home', group: 'Go To', defaults: ['Mod+Digit1'] },
@@ -87,6 +89,17 @@ export const EDITOR_KEYS: { label: string; keys: string[][] }[] = [
   { label: 'Duplicate block', keys: [['Ctrl', 'D']] },
   { label: 'Indent list item', keys: [['Tab'], ['Shift', 'Tab']] },
   { label: 'Flashcards: show answer, then rate', keys: [['Space'], ['1'], ['2'], ['3'], ['4']] },
+];
+
+/** Typing these at the start of a line (then Space, unless `now`) turns it into a block. */
+export const MARKDOWN_KEYS: { label: string; type: string; now?: boolean }[] = [
+  { label: 'Heading', type: '#' },
+  { label: 'Bulleted list', type: '-' },
+  { label: 'Numbered list', type: '1.' },
+  { label: 'Checklist', type: '[ ]' },
+  { label: 'Quote', type: '>' },
+  { label: 'Code block', type: '```' },
+  { label: 'Divider', type: '---', now: true },
 ];
 
 const MODIFIER_CODES = new Set(['ControlLeft', 'ControlRight', 'ShiftLeft', 'ShiftRight', 'AltLeft', 'AltRight', 'MetaLeft', 'MetaRight']);

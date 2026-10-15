@@ -63,7 +63,7 @@
 
 <svelte:window onkeydowncapture={onKey} />
 
-<h3 class="group-title">
+<h3 class="group-title" id="settings-keyboard">
   <span>Keyboard Shortcuts</span>
   {#if anyCustom}
     <button class="btn small raised" onclick={() => shortcuts.reset()}><Icon name="restore" size={13} stroke={2} /> Reset All</button>

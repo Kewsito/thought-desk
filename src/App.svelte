@@ -20,6 +20,7 @@
   import PageView from './lib/components/PageView.svelte';
   import SearchPalette from './lib/components/SearchPalette.svelte';
   import SettingsModal from './lib/components/SettingsModal.svelte';
+  import ShortcutsHelp from './lib/components/ShortcutsHelp.svelte';
   import TrashModal from './lib/components/TrashModal.svelte';
   import Menu from './lib/components/Menu.svelte';
   import IconPicker from './lib/components/IconPicker.svelte';
@@ -94,6 +95,7 @@
     sidebar: () => (prefs.sidebarOpen = !prefs.sidebarOpen),
     theme: () => prefs.toggleTheme(),
     settings: () => (ui.settingsOpen = true),
+    help: () => (ui.shortcutsHelp = !ui.shortcutsHelp),
     back: () => store.back(),
     forward: () => store.forward(),
     goHome: () => store.go('home'),
@@ -316,6 +318,7 @@
 
 {#if ui.searchOpen}<SearchPalette />{/if}
 {#if ui.settingsOpen}<SettingsModal />{/if}
+{#if ui.shortcutsHelp}<ShortcutsHelp />{/if}
 {#if ui.trashOpen}<TrashModal />{/if}
 {#if ui.menu}
   {#key ui.menu}<Menu menu={ui.menu} />{/key}

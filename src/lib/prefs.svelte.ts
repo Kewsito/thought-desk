@@ -57,6 +57,8 @@ interface Stored {
   globalCapture: boolean;
   /** The page captured notes and to-dos go to. */
   inboxId: string | null;
+  /** The "Get set up" card on Home was closed. */
+  setupHidden: boolean;
   remindAssignments: RemindAssignments;
   remindEvents: RemindEvents;
   /** The user's own shortcuts; null turns one off. Missing: the default. */
@@ -103,6 +105,7 @@ const defaults: Stored = {
   studyReverse: false,
   globalCapture: true,
   inboxId: null,
+  setupHidden: false,
   remindAssignments: 'evening',
   remindEvents: 10,
   shortcuts: {},
@@ -151,6 +154,7 @@ class Prefs {
   studyReverse = $state(this.#initial.studyReverse);
   globalCapture = $state(this.#initial.globalCapture);
   inboxId = $state<string | null>(this.#initial.inboxId);
+  setupHidden = $state(this.#initial.setupHidden);
   remindAssignments = $state<RemindAssignments>(this.#initial.remindAssignments);
   remindEvents = $state<RemindEvents>(this.#initial.remindEvents);
   shortcuts = $state<Partial<Record<ShortcutId, string | null>>>(this.#initial.shortcuts);
@@ -188,6 +192,7 @@ class Prefs {
       studyReverse: this.studyReverse,
       globalCapture: this.globalCapture,
       inboxId: this.inboxId,
+      setupHidden: this.setupHidden,
       remindAssignments: this.remindAssignments,
       remindEvents: this.remindEvents,
       shortcuts: $state.snapshot(this.shortcuts),

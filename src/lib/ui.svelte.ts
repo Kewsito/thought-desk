@@ -84,6 +84,9 @@ export interface Toast {
 class UI {
   searchOpen = $state(false);
   settingsOpen = $state(false);
+  /** A part of Settings to scroll to when it opens. */
+  settingsSection = $state<'keyboard' | null>(null);
+  shortcutsHelp = $state(false);
   trashOpen = $state(false);
   menu = $state<MenuState | null>(null);
   iconPicker = $state<IconPickerState | null>(null);
@@ -113,6 +116,7 @@ class UI {
     return (
       this.searchOpen ||
       this.settingsOpen ||
+      this.shortcutsHelp ||
       this.trashOpen ||
       this.confirmState !== null ||
       this.assignmentSheet !== null ||

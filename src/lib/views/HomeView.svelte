@@ -5,6 +5,7 @@
   import CaptureBox from '../ui/CaptureBox.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
   import EventRow from '../ui/EventRow.svelte';
+  import SetupCard from '../ui/SetupCard.svelte';
   import FileTile from '../ui/FileTile.svelte';
   import { itemsByDay } from '../calendar.svelte';
   import { clock } from '../clock.svelte';
@@ -90,6 +91,8 @@
       <p class="view-sub">{summary}</p>
     </div>
   </header>
+
+  <SetupCard />
 
   <div class="group capture-card">
     <CaptureBox inline onsaved={() => void todos.load()} />

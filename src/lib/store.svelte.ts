@@ -405,10 +405,12 @@ class Store {
 
   async create(
     parentId: string | null = null,
-    opts: { index?: number; open?: boolean; title?: string; icon?: string } = {},
+    opts: { index?: number; open?: boolean; title?: string; icon?: string; content?: unknown[] } = {},
   ) {
     try {
       const meta = await api.createPage(parentId, opts.index ?? null, opts.title ?? '', opts.icon ?? '');
+      // Starter blocks (a flashcard deck, lecture notes…).
+      if (opts.content?.length) await api.updatePage(meta.id, { content: JSON.stringify({ type: 'doc', content: opts.content }) });
       await this.refresh();
       if (parentId) prefs.expanded[parentId] = true;
       if (opts.open !== false) {

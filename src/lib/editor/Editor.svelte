@@ -11,7 +11,16 @@
   import BubbleMenu from './BubbleMenu.svelte';
   import TableMenu from './TableMenu.svelte';
 
-  let { page, onstats }: { page: Page; onstats?: (words: number) => void } = $props();
+  let {
+    page,
+    onstats,
+    onempty,
+  }: {
+    page: Page;
+    onstats?: (words: number) => void;
+    /** Whether the page body is empty (told on start and as it changes). */
+    onempty?: (empty: boolean) => void;
+  } = $props();
 
   let host: HTMLDivElement;
   let editor = $state<Editor | null>(null);
@@ -66,6 +75,25 @@
     editor?.chain().focus('end').run();
   }
 
+  /** Fills an empty page with starter blocks, the caret in the first empty line. */
+  export function start(content: JSONContent[]) {
+    if (!editor || editor.isDestroyed) return;
+    editor.commands.setContent({ type: 'doc', content }, { emitUpdate: true });
+    let at: number | null = null;
+    editor.state.doc.descendants((node, pos) => {
+      if (at !== null) return false;
+      if (node.isTextblock && node.content.size === 0) at = pos + 1;
+      return true;
+    });
+    editor.chain().focus(at ?? 'end').run();
+  }
+
+  /** Puts a database (made from the page's starter row) into the page. */
+  export function insertDatabase(id: string) {
+    if (!editor || editor.isDestroyed) return;
+    editor.chain().focus('end').insertContent([{ type: 'databaseBlock', attrs: { id } }, { type: 'paragraph' }]).run();
+  }
+
   onMount(() => {
     const { content, legacy } = parseContent(page.content);
     const ed = new Editor({
@@ -85,6 +113,7 @@
         },
       },
       onUpdate: () => {
+        onempty?.(ed.isEmpty);
         dirty = true;
         clearTimeout(timer);
         timer = setTimeout(() => {
@@ -95,6 +124,7 @@
     });
     editor = ed;
     if (import.meta.env.DEV) (window as any).__editor = ed;
+    onempty?.(ed.isEmpty);
     stats();
     if (legacy) {
       // Convert seeded HTML into stored JSON right away.

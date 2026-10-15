@@ -22,6 +22,10 @@
 
   onMount(() => {
     api.dataInfo().then((d) => (info = d), ui.error);
+    if (ui.settingsSection) {
+      document.getElementById(`settings-${ui.settingsSection}`)?.scrollIntoView({ block: 'start' });
+      ui.settingsSection = null;
+    }
     // Settings is the most expensive screen to draw. Chromium keeps those
     // graphics around for minutes; let it go as soon as Settings closes.
     return () => void api.trimMemory().catch(() => {});

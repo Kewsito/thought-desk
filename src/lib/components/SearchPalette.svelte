@@ -120,6 +120,7 @@
     { title: 'New Database', icon: 'database', keywords: 'table board tracker spreadsheet template kanban list', run: () => (ui.newDatabase = { parentId: null }) },
     { title: 'Import a Spreadsheet', icon: 'upload', keywords: 'csv excel sheets database table import', run: () => (ui.newDatabase = { parentId: null }) },
     { title: 'Settings', icon: 'settings', keywords: 'preferences theme accent color', run: () => (ui.settingsOpen = true) },
+    { title: 'Keyboard Shortcuts', icon: 'keyboard', keywords: 'keys hotkeys help cheat sheet', run: () => (ui.shortcutsHelp = true) },
     { title: 'Trash', icon: 'trash', keywords: 'deleted restore', run: () => (ui.trashOpen = true) },
   ];
 

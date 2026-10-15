@@ -9,6 +9,8 @@
   import { randomEmoji } from '../emoji';
   import { store } from '../store.svelte';
   import { ui } from '../ui.svelte';
+  import { STARTERS, type Starter } from '../editor/starters';
+  import type { JSONContent } from '@tiptap/core';
   import type { Page } from '../types';
 
   let { page, onstats }: { page: Page; onstats?: (words: number) => void } = $props();
@@ -16,7 +18,23 @@
   // Live metadata (title/icon/width) comes from the store, content from `page`.
   const meta = $derived(store.byId.get(page.id));
   let titleEl: HTMLHeadingElement;
-  let editor = $state<{ focusStart(): void; focusEnd(): void }>();
+  let editor = $state<{ focusStart(): void; focusEnd(): void; start(content: JSONContent[]): void; insertDatabase(id: string): void }>();
+  /** The body is empty: offer ways to start it. */
+  let empty = $state(false);
+
+  function useStarter(s: Starter) {
+    // A page with no name yet takes the starter's.
+    if (!meta?.title.trim()) {
+      const title = s.title(new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' }));
+      titleEl.textContent = title;
+      store.update(page.id, { title, ...(meta?.icon ? {} : { icon: s.icon }) });
+    }
+    editor?.start(s.content());
+  }
+
+  function startDatabase() {
+    ui.newDatabase = { parentId: page.id, onCreated: (id) => editor?.insertDatabase(id) };
+  }
 
   onMount(() => {
     titleEl.textContent = page.title;
@@ -111,7 +129,17 @@
     <RowProperties rowId={page.id} />
   {/if}
 
-  <Editor bind:this={editor} {page} {onstats} />
+  <Editor bind:this={editor} {page} {onstats} onempty={(e) => (empty = e)} />
+
+  {#if empty}
+    <div class="starters" aria-label="Start this page">
+      <span class="starters-label">Start with</span>
+      {#each STARTERS as s (s.key)}
+        <button class="starter" onclick={() => useStarter(s)} data-tip={s.hint}><span class="starter-icon">{s.icon}</span>{s.label}</button>
+      {/each}
+      <button class="starter" onclick={startDatabase} data-tip="A table, board or tracker in this page"><Icon name="database" size={14} />Database</button>
+    </div>
+  {/if}
 
   <Backlinks id={page.id} />
 
@@ -224,5 +252,48 @@
   .tail {
     min-height: 35vh;
     cursor: text;
+  }
+  .starters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 18px;
+    font-family: var(--font-ui);
+    animation: starters-in var(--dur) var(--ease) both;
+  }
+  @keyframes starters-in {
+    from {
+      opacity: 0;
+    }
+  }
+  .starters-label {
+    margin-right: 4px;
+    font-size: var(--fs-footnote);
+    color: var(--text-3);
+  }
+  .starter {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 10px;
+    border-radius: var(--r-sm);
+    box-shadow: inset 0 0 0 1px var(--hairline);
+    font-size: var(--fs-ui);
+    color: var(--text-2);
+    transition:
+      background-color var(--dur-fast) var(--ease),
+      color var(--dur-fast) var(--ease);
+  }
+  .starter:hover {
+    background: var(--fill);
+    color: var(--text);
+  }
+  .starter :global(.icon) {
+    color: var(--text-3);
+  }
+  .starter-icon {
+    font-size: 13px;
   }
 </style>

@@ -10,6 +10,10 @@ import { TEMPLATES } from './lib/db/templates';
 type Row = PageMeta & { content: string; text: string };
 
 const KEY = 'thoughtdesk.devmock.v2';
+// `?fresh` in the address: start like a new install (just the welcome page,
+// no sample courses, assignments or databases) to see the first run.
+const FRESH = new URLSearchParams(location.search).has('fresh');
+if (FRESH) for (const k of Object.keys(localStorage)) if (k.startsWith('thoughtdesk.')) localStorage.removeItem(k);
 const load = (): Row[] => {
   try {
     return JSON.parse(localStorage.getItem(KEY) ?? '') as Row[];
@@ -172,7 +176,8 @@ const persistBlobs = () => {
   }
 };
 
-let planner: PlannerData = loadPlanner() ?? seedPlanner();
+let planner: PlannerData =
+  loadPlanner() ?? (FRESH ? { courses: [], assignments: [], events: [], files: [], tags: [], sessions: [], reviews: [] } : seedPlanner());
 // Older preview data predates tags.
 planner.tags ??= [];
 for (const x of [...planner.assignments, ...planner.events, ...planner.files]) x.tags ??= [];
@@ -423,7 +428,7 @@ function mockCreateDatabase(parentId: string | null, title: string, icon: string
 }
 
 // A database to look at in the preview.
-if (!Object.keys(dbData.schemas).length && !localStorage.getItem(DB_KEY)) {
+if (!FRESH && !Object.keys(dbData.schemas).length && !localStorage.getItem(DB_KEY)) {
   const t = TEMPLATES.find((x) => x.key === 'reading')!;
   const books: [string, string, string, string[], number, string?][] = [
     ['The Left Hand of Darkness', 'Ursula K. Le Guin', 'finished', ['fiction'], 304, 'r5'],

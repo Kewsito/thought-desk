@@ -8,6 +8,13 @@
   import { Progressive, takeGrouped } from '../progressive.svelte';
   import { store } from '../store.svelte';
   import { ui } from '../ui.svelte';
+  import { STARTERS } from '../editor/starters';
+
+  /** A new page with a first, empty card to type into. */
+  function startDeck() {
+    const deck = STARTERS.find((s) => s.key === 'cards')!;
+    void store.create(null, { title: deck.title(''), icon: deck.icon, content: deck.content() });
+  }
 
   onMount(() => void cards.load());
 
@@ -86,7 +93,9 @@
       icon="cards"
       title="No flashcards yet"
       text="Type /flashcard in any page. Write the front, press Enter for the back, and Enter again for the next card."
-    />
+    >
+      <button class="btn primary" onclick={startDeck}><Icon name="plus" size={15} stroke={2.2} /> Start a deck</button>
+    </EmptyState>
   {/if}
 
   {#each shownGroups as { group: g, items } (g.key)}
