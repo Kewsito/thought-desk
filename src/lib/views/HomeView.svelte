@@ -13,6 +13,7 @@
   import { addDays, dueState, parseDate } from '../dates';
   import { library } from '../library.svelte';
   import { planner } from '../planner.svelte';
+  import { prefs } from '../prefs.svelte';
   import { store } from '../store.svelte';
   import { tags } from '../tags.svelte';
   import { relativeTime, formatBytes } from '../time';
@@ -25,10 +26,11 @@
 
   const greeting = $derived.by(() => {
     const h = Number(clock.time.slice(0, 2));
-    if (h < 5) return 'Working late?';
-    if (h < 12) return 'Good morning';
-    if (h < 18) return 'Good afternoon';
-    return 'Good evening';
+    // A greeting uses the first name only.
+    const name = prefs.name.trim().split(/\s+/)[0] ?? '';
+    if (h < 5) return name ? `Working late, ${name}?` : 'Working late?';
+    const hello = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+    return name ? `${hello}, ${name}` : hello;
   });
   const dateLine = $derived(parseDate(clock.today).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }));
 

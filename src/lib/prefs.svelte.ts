@@ -59,6 +59,10 @@ interface Stored {
   inboxId: string | null;
   /** The "Get set up" card on Home was closed. */
   setupHidden: boolean;
+  /** What Home calls you ("Good morning, Sam"); empty for no name. */
+  name: string;
+  /** The welcome screen has been gone through (or this install predates it). */
+  welcomed: boolean;
   remindAssignments: RemindAssignments;
   remindEvents: RemindEvents;
   /** The user's own shortcuts; null turns one off. Missing: the default. */
@@ -106,6 +110,8 @@ const defaults: Stored = {
   globalCapture: true,
   inboxId: null,
   setupHidden: false,
+  name: '',
+  welcomed: false,
   remindAssignments: 'evening',
   remindEvents: 10,
   shortcuts: {},
@@ -118,7 +124,10 @@ function read(): Stored {
   try {
     const raw = localStorage.getItem(KEY);
     if (raw) {
-      const stored = { ...defaults, ...JSON.parse(raw) } as Stored;
+      const parsed = JSON.parse(raw);
+      const stored = { ...defaults, ...parsed } as Stored;
+      // Someone who used the app before the welcome screen existed doesn't get it now.
+      if (!('welcomed' in parsed)) stored.welcomed = true;
       if (!ACCENTS.some((a) => a.key === stored.accent) && stored.accent !== 'custom') stored.accent = 'graphite';
       if (!PALETTES.some((p) => p.key === stored.palette) && stored.palette !== 'custom') stored.palette = 'default';
       return stored;
@@ -155,6 +164,8 @@ class Prefs {
   globalCapture = $state(this.#initial.globalCapture);
   inboxId = $state<string | null>(this.#initial.inboxId);
   setupHidden = $state(this.#initial.setupHidden);
+  name = $state(this.#initial.name);
+  welcomed = $state(this.#initial.welcomed);
   remindAssignments = $state<RemindAssignments>(this.#initial.remindAssignments);
   remindEvents = $state<RemindEvents>(this.#initial.remindEvents);
   shortcuts = $state<Partial<Record<ShortcutId, string | null>>>(this.#initial.shortcuts);
@@ -193,6 +204,8 @@ class Prefs {
       globalCapture: this.globalCapture,
       inboxId: this.inboxId,
       setupHidden: this.setupHidden,
+      name: this.name,
+      welcomed: this.welcomed,
       remindAssignments: this.remindAssignments,
       remindEvents: this.remindEvents,
       shortcuts: $state.snapshot(this.shortcuts),

@@ -21,6 +21,7 @@
   import SearchPalette from './lib/components/SearchPalette.svelte';
   import SettingsModal from './lib/components/SettingsModal.svelte';
   import ShortcutsHelp from './lib/components/ShortcutsHelp.svelte';
+  import Welcome from './lib/components/Welcome.svelte';
   import TrashModal from './lib/components/TrashModal.svelte';
   import Menu from './lib/components/Menu.svelte';
   import IconPicker from './lib/components/IconPicker.svelte';
@@ -186,7 +187,8 @@
   });
 
   function onKeydown(e: KeyboardEvent) {
-    if (e.defaultPrevented) return;
+    // The welcome screen covers everything; the app's shortcuts wait for it.
+    if (e.defaultPrevented || !prefs.welcomed) return;
     const mod = e.ctrlKey || e.metaKey;
     const key = e.key.toLowerCase();
 
@@ -316,6 +318,7 @@
   </main>
 </div>
 
+{#if !prefs.welcomed}<Welcome />{/if}
 {#if ui.searchOpen}<SearchPalette />{/if}
 {#if ui.settingsOpen}<SettingsModal />{/if}
 {#if ui.shortcutsHelp}<ShortcutsHelp />{/if}

@@ -6,6 +6,7 @@
 import { mockConvertFileSrc, mockIPC, mockWindows } from '@tauri-apps/api/mocks';
 import type { Assignment, CalEvent, CardReview, CellValue, Course, DatabaseSchema, DbRow, FileMeta, OccurrencePage, PageMeta, Tag } from './lib/types';
 import { TEMPLATES } from './lib/db/templates';
+import { prefs } from './lib/prefs.svelte';
 
 type Row = PageMeta & { content: string; text: string };
 
@@ -14,6 +15,9 @@ const KEY = 'thoughtdesk.devmock.v2';
 // no sample courses, assignments or databases) to see the first run.
 const FRESH = new URLSearchParams(location.search).has('fresh');
 if (FRESH) for (const k of Object.keys(localStorage)) if (k.startsWith('thoughtdesk.')) localStorage.removeItem(k);
+// The welcome screen only shows in the preview with `?welcome` (so test runs,
+// each a "new install", go straight to the app).
+prefs.welcomed = !new URLSearchParams(location.search).has('welcome');
 const load = (): Row[] => {
   try {
     return JSON.parse(localStorage.getItem(KEY) ?? '') as Row[];

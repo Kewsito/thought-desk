@@ -40,6 +40,7 @@ Databases were tested the same way: a 50,000-row tracker linked to a 5,000-row o
 
 ## Features
 
+- **Welcome screen:** a new install opens on four short steps: your name (Home greets you by it), how the app looks (light, dark or matching the system, an accent color and a writing font, applied as you choose), three things worth knowing (`/`, `Ctrl+K`, Home), and you're set. All of it can be changed in Settings, which can also show the welcome again. People who used the app before don't see it.
 - **A gentle first run:** Home shows a "Get set up for the semester" checklist (add courses, bring in your class schedule, add an assignment, make a flashcard deck) that ticks itself off and can be hidden. An empty page offers starters (lecture notes, study guide, flashcards, checklist, database), the Calendar explains how to import a Canvas, Google or Outlook schedule until it has one, and Flashcards offers to start a deck.
 - **Page icons:** about 120 line icons for subjects and everyday life (search them, tint them in any label colour), or an emoji if you prefer. Everything the app names itself (courses, lecture notes, the Inbox, database templates) gets a line icon in its course's colour.
 - **Block editor:** headings, to-dos, bullets, numbers, toggles, quotes, callouts, code, tables (resizable columns), images, dividers.

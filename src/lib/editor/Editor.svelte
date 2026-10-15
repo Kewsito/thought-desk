@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Editor, type JSONContent } from '@tiptap/core';
+  import { Selection } from '@tiptap/pm/state';
   import { onMount } from 'svelte';
   import { normalizeFileUrl } from '../api';
   import { prefs } from '../prefs.svelte';
@@ -67,12 +68,24 @@
     if (editor && !editor.isDestroyed) onstats?.(editor.storage.characterCount.words());
   }
 
+  /**
+   * Puts the caret at the start or end right away. TipTap's focus() waits a
+   * frame, and a key typed in that frame (Enter in the title, then straight
+   * on typing) would still land where focus was.
+   */
+  function focusAt(where: 'start' | 'end') {
+    if (!editor || editor.isDestroyed) return;
+    const { state, view } = editor;
+    view.dispatch(state.tr.setSelection(where === 'start' ? Selection.atStart(state.doc) : Selection.atEnd(state.doc)).scrollIntoView());
+    view.focus();
+  }
+
   export function focusStart() {
-    editor?.chain().focus('start').run();
+    focusAt('start');
   }
 
   export function focusEnd() {
-    editor?.chain().focus('end').run();
+    focusAt('end');
   }
 
   /** Fills an empty page with starter blocks, the caret in the first empty line. */

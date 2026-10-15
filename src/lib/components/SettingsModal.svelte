@@ -145,6 +145,26 @@
   </header>
 
   <div class="modal-body fade">
+    <h3 class="group-title">You</h3>
+    <div class="group">
+      <div class="group-row">
+        <div class="row-label">
+          Name
+          <small>Home greets you by it</small>
+        </div>
+        <input
+          class="field name-field"
+          value={prefs.name}
+          placeholder="Your name"
+          maxlength="40"
+          spellcheck="false"
+          aria-label="Your name"
+          onchange={(e) => (prefs.name = e.currentTarget.value.trim())}
+          onkeydown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+        />
+      </div>
+    </div>
+
     <h3 class="group-title">Appearance</h3>
     <div class="group">
       <div class="group-row">
@@ -402,7 +422,16 @@
 
     <ShortcutsEditor />
 
-    <p class="about">Thought Desk {info?.version ?? ''}</p>
+    <p class="about">
+      Thought Desk {info?.version ?? ''} ·
+      <button
+        class="link"
+        onclick={() => {
+          ui.settingsOpen = false;
+          prefs.welcomed = false;
+        }}>Show the welcome again</button
+      >
+    </p>
   </div>
 </Modal>
 
@@ -737,5 +766,17 @@
     text-align: center;
     font-size: var(--fs-footnote);
     color: var(--text-3);
+  }
+  .about .link {
+    font-size: inherit;
+    color: var(--text-2);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .about .link:hover {
+    color: var(--text);
+  }
+  .name-field {
+    width: 220px;
   }
 </style>
