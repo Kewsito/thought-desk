@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Logo from './Logo.svelte';
   import PageIcon from './PageIcon.svelte';
   import Icon from './Icon.svelte';
   import TreeItem, { drag } from './TreeItem.svelte';
@@ -127,11 +128,7 @@
 <aside class="sidebar" class:resizing style:width="{prefs.sidebarWidth}px">
   <div class="head" data-tauri-drag-region>
     <div class="brand" data-tauri-drag-region>
-      <svg class="logo" width="20" height="20" viewBox="0 0 1024 1024" aria-hidden="true">
-        <rect x="64" y="64" width="896" height="896" rx="230" fill="var(--text)" />
-        <circle cx="512" cy="430" r="150" fill="var(--bg-sidebar)" />
-        <rect x="262" y="660" width="500" height="68" rx="34" fill="var(--bg-sidebar)" />
-      </svg>
+      <Logo size={20} />
       <span data-tauri-drag-region>Thought Desk</span>
     </div>
     <div class="head-actions">
@@ -364,8 +361,9 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .logo {
+  .brand :global(.logo) {
     flex: none;
+    --logo-hands: var(--bg-sidebar);
   }
   .head-actions {
     display: flex;

@@ -4,6 +4,7 @@
    * how the app looks (applied as you choose), three things worth knowing,
    * and off you go. Everything here can be changed later in Settings.
    */
+  import Logo from './Logo.svelte';
   import { onMount, tick } from 'svelte';
   import Icon from './Icon.svelte';
   import WindowControls from './WindowControls.svelte';
@@ -108,11 +109,7 @@
     {#key step}
       <section class="step" in:slideIn={{ from: dir }} out:slideOut={{ to: -dir }}>
         {#if STEPS[step] === 'welcome'}
-          <svg class="logo" width="64" height="64" viewBox="0 0 1024 1024" aria-hidden="true">
-            <rect x="64" y="64" width="896" height="896" rx="230" fill="var(--text)" />
-            <circle cx="512" cy="430" r="150" fill="var(--bg)" />
-            <rect x="262" y="660" width="500" height="68" rx="34" fill="var(--bg)" />
-          </svg>
+          <Logo size={88} class="welcome-logo" />
           <h1>Welcome to Thought Desk</h1>
           <p class="lead">Your notes, classes and deadlines in one quiet place. Everything stays on this computer.</p>
           <label class="name">
@@ -264,7 +261,7 @@
     }
   }
   /* The logo springs in first. */
-  .step > .logo {
+  .step > :global(.welcome-logo) {
     animation: spring 760ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
   }
   @keyframes spring {
@@ -307,8 +304,8 @@
     align-items: center;
     text-align: center;
   }
-  .logo {
-    margin-bottom: 22px;
+  .step :global(.welcome-logo) {
+    margin-bottom: 20px;
   }
   h1 {
     margin: 0;

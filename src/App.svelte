@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Logo from './lib/components/Logo.svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
   import { onMount } from 'svelte';
@@ -303,11 +304,7 @@
         {/key}
       {:else if store.loaded && !store.currentId}
         <div class="empty">
-          <svg class="empty-logo" width="48" height="48" viewBox="0 0 1024 1024" aria-hidden="true">
-            <rect x="64" y="64" width="896" height="896" rx="230" fill="var(--text)" />
-            <circle cx="512" cy="430" r="150" fill="var(--bg)" />
-            <rect x="262" y="660" width="500" height="68" rx="34" fill="var(--bg)" />
-          </svg>
+          <Logo size={48} class="empty-logo" />
           <h2>A clear desk</h2>
           <p>Create a page to start writing. Everything stays on this computer.</p>
           <button class="btn primary" onclick={() => void store.create(null)}>
@@ -437,7 +434,7 @@
     padding: 0 32px 12vh;
     text-align: center;
   }
-  .empty-logo {
+  .empty :global(.empty-logo) {
     margin-bottom: 20px;
   }
   .empty h2 {
