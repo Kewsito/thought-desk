@@ -387,6 +387,13 @@ CREATE TABLE db_automations (
 ) WITHOUT ROWID;
 ";
 
+/// Faster trash bookkeeping, and each row's gallery picture kept with it so
+/// listing rows never reads their pages.
+const SCHEMA_V9: &str = "
+CREATE INDEX pages_trashed ON pages(deleted_at) WHERE deleted_at IS NOT NULL;
+ALTER TABLE db_rows ADD COLUMN cover TEXT;
+";
+
 const WELCOME_HTML: &str = r#"<p>Thought Desk is a quiet place to write. Everything stays on this computer, in a single local database.</p>
 <h2>The basics</h2>
 <ul data-type="taskList">
@@ -537,6 +544,13 @@ impl Db {
             tx.execute_batch("PRAGMA user_version = 8;")?;
             tx.commit()?;
         }
+        if version < 9 {
+            let tx = conn.transaction()?;
+            tx.execute_batch(SCHEMA_V9)?;
+            crate::databases::fill_covers(&tx)?;
+            tx.execute_batch("PRAGMA user_version = 9;")?;
+            tx.commit()?;
+        }
         Ok(())
     }
 
@@ -621,6 +635,7 @@ impl Db {
         if let Some(content) = &patch.content {
             tx.execute("UPDATE page_content SET content = ?1 WHERE rid = ?2", params![content, rid])?;
             index_content(&tx, rid, content)?;
+            crate::databases::cover_changed(&tx, id, content)?;
             touched = true;
         }
         if let Some(text) = &patch.text {
@@ -1022,7 +1037,9 @@ fn restore_in(tx: &Transaction, id: &str) -> Result<()> {
             "WITH RECURSIVE sub(id) AS (
                SELECT id FROM pages WHERE id = ?1
                UNION ALL
-               SELECT p.id FROM pages p JOIN sub ON p.parent_id = sub.id WHERE p.deleted_at = ?2
+               -- `+` keeps SQLite on the parent index: the trashed-pages index
+               -- would scan every page trashed at that moment for each child.
+               SELECT p.id FROM pages p JOIN sub ON p.parent_id = sub.id WHERE +p.deleted_at = ?2
              )
              SELECT id FROM sub",
         )?;
@@ -1204,6 +1221,13 @@ pub(crate) fn meta_by_id(tx: &Transaction, id: &str) -> Result<PageMeta> {
 /// Puts `id` at `index` among the live children of `parent` (end if None)
 /// and rewrites sibling positions as 0..n.
 pub(crate) fn place(tx: &Transaction, id: &str, parent: Option<&str>, index: Option<usize>) -> Result<()> {
+    // A database's rows keep their own order (sort keys), not positions:
+    // renumbering 50,000 of them for one row would take seconds.
+    if let Some(pid) = parent {
+        if is_database(tx, pid)? {
+            return Ok(());
+        }
+    }
     let mut ids: Vec<String> = {
         let mut stmt = tx.prepare(
             "SELECT id FROM pages WHERE parent_id IS ?1 AND id != ?2 AND deleted_at IS NULL
@@ -1218,6 +1242,12 @@ pub(crate) fn place(tx: &Transaction, id: &str, parent: Option<&str>, index: Opt
 }
 
 fn renumber(tx: &Transaction, parent: Option<&str>) -> Result<()> {
+    // A database's rows keep their own order (sort keys), not positions.
+    if let Some(pid) = parent {
+        if is_database(tx, pid)? {
+            return Ok(());
+        }
+    }
     let ids: Vec<String> = {
         let mut stmt = tx.prepare(
             "SELECT id FROM pages WHERE parent_id IS ?1 AND deleted_at IS NULL

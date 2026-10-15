@@ -174,7 +174,10 @@ class Store {
   /** Takes pages made elsewhere (database rows) without reloading the list. */
   adopt(metas: PageMeta[]) {
     const fresh = metas.filter((m) => !this.byId.has(m.id));
-    if (fresh.length) this.pages.push(...fresh);
+    // A few: added in place. Many (an import): a new list, since
+    // push(...fresh) would pass more arguments than a call allows.
+    if (fresh.length > 1000) this.pages = this.pages.concat(fresh);
+    else if (fresh.length) this.pages.push(...fresh);
   }
 
   // ------------------------------------------------------------- navigation

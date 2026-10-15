@@ -22,7 +22,7 @@
   import { Progressive } from '../progressive.svelte';
   import { keyBetween } from './order';
   import { parse as parseCsv, stringify } from './csv';
-  import { calcLabel, type Group } from './query';
+  import { calcLabel, pinFirst, type Group } from './query';
   import { CALC_LABELS, CALC_SHORT, EDITABLE, TYPES, calcsFor, typeInfo } from './schema';
   import type { CalcFn, DbRow, DbView, Property, PropertyType } from '../types';
 
@@ -79,8 +79,12 @@
       kids,
     };
   });
-  const listRows = $derived(tree?.rows ?? rows);
-  const listGroups = $derived<(Group & { total?: number })[] | null>(tree?.groups ?? groups);
+  /** Rows added here, shown first until the view is left. */
+  let fresh = $state<string[]>([]);
+  const listRows = $derived(pinFirst(tree?.rows ?? rows, fresh));
+  const listGroups = $derived<(Group & { total?: number })[] | null>(
+    (tree?.groups ?? groups)?.map((g) => ({ total: g.rows.length, ...g, rows: pinFirst(g.rows, fresh) })) ?? null,
+  );
 
   const shownGroups = $derived(listGroups ? listGroups.filter((g) => g.rows.length || (!c.hideEmptyGroups && g.key !== '')) : null);
   /** Every row the keyboard can reach, top to bottom. */
@@ -111,7 +115,8 @@
   type Pos = { r: number; c: number };
   let sel = $state<Pos | null>(null);
   let anchor = $state<Pos | null>(null);
-  let editing = $state<{ row: DbRow; prop: Property; el: Element; initial?: string } | null>(null);
+  // Raw: a row kept here must stay the store's own object (a proxy of it would take edits).
+  let editing = $state.raw<{ row: DbRow; prop: Property; el: Element; initial?: string } | null>(null);
   let grid: HTMLDivElement;
   let body: HTMLDivElement;
   let head: HTMLDivElement;
@@ -131,7 +136,9 @@
   }
 
   async function select(p: Pos, extend = false) {
-    const r = Math.max(0, Math.min(flat.length - 1, p.r));
+    // A jump (Ctrl+↓) goes at most 500 rows past what's drawn: drawing a
+    // 50,000-row table to its end would freeze the window.
+    const r = Math.max(0, Math.min(flat.length - 1, p.r, lazy.limit + 500));
     const col = Math.max(0, Math.min(columns.length - 1, p.c));
     if (r >= lazy.limit) lazy.limit = r + 40;
     // Extending keeps the block's first corner where the selection was.
@@ -299,7 +306,7 @@
       if (made.length) ui.toast(`Added ${made.length} row${made.length === 1 ? '' : 's'}`);
     }
     anchor = { r: start.r, c: start.c };
-    sel = { r: Math.min(flat.length - 1, start.r + table.length - 1), c: Math.min(columns.length - 1, start.c + Math.max(...table.map((l) => l.length)) - 1) };
+    sel = { r: Math.min(flat.length - 1, start.r + table.length - 1), c: Math.min(columns.length - 1, start.c + table.map((l) => l.length).reduce((a, b) => Math.max(a, b), -Infinity) - 1) };
   }
 
   function onKey(e: KeyboardEvent) {
@@ -414,7 +421,7 @@
     );
   }
 
-  let bulk = $state<{ prop: Property; el: Element; rows: DbRow[]; before: string } | null>(null);
+  let bulk = $state.raw<{ prop: Property; el: Element; rows: DbRow[]; before: string } | null>(null);
 
   function endBulk() {
     if (!bulk) return;
@@ -524,9 +531,19 @@
     return newRow(undefined, template);
   }
 
-  async function newRow(group?: Group, template?: string) {
-    const made = await databases.addRow(dbId, { view, template, group: group && c.group ? { prop: c.group, key: group.key } : undefined });
+  /**
+   * Adds a row where it can be seen straight away: at the top (stored there
+   * too when the view has its own order), or, from the button under the
+   * rows, after the last one showing. Never by drawing every row down to
+   * the end of a long table.
+   */
+  async function newRow(group?: Group, template?: string, below = false) {
+    const last = visible.at(-1);
+    const placed = manual && !groups && !sub;
+    const where = below && placed && last ? { after: last.id } : placed && listRows[0] ? { before: listRows[0].id } : {};
+    const made = await databases.addRow(dbId, { view, template, ...where, group: group && c.group ? { prop: c.group, key: group.key } : undefined });
     if (!made) return;
+    if (!(below && placed)) fresh = [made.id, ...fresh];
     await tick();
     const r = flat.findIndex((x) => x.id === made.id);
     if (r >= 0) {
@@ -745,7 +762,7 @@
         </div>
       {/if}
 
-      <button class="add-row" onclick={() => newRow()}><Icon name="plus" size={14} /> New</button>
+      <button class="add-row" onclick={() => newRow(undefined, undefined, true)}><Icon name="plus" size={14} /> New</button>
 
       <div class="calc" style:grid-template-columns={template}>
         <div></div>
@@ -903,6 +920,10 @@
   .tr {
     position: relative;
     box-shadow: inset 0 -1px 0 var(--separator);
+    /* Rows out of sight skip layout and painting: a table thousands of rows
+       long scrolls as lightly as a short one. */
+    content-visibility: auto;
+    contain-intrinsic-block-size: auto 35px;
   }
   .tr:hover .gutter .handle,
   .tr:hover .pick,

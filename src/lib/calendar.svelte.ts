@@ -124,7 +124,7 @@ export function itemsByDay(from: string, to: string): Map<string, DayItems> {
     let color = 'var(--text-3)';
     for (const p of databases.props(it.dbId)) {
       if (p.type !== 'select' && p.type !== 'status') continue;
-      const o = option(p, it.row.cells[p.id]);
+      const o = option(p, databases.cell(it.row, p.id));
       if (o) {
         color = colorVar(o.color);
         break;

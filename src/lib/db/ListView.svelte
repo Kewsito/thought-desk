@@ -7,7 +7,7 @@
   import { store } from '../store.svelte';
   import { ui } from '../ui.svelte';
   import { Progressive, takeGrouped } from '../progressive.svelte';
-  import type { Group } from './query';
+  import { pinFirst, type Group } from './query';
   import type { DbRow, DbView, Property } from '../types';
 
   let { dbId, view, rows, groups }: { dbId: string; view: DbView; rows: DbRow[]; groups: Group[] | null } = $props();
@@ -16,6 +16,8 @@
   const AUTO_SKIP = new Set(['title', 'created', 'edited', 'text', 'id']);
   const allProps = $derived(databases.props(dbId));
   const lazy = new Progressive(80, 150);
+  /** Rows added here come first (on screen at once) until the view is left. */
+  let fresh = $state<string[]>([]);
   // Sub-items sit under their parent (folded until opened).
   const nested = $derived((c.subItems ?? 'nested') === 'nested' && !!databases.subItems(dbId));
   const shaped = $derived.by(() => {
@@ -23,10 +25,10 @@
     const kids = new Map<string, number>();
     const fold = (list: DbRow[]): DbRow[] => {
       const n = nested ? databases.nest(dbId, list) : null;
-      if (!n) return list;
+      if (!n) return pinFirst(list, fresh);
       n.depth.forEach((v, k) => depth.set(k, v));
       n.kids.forEach((v, k) => kids.set(k, v));
-      return n.rows;
+      return pinFirst(n.rows, fresh);
     };
     const folded = groups
       ? groups.filter((g) => g.rows.length || (!c.hideEmptyGroups && g.key !== '')).map((g) => ({ ...g, total: g.rows.length, rows: fold(g.rows) }))
@@ -55,6 +57,7 @@
   async function add(group?: Group | null, parent?: DbRow) {
     const row = parent ? await databases.addSubItem(parent, view) : await databases.addRow(dbId, { view, group: group && c.group ? { prop: c.group, key: group.key } : undefined });
     if (!row) return;
+    if (!parent) fresh = [row.id, ...fresh];
     editing = { id: row.id, title: '' };
     await tick();
     input?.focus();
@@ -173,6 +176,8 @@
   }
   .line-wrap {
     position: relative;
+    content-visibility: auto;
+    contain-intrinsic-block-size: auto 38px;
   }
   .line.nested {
     padding-left: calc(8px + var(--indent) + 22px);

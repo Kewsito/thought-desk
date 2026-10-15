@@ -678,11 +678,11 @@ export const FUNCTIONS: Record<string, FnDef> = Object.fromEntries(
     def('Math', 'mod', 'a number, a divisor', 'The remainder: mod(10, 3) is 1', 2, 2, ([a, b]) => arithmetic('%', a, b)),
     def('Math', 'min', 'numbers or lists', 'The smallest', 1, undefined, (args) => {
       const ns = numbers(args, 'min()');
-      return ns.length ? Math.min(...ns) : null;
+      return ns.length ? ns.reduce((a, b) => Math.min(a, b), Infinity) : null;
     }),
     def('Math', 'max', 'numbers or lists', 'The largest', 1, undefined, (args) => {
       const ns = numbers(args, 'max()');
-      return ns.length ? Math.max(...ns) : null;
+      return ns.length ? ns.reduce((a, b) => Math.max(a, b), -Infinity) : null;
     }),
     def('Math', 'sum', 'numbers or lists', 'Adds them up: sum({Q1}, {Q2}, {Q3})', 1, undefined, (args) => {
       const ns = numbers(args, 'sum()');

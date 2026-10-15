@@ -45,7 +45,10 @@
 
   const picture = $derived.by(() => {
     if (cover === 'none') return null;
-    if (cover === 'page') return row.cover ? normalizeFileUrl(row.cover) : null;
+    if (cover === 'page') {
+      const src = databases.cover(row);
+      return src ? normalizeFileUrl(src) : null;
+    }
     const p = databases.prop(dbId, cover);
     if (!p) return null;
     for (const id of databases.get(row, p) as string[]) {

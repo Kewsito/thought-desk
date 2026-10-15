@@ -10,7 +10,7 @@
   import { databases, type CellSet } from '../databases.svelte';
   import { ui } from '../ui.svelte';
   import { newOption, options } from './schema';
-  import type { Group } from './query';
+  import { pinFirst, type Group } from './query';
   import type { CellValue, DbRow, DbView } from '../types';
 
   let { dbId, view, groups, onsettings }: { dbId: string; view: DbView; groups: Group[] | null; onsettings: () => void } = $props();
@@ -26,9 +26,23 @@
 
   let editing = $state<string | null>(null);
 
+  // A column shows its first cards and more on request: a column of 20,000
+  // cards would take the board down with it.
+  const PAGE = 50;
+  let limits = $state<Record<string, number>>({});
+  const limitOf = (key: string) => limits[key] ?? PAGE;
+
+  /** Cards added here come first in their column until the view is left. */
+  let fresh = $state<string[]>([]);
+  const cardsOf = (g: Group) => {
+    const list = pinFirst(g.rows, fresh);
+    return list.length > limitOf(g.key) ? list.slice(0, limitOf(g.key)) : list;
+  };
+
   async function add(g: Group) {
     const row = await databases.addRow(dbId, { view, group: prop ? { prop: prop.id, key: g.key } : undefined });
     if (row) {
+      fresh = [row.id, ...fresh];
       editing = row.id;
       await tick();
     }
@@ -137,7 +151,7 @@
           <button class="icon-btn small" onclick={() => add(g)} aria-label="New card in {g.label}" data-tip="New card"><Icon name="plus" size={14} /></button>
         </div>
         <div class="cards">
-          {#each g.rows as row (row.id)}
+          {#each cardsOf(g) as row (row.id)}
             <div
               class="slot"
               class:before={over?.group === g.key && over.before === row.id}
@@ -157,6 +171,11 @@
               <Card {dbId} {row} {view} cover={c.cover ?? 'none'} editTitle={editing === row.id} ondone={() => (editing = null)} />
             </div>
           {/each}
+          {#if g.rows.length > limitOf(g.key)}
+            <button class="add" onclick={() => (limits[g.key] = limitOf(g.key) + 200)}>
+              <Icon name="chevron-down" size={14} /> Show more ({(g.rows.length - limitOf(g.key)).toLocaleString()} left)
+            </button>
+          {/if}
           {#if over?.group === g.key && over.before === null && drag}<div class="drop-end"></div>{/if}
           <button class="add" onclick={() => add(g)}><Icon name="plus" size={14} /> New</button>
         </div>

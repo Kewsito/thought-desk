@@ -48,6 +48,7 @@ import type {
   Automation,
   CalcFn,
   CellValue,
+  CreatedRow,
   DatabaseSchema,
   DateValue,
   DbAction,
@@ -85,7 +86,17 @@ const stamp = (ms: number) => {
 
 class Databases {
   schemas = $state<Record<string, DatabaseSchema>>({});
-  rows = $state<Record<string, DbRow>>({});
+  /**
+   * Every row, as plain objects: with tens of thousands of rows, making each
+   * value reactive on its own costs more than everything else put together.
+   * Instead each database has a change count (`#version`) that reading a
+   * value depends on and writing one bumps; the map itself is replaced when
+   * rows come or go.
+   */
+  rows = $state.raw<Record<string, DbRow>>({});
+  #version = $state<Record<string, number>>({});
+  /** Bumped when rows change order (moving one). */
+  #order = $state(0);
   loaded = $state(false);
   /** Whether there's something to undo or redo (for menus and buttons). */
   canUndo = $state(false);
@@ -98,6 +109,7 @@ class Databases {
 
   /** Live rows of each database, in their own order (templates apart). */
   #split = $derived.by(() => {
+    void this.#order;
     const rows = new Map<string, DbRow[]>();
     const templates = new Map<string, DbRow[]>();
     for (const row of Object.values(this.rows)) {
@@ -194,6 +206,28 @@ class Databases {
     return store.byId.get(id)?.title || 'Untitled';
   }
 
+  /** Makes the caller depend on a database's values. */
+  #track(dbId: string) {
+    void this.#version[dbId];
+  }
+
+  /** Tells everything showing a database's values that they changed. */
+  touch(dbId: string) {
+    this.#version[dbId] = (this.#version[dbId] ?? 0) + 1;
+  }
+
+  /** A stored value as it is (for editors; reading it follows changes). */
+  cell(row: DbRow, propId: string): CellValue | undefined {
+    this.#track(row.dbId);
+    return row.cells[propId];
+  }
+
+  /** A row's picture (the first image in its page). */
+  cover(row: DbRow): string | null | undefined {
+    this.#track(row.dbId);
+    return row.cover;
+  }
+
   #live(id: string): DbRow | undefined {
     const row = this.rows[id];
     const page = row ? store.byId.get(id) : undefined;
@@ -202,6 +236,7 @@ class Databases {
 
   /** The rows a relation property links to (live ones). */
   related(row: DbRow, p: Property): DbRow[] {
+    this.#track(row.dbId);
     return asList(row.cells[p.id])
       .map((id) => this.#live(id))
       .filter((r): r is DbRow => !!r);
@@ -211,6 +246,7 @@ class Databases {
 
   /** What a property holds for a row, normalised for sorting and filtering. */
   get(row: DbRow, p: Property): Plain {
+    this.#track(row.dbId);
     const page = store.byId.get(row.id);
     const c = row.cells[p.id];
     switch (p.type) {
@@ -443,9 +479,9 @@ class Databases {
         case 'average':
           return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
         case 'min':
-          return nums.length ? Math.min(...nums) : null;
+          return nums.length ? nums.reduce((a, b) => Math.min(a, b), Infinity) : null;
         case 'max':
-          return nums.length ? Math.max(...nums) : null;
+          return nums.length ? nums.reduce((a, b) => Math.max(a, b), -Infinity) : null;
         case 'percentChecked':
           return linked.length ? Math.round((values.filter((v) => v === true).length / linked.length) * 100) : null;
         case 'earliest':
@@ -496,12 +532,33 @@ class Databases {
     let rows = this.rowsOf(dbId);
     if (search.trim()) {
       const hidden = new Set(c.hidden ?? []);
-      rows = searchRows(rows, search, this.props(dbId).filter((p) => p.type === 'title' || !hidden.has(p.id)), ctx);
+      const searched = this.props(dbId).filter((p) => p.type === 'title' || !hidden.has(p.id));
+      rows = searchRows(rows, search, searched, ctx, this.#haystack(dbId, searched));
     }
     rows = filterRows(rows, c.filters ?? [], c.match ?? 'all', map, ctx, prefs.weekStart === 0);
     rows = sortRows(rows, c.sorts ?? [], map, ctx);
     const gp = c.group ? map.get(c.group) : undefined;
     return { rows, groups: gp ? groupRows(rows, gp, ctx) : null };
+  }
+
+  /**
+   * Each row's searchable text, kept between keystrokes until a value or a
+   * property of the database changes. Titles live on the pages, so they're
+   * read fresh each time.
+   */
+  #hay = new Map<string, { stamp: string; texts: Map<string, string> }>();
+
+  #haystack(dbId: string, props: Property[]): (row: DbRow) => string {
+    const others = props.filter((p) => p.type !== 'title');
+    const stamp = `${this.#version[dbId] ?? 0}|${JSON.stringify(others.map((p) => [p.id, p.type, p.config]))}`;
+    let cache = this.#hay.get(dbId);
+    if (!cache || cache.stamp !== stamp) this.#hay.set(dbId, (cache = { stamp, texts: new Map() }));
+    const texts = cache.texts;
+    return (row) => {
+      let t = texts.get(row.id);
+      if (t === undefined) texts.set(row.id, (t = others.map((p) => this.text(row, p)).join('\n').toLowerCase()));
+      return `${(store.byId.get(row.id)?.title ?? '').toLowerCase()}\n${t}`;
+    };
   }
 
   /** Rows with a value (not a title: search finds those) containing every word. */
@@ -512,18 +569,33 @@ class Databases {
     const out: { row: DbRow; prop: Property; text: string }[] = [];
     for (const d of this.list) {
       const props = this.props(d.id).filter((p) => SEARCHED.has(p.type));
+      const texts = this.#valueTexts(d.id, props);
       for (const row of this.rowsOf(d.id)) {
-        for (const p of props) {
-          const t = this.text(row, p);
-          if (t && words.every((w) => t.toLowerCase().includes(w))) {
-            out.push({ row, prop: p, text: t });
-            break;
-          }
-        }
+        const [shown, lower] = texts(row);
+        const i = lower.findIndex((t) => t && words.every((w) => t.includes(w)));
+        if (i >= 0) out.push({ row, prop: props[i], text: shown[i] });
         if (out.length >= limit) return out;
       }
     }
     return out;
+  }
+
+  /** Rows' values as text (and lower-cased), kept between keystrokes like `#haystack`. */
+  #texts = new Map<string, { stamp: string; texts: Map<string, [string[], string[]]> }>();
+
+  #valueTexts(dbId: string, props: Property[]): (row: DbRow) => [string[], string[]] {
+    const stamp = `${this.#version[dbId] ?? 0}|${JSON.stringify(props.map((p) => [p.id, p.type, p.config]))}`;
+    let cache = this.#texts.get(dbId);
+    if (!cache || cache.stamp !== stamp) this.#texts.set(dbId, (cache = { stamp, texts: new Map() }));
+    const texts = cache.texts;
+    return (row) => {
+      let t = texts.get(row.id);
+      if (!t) {
+        const shown = props.map((p) => this.text(row, p));
+        texts.set(row.id, (t = [shown, shown.map((x) => x.toLowerCase())]));
+      }
+      return t;
+    };
   }
 
   calc(dbId: string, rows: DbRow[], p: Property, fn: CalcFn): string {
@@ -652,6 +724,7 @@ class Databases {
     const empty = value === null || value === '' || (Array.isArray(value) && !value.length) || value === false;
     if (empty) delete row.cells[p.id];
     else row.cells[p.id] = value;
+    this.touch(row.dbId);
     this.#queue(row.id, { cells: { [p.id]: empty ? null : value } });
   }
 
@@ -928,6 +1001,7 @@ class Databases {
   parentOf(row: DbRow, ids?: Set<string>): string | undefined {
     const s = this.subItems(row.dbId);
     if (!s) return undefined;
+    this.#track(row.dbId);
     return asList(row.cells[s.parent.id]).find((x) => x !== row.id && (ids ? ids.has(x) : !!this.#live(x)));
   }
 
@@ -1161,14 +1235,22 @@ class Databases {
   async #create(dbId: string, list: NewRow[]): Promise<DbRow[]> {
     try {
       await this.flush();
-      const created = await api.createRows(dbId, list);
-      store.adopt(created.map((c) => c.page));
-      for (const c of created) this.rows[c.row.id] = c.row;
+      const created: CreatedRow[] = [];
+      for (let i = 0; i < list.length; i += BATCH) created.push(...(await api.createRows(dbId, list.slice(i, i + BATCH))));
+      this.#adopt(created);
       return created.map((c) => this.rows[c.row.id]);
     } catch (e) {
       ui.error(e);
       return [];
     }
+  }
+
+  /** New rows from storage into the page list and here, in one go. */
+  #adopt(created: CreatedRow[]) {
+    store.adopt(created.map((c) => c.page));
+    const next = { ...this.rows };
+    for (const c of created) next[c.row.id] = c.row;
+    this.rows = next;
   }
 
   async #trash(ids: string[]) {
@@ -1224,6 +1306,8 @@ class Databases {
     const key = keyBetween(a, b);
     const apply = (k: string) => {
       row.sortKey = k;
+      this.#order++;
+      this.touch(row.dbId);
       this.#queue(id, { sortKey: k });
     };
     apply(key);
@@ -1603,14 +1687,18 @@ class Databases {
     const t = opts.template ?? TEMPLATES[0];
     try {
       await store.flush();
+      // One call takes up to BATCH rows; a big import sends the rest after.
+      const rows = opts.rows ?? [];
       const res = await api.createDatabase(opts.parentId ?? null, opts.title ?? (t.key === 'blank' ? '' : t.name), opts.icon ?? t.icon, {
         properties: t.properties,
         views: t.views,
-        rows: opts.rows ?? [],
+        rows: rows.slice(0, BATCH),
       });
-      store.adopt([res.page, ...res.rows.map((r) => r.page)]);
+      const created = [...res.rows];
+      for (let i = BATCH; i < rows.length; i += BATCH) created.push(...(await api.createRows(res.page.id, rows.slice(i, i + BATCH))));
+      store.adopt([res.page]);
       this.schemas[res.database.id] = sortSchema(res.database);
-      for (const r of res.rows) this.rows[r.row.id] = r.row;
+      this.#adopt(created);
       if (opts.open !== false) {
         store.open(res.page.id);
         // Name it straight away (typing replaces the template's name).
@@ -1635,7 +1723,7 @@ class Databases {
       return null;
     }
     const [header, ...body] = table;
-    const width = Math.max(...table.map((r) => r.length));
+    const width = table.map((r) => r.length).reduce((a, b) => Math.max(a, b), -Infinity);
     const names = Array.from({ length: width }, (_, i) => (header[i] ?? '').trim() || `Column ${i + 1}`);
     const keys = keysBetween(null, null, width);
     const props: Property[] = names.map((n, i) => {
@@ -1757,6 +1845,7 @@ class Databases {
       if (!dateProps.length) continue;
       const dbPage = store.byId.get(schema.id);
       if (!dbPage || dbPage.deletedAt) continue;
+      this.#track(schema.id);
       for (const row of this.rowsOf(schema.id)) {
         for (const p of dateProps) {
           const v = row.cells[p.id];
@@ -1770,6 +1859,9 @@ class Databases {
     return out;
   });
 }
+
+/** Most rows storage takes in one call (see MAX_BATCH in databases.rs). */
+const BATCH = 20_000;
 
 /** Types a button or automation can set. */
 export const ACTION_TYPES = new Set<PropertyType>(['title', 'text', 'number', 'select', 'multiSelect', 'status', 'date', 'checkbox', 'url', 'email', 'phone', 'course']);
@@ -1796,6 +1888,8 @@ function sortSchema(s: DatabaseSchema): DatabaseSchema {
 }
 
 export const databases = new Databases();
+// For poking at in the browser console while developing.
+if (import.meta.env.DEV && typeof window !== 'undefined') (window as unknown as { databases: Databases }).databases = databases;
 
 /** The first image in a page body (editor JSON), for gallery cards. */
 export function firstImage(content: string): string | null {
@@ -1823,6 +1917,9 @@ if (typeof window !== 'undefined') {
   window.addEventListener('td:page-saved', (e) => {
     const { id, content } = (e as CustomEvent<{ id: string; content: string }>).detail;
     const row = databases.rows[id];
-    if (row) row.cover = firstImage(content);
+    if (row) {
+      row.cover = firstImage(content);
+      databases.touch(row.dbId);
+    }
   });
 }

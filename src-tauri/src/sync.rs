@@ -82,6 +82,17 @@ pub(crate) fn mark(conn: &Connection, entity: &str, id: &str, stamp: &str) -> Re
     Ok(())
 }
 
+/// Whether this copy has ever exchanged changes with another. Until then a
+/// record deleted for good needs no note in the outbox: no one else has it.
+pub(crate) fn has_peer(conn: &Connection) -> Result<bool> {
+    Ok(conn.query_row("SELECT EXISTS (SELECT 1 FROM sync_meta WHERE key = 'peer')", [], |r| r.get(0))?)
+}
+
+pub(crate) fn met_peer(conn: &Connection) -> Result<()> {
+    conn.execute("INSERT OR IGNORE INTO sync_meta (key, value) VALUES ('peer', '1')", [])?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

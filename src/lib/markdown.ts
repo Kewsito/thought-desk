@@ -132,7 +132,7 @@ function block(n: JNode, titleOf: TitleOf): string {
     case 'table': {
       const rows = (n.content ?? []).map((r) => (r.content ?? []).map((c) => cellText(c, titleOf)));
       if (rows.length === 0) return '';
-      const width = Math.max(...rows.map((r) => r.length));
+      const width = rows.map((r) => r.length).reduce((a, b) => Math.max(a, b), -Infinity);
       const line = (r: string[]) => `| ${Array.from({ length: width }, (_, i) => r[i] ?? '').join(' | ')} |`;
       const sep = `| ${Array.from({ length: width }, () => '---').join(' | ')} |`;
       return [line(rows[0]), sep, ...rows.slice(1).map(line)].join('\n');

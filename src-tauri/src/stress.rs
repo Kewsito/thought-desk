@@ -276,3 +276,168 @@ fn stress_upgrade() {
     let db = Db::open(&dir).unwrap();
     time("list_todos (upgraded)", 3, || db.list_todos().unwrap());
 }
+
+/// Years of databases: a 50,000-row tracker linked to a 5,000-row one, 40
+/// small ones, row pages with notes, and a long history of edits, deletes
+/// and copies. Times every database call the UI makes.
+///
+///   cargo test --release stress_databases -- --ignored --nocapture
+#[test]
+#[ignore]
+fn stress_databases() {
+    use crate::databases::{DatabaseInput, NewRow, RowChange, SchemaItem};
+    let dir = std::env::var_os("TD_STRESS_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| std::env::temp_dir().join("td-stress-db"));
+    let _ = std::fs::remove_dir_all(&dir);
+    let db = Db::open(&dir).unwrap();
+    let mut rng = Rng(0x2545_f491_4f6c_dd1d);
+    let size = || std::fs::metadata(dir.join("thoughtdesk.db")).map(|m| m.len()).unwrap_or(0) as f64 / 1048576.0;
+    let item = |id: &str, name: &str, kind: &str, key: &str, config: Value| SchemaItem {
+        id: id.into(),
+        name: name.into(),
+        kind: kind.into(),
+        config,
+        sort_key: key.into(),
+    };
+    let opts = |names: &[&str]| json!({ "options": names.iter().enumerate().map(|(i, n)| json!({"id": format!("o{i}"), "name": n, "color": "blue"})).collect::<Vec<_>>() });
+    let keys = |n: usize| -> Vec<String> { (0..n).map(|i| format!("a{i:06}")).collect() };
+
+    let start = Instant::now();
+    // The linked database: 5,000 courses' worth of "projects".
+    let projects = db
+        .create_database(
+            None,
+            "Projects",
+            "",
+            DatabaseInput {
+                properties: vec![item("budget", "Budget", "number", "a1", json!({}))],
+                rows: keys(5000)
+                    .into_iter()
+                    .map(|k| NewRow { title: rng.sentence(3), sort_key: k, cells: json!({"budget": rng.below(1000)}).as_object().cloned().unwrap(), ..Default::default() })
+                    .collect(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    let project_ids: Vec<String> = projects.rows.iter().map(|r| r.row.id.clone()).collect();
+
+    // The big one: 50,000 tasks with ten properties.
+    let props = vec![
+        item("status", "Status", "status", "a1", opts(&["Not started", "In progress", "Done"])),
+        item("prio", "Priority", "select", "a2", opts(&["Low", "Medium", "High"])),
+        item("tags", "Labels", "multiSelect", "a3", opts(&["red", "green", "blue", "work", "home"])),
+        item("due", "Due", "date", "a4", json!({})),
+        item("est", "Estimate", "number", "a5", json!({})),
+        item("done", "Done", "checkbox", "a6", json!({})),
+        item("notes", "Notes", "text", "a7", json!({})),
+        item("url", "Link", "url", "a8", json!({})),
+        item("proj", "Project", "relation", "a9", json!({"database": projects.page.id})),
+        item("score", "Score", "formula", "b0", json!({"expression": "{Estimate} * 2"})),
+    ];
+    let rows: Vec<NewRow> = keys(50_000)
+        .into_iter()
+        .map(|k| {
+            let cells = json!({
+                "status": format!("o{}", rng.below(3)),
+                "prio": format!("o{}", rng.below(3)),
+                "tags": [format!("o{}", rng.below(5)), format!("o{}", rng.below(5))],
+                "due": { "start": format!("2026-{:02}-{:02}", 1 + rng.below(12), 1 + rng.below(28)) },
+                "est": rng.below(40),
+                "done": rng.chance(40),
+                "notes": rng.sentence(12),
+                "url": "https://example.com/item",
+                "proj": [project_ids[rng.below(project_ids.len())].clone()],
+            });
+            NewRow { title: rng.sentence(4), sort_key: k, cells: cells.as_object().cloned().unwrap(), ..Default::default() }
+        })
+        .collect();
+    // In chunks, as an import does (one call takes at most 20,000 rows).
+    let tasks = db.create_database(None, "Tasks", "✅", DatabaseInput { properties: props, ..Default::default() }).unwrap();
+    let mut task_ids: Vec<String> = Vec::new();
+    let mut rows = rows;
+    while !rows.is_empty() {
+        let rest = rows.split_off(rows.len().min(20_000));
+        task_ids.extend(db.create_rows(&tasks.page.id, rows).unwrap().into_iter().map(|c| c.row.id));
+        rows = rest;
+    }
+    println!("built 55,000 rows in {:.1}s", start.elapsed().as_secs_f64());
+
+    // Notes on one row in ten (some with a picture: the gallery cover).
+    for (i, id) in task_ids.iter().enumerate().step_by(10) {
+        let (content, plain) = page_doc(&mut rng, 6, &[], &[]);
+        let content = if i % 30 == 0 {
+            content.replacen("\"content\":[", "\"content\":[{\"type\":\"image\",\"attrs\":{\"src\":\"tdfile://x.png\"}},", 1)
+        } else {
+            content
+        };
+        db.update_page(id, PagePatch { content: Some(content), text: Some(plain), ..Default::default() }).unwrap();
+    }
+    // Forty small databases, as a student would make over the years.
+    for i in 0..40 {
+        db.create_database(
+            None,
+            &format!("Small {i}"),
+            "",
+            DatabaseInput {
+                rows: keys(100).into_iter().map(|k| NewRow { title: rng.sentence(2), sort_key: k, ..Default::default() }).collect(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    }
+    // A template and an automation.
+    db.create_rows(&tasks.page.id, vec![NewRow { title: "Weekly review".into(), sort_key: "z0".into(), template: true, ..Default::default() }]).unwrap();
+    db.save_automation(&tasks.page.id, item("r1", "", "changed", "a0", json!({"prop": "status", "to": "o2", "actions": [{"type": "set", "prop": "done", "value": {"mode": "value", "value": true}}]}))).unwrap();
+    println!("database {:.1} MB after building\n", size());
+
+    // Years of editing: 100,000 single-cell saves, the way the UI sends them.
+    let start = Instant::now();
+    for n in 0..100_000 {
+        let id = &task_ids[rng.below(task_ids.len())];
+        let cells = json!({ "est": n % 50, "notes": rng.sentence(10) }).as_object().cloned().unwrap();
+        db.update_rows(vec![RowChange { id: id.clone(), cells: Some(cells), sort_key: None }]).unwrap();
+    }
+    let per = start.elapsed().as_secs_f64() * 1000.0 / 100_000.0;
+    println!("{per:>10.3} ms  update_rows, one cell (average of 100,000)");
+    println!("database {:.1} MB after 100,000 edits\n", size());
+
+    time("open (existing database)", 3, || Db::open(&dir).unwrap());
+    time("list_databases", 5, || db.list_databases().unwrap());
+    let all = db.list_rows_raw().unwrap();
+    time("list_rows (all 59,000)", 3, || db.list_rows_raw().unwrap());
+    time("list_rows serialized for the UI", 3, || serde_json::to_string(&db.list_rows_raw().unwrap()).unwrap());
+    println!("            list_rows payload {:.1} MB", serde_json::to_string(&all).unwrap().len() as f64 / 1048576.0);
+    time("create_rows (one)", 5, || {
+        db.create_rows(&tasks.page.id, vec![NewRow { title: "New".into(), sort_key: "zz".into(), ..Default::default() }]).unwrap()
+    });
+    time("create_rows (a pasted sheet of 1,000)", 1, || {
+        db.create_rows(&tasks.page.id, keys(1000).into_iter().map(|k| NewRow { title: "Pasted".into(), sort_key: format!("y{k}"), ..Default::default() }).collect()).unwrap()
+    });
+    time("update_rows (a column fill of 5,000)", 1, || {
+        db.update_rows(task_ids[..5000].iter().map(|id| RowChange { id: id.clone(), cells: Some(json!({"done": true}).as_object().cloned().unwrap()), sort_key: None }).collect())
+            .unwrap()
+    });
+    time("update_page (row title)", 5, || db.update_page(&task_ids[7], PagePatch { title: Some("Renamed".into()), ..Default::default() }).unwrap());
+    time("search \"review\"", 3, || db.search("review", 40).unwrap());
+    time("sync_pending (everything, never synced)", 1, || db.sync_pending().unwrap());
+    let outbox: i64 = db.conn().query_row("SELECT count(*) FROM sync_outbox", [], |r| r.get(0)).unwrap();
+    println!("            outbox holds {outbox} records");
+    time("duplicate_page (Projects, 5,000 rows)", 1, || db.duplicate_page(&projects.page.id).unwrap());
+    time("trash_page (Tasks, 51,000 rows)", 1, || db.trash_page(&tasks.page.id).unwrap());
+    time("restore_page (Tasks)", 1, || db.restore_page(&tasks.page.id).unwrap());
+    time("trash_page (2,000 rows one by one)", 1, || {
+        for id in &task_ids[..2000] {
+            db.trash_page(id).unwrap();
+        }
+    });
+    time("empty_trash (2,000 rows)", 1, || db.empty_trash().unwrap());
+    time("trash + delete Projects copy for good", 1, || {
+        let copy = db.list_pages().unwrap().into_iter().find(|p| p.title == "Projects (copy)").unwrap();
+        db.trash_page(&copy.id).unwrap();
+        db.delete_page(&copy.id).unwrap();
+    });
+    let outbox: i64 = db.conn().query_row("SELECT count(*) FROM sync_outbox", [], |r| r.get(0)).unwrap();
+    println!("            outbox holds {outbox} records after deleting");
+    println!("\ndatabase {:.1} MB at the end", size());
+}

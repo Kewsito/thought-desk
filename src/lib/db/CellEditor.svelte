@@ -48,7 +48,7 @@
   const TEXT = new Set(['title', 'text', 'url', 'email', 'phone', 'number']);
   const isText = TEXT.has(prop.type);
 
-  const current = $derived(row.cells[prop.id]);
+  const current = $derived(databases.cell(row, prop.id));
 
   function set(value: CellValue) {
     databases.setOne(row, prop, value);

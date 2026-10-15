@@ -14,7 +14,7 @@
   import { store } from '../store.svelte';
   import { ui } from '../ui.svelte';
   import { Progressive } from '../progressive.svelte';
-  import { addDaysIso } from './query';
+  import { addDaysIso, pinFirst } from './query';
   import { isoDate, option, toDate } from './schema';
   import type { DateValue, DbRow, DbView, ViewConfig } from '../types';
 
@@ -33,7 +33,9 @@
   const showTable = $derived(c.showTable !== false);
 
   const lazy = new Progressive(80, 150);
-  const shown = $derived(rows.slice(0, lazy.limit));
+  /** Rows added here come first (on screen at once) until the view is left. */
+  let fresh = $state<string[]>([]);
+  const shown = $derived(pinFirst(rows, fresh).slice(0, lazy.limit));
 
   const day = (s: string) => s.slice(0, 10);
   const dayMs = 86_400_000;
@@ -273,6 +275,7 @@
     const cells = endProp ? { [prop.id]: { start: clock.today }, [endProp.id]: { start: addDaysIso(clock.today, 2) } } : { [prop.id]: { start: clock.today, end: addDaysIso(clock.today, 2) } };
     const row = await databases.addRow(dbId, { view, cells });
     if (!row) return;
+    fresh = [row.id, ...fresh];
     naming = row.id;
     scrollToDay(clock.today, true);
   }

@@ -271,39 +271,69 @@ function sortKey(v: Plain, p: Property, ctx: Ctx): number | string | null {
   }
 }
 
-export function compareRows(a: DbRow, b: DbRow, rule: SortRule, p: Property, ctx: Ctx): number {
-  const kind = ctx.kind(p);
-  const textual = kind === 'text' || kind === 'options' || kind === 'list';
-  const x = textual ? ctx.text(a, p) || null : sortKey(ctx.get(a, p), p, ctx);
-  const y = textual ? ctx.text(b, p) || null : sortKey(ctx.get(b, p), p, ctx);
+/** A row's value for sorting by a property: a number, text, or null (always last). */
+function sortValue(row: DbRow, p: Property, ctx: Ctx, textual: boolean): string | number | null {
+  return textual ? ctx.text(row, p) || null : sortKey(ctx.get(row, p), p, ctx);
+}
+
+function compareValues(x: string | number | null, y: string | number | null, desc: boolean): number {
   if (x === null && y === null) return 0;
   if (x === null) return 1;
   if (y === null) return -1;
   const c = typeof x === 'number' && typeof y === 'number' ? x - y : collator.compare(String(x), String(y));
-  return rule.dir === 'desc' ? -c : c;
+  return desc ? -c : c;
 }
 
+const isTextual = (kind: string) => kind === 'text' || kind === 'options' || kind === 'list';
+
+export function compareRows(a: DbRow, b: DbRow, rule: SortRule, p: Property, ctx: Ctx): number {
+  const textual = isTextual(ctx.kind(p));
+  return compareValues(sortValue(a, p, ctx, textual), sortValue(b, p, ctx, textual), rule.dir === 'desc');
+}
+
+/**
+ * Rows in order. Each row's sort values are worked out once, not at every
+ * comparison: tens of thousands of rows make hundreds of thousands of those.
+ */
 export function sortRows(rows: DbRow[], sorts: SortRule[], props: Map<string, Property>, ctx: Ctx): DbRow[] {
   const rules = sorts.filter((s) => props.has(s.prop));
-  const out = [...rows];
-  if (!rules.length) return out.sort(byKey);
-  return out.sort((a, b) => {
-    for (const r of rules) {
-      const c = compareRows(a, b, r, props.get(r.prop)!, ctx);
+  if (!rules.length) return [...rows].sort(byKey);
+  const specs = rules.map((r) => {
+    const p = props.get(r.prop)!;
+    return { p, desc: r.dir === 'desc', textual: isTextual(ctx.kind(p)) };
+  });
+  const keyed = rows.map((row) => ({ row, keys: specs.map((s) => sortValue(row, s.p, ctx, s.textual)) }));
+  keyed.sort((a, b) => {
+    for (let i = 0; i < specs.length; i++) {
+      const c = compareValues(a.keys[i], b.keys[i], specs[i].desc);
       if (c) return c;
     }
-    return byKey(a, b);
+    return byKey(a.row, b.row);
   });
+  return keyed.map((k) => k.row);
+}
+
+/**
+ * Rows just added in a view go first (newest on top) until the view is left:
+ * they're on screen at once and stay put while being filled in, however long
+ * the list or wherever the sort would put them.
+ */
+export function pinFirst(rows: DbRow[], ids: string[]): DbRow[] {
+  if (!ids.length) return rows;
+  const at = new Map(ids.map((id, i) => [id, i]));
+  const top = rows.filter((r) => at.has(r.id)).sort((a, b) => at.get(a.id)! - at.get(b.id)!);
+  return top.length ? [...top, ...rows.filter((r) => !at.has(r.id))] : rows;
 }
 
 // ------------------------------------------------------------------ searching
 
-export function searchRows(rows: DbRow[], query: string, props: Property[], ctx: Ctx): DbRow[] {
+export function searchRows(rows: DbRow[], query: string, props: Property[], ctx: Ctx, hay?: (row: DbRow) => string): DbRow[] {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   if (!words.length) return rows;
+  const text = hay ?? ((row: DbRow) => props.map((p) => ctx.text(row, p)).join('\n').toLowerCase());
   return rows.filter((row) => {
-    const hay = props.map((p) => ctx.text(row, p)).join('\n').toLowerCase();
-    return words.every((w) => hay.includes(w));
+    const h = text(row);
+    return words.every((w) => h.includes(w));
   });
 }
 
@@ -444,11 +474,11 @@ export function calculate(rows: DbRow[], p: Property, fn: CalcFn, ctx: Ctx): str
       return numFmt(s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2);
     }
     case 'min':
-      return numFmt(Math.min(...nums));
+      return numFmt(nums.reduce((a, b) => Math.min(a, b), Infinity));
     case 'max':
-      return numFmt(Math.max(...nums));
+      return numFmt(nums.reduce((a, b) => Math.max(a, b), -Infinity));
     case 'range':
-      return numFmt(Math.max(...nums) - Math.min(...nums));
+      return numFmt(nums.reduce((a, b) => Math.max(a, b), -Infinity) - nums.reduce((a, b) => Math.min(a, b), Infinity));
   }
   return '';
 }

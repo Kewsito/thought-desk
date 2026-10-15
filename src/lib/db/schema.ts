@@ -93,8 +93,17 @@ export function options(p: Property): SelectOption[] {
   return p.config.options ?? [];
 }
 
+/** Options by id, per list (a list is replaced, never changed in place, when edited). */
+const optionMaps = new WeakMap<SelectOption[], Map<string, SelectOption>>();
+
 export function option(p: Property, id: unknown): SelectOption | undefined {
-  return typeof id === 'string' ? options(p).find((o) => o.id === id) : undefined;
+  if (typeof id !== 'string') return undefined;
+  const list = options(p);
+  // Short lists are quicker to scan than to index.
+  if (list.length < 8) return list.find((o) => o.id === id);
+  let map = optionMaps.get(list);
+  if (!map) optionMaps.set(list, (map = new Map(list.map((o) => [o.id, o]))));
+  return map.get(id);
 }
 
 /** A new option for a property's list, in the next unused colour. */

@@ -5,6 +5,7 @@
   import Card from './Card.svelte';
   import { databases } from '../databases.svelte';
   import { Progressive } from '../progressive.svelte';
+  import { pinFirst } from './query';
   import type { DbRow, DbView } from '../types';
 
   let { dbId, view, rows }: { dbId: string; view: DbView; rows: DbRow[] } = $props();
@@ -12,12 +13,15 @@
   const c = $derived(view.config);
   const min = $derived(c.cardSize === 'small' ? 180 : c.cardSize === 'large' ? 320 : 240);
   const lazy = new Progressive(60, 90);
-  const shown = $derived(rows.slice(0, lazy.limit));
+  /** Cards added here come first (on screen at once) until the view is left. */
+  let fresh = $state<string[]>([]);
+  const shown = $derived(pinFirst(rows, fresh).slice(0, lazy.limit));
   let editing = $state<string | null>(null);
 
   async function add() {
     const row = await databases.addRow(dbId, { view });
     if (row) {
+      fresh = [row.id, ...fresh];
       editing = row.id;
       await tick();
     }

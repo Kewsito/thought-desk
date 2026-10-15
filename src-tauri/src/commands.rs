@@ -6,7 +6,7 @@
 //! the main thread.
 
 use crate::cards::{Card, Deck, Review};
-use crate::databases::{Change, CreatedDatabase, CreatedRow, Database, DatabaseInput, NewRow, Row, RowChange, SchemaItem};
+use crate::databases::{Change, CreatedDatabase, CreatedRow, Database, DatabaseInput, ListedRow, NewRow, RowChange, SchemaItem};
 use crate::db::{Db, Error, Page, PageMeta, PagePatch, Result, SearchHit, Table};
 use crate::library::{FileMeta, FilePatch, FileUsage};
 use crate::organize::{Tag, Todo};
@@ -427,8 +427,8 @@ pub fn list_databases(db: State<Db>) -> Result<Vec<Database>> {
 }
 
 #[tauri::command(async)]
-pub fn list_rows(db: State<Db>) -> Result<Vec<Row>> {
-    db.list_rows()
+pub fn list_rows(db: State<Db>) -> Result<Vec<ListedRow>> {
+    db.list_rows_raw()
 }
 
 #[tauri::command(async)]

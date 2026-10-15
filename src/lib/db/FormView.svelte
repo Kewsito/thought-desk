@@ -36,7 +36,7 @@
   let texts = $state<Record<string, string>>({});
   let values = $state<Record<string, CellValue>>({});
   let errors = $state<Record<string, string>>({});
-  let sent = $state<DbRow | null>(null);
+  let sent = $state.raw<DbRow | null>(null);
   let busy = $state(false);
   let editing = $state(false);
   let picker = $state<{ prop: Property; anchor: Element } | null>(null);

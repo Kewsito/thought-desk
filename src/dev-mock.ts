@@ -376,9 +376,9 @@ const dbData: MockDb = (() => {
 })();
 const persistDb = () => localStorage.setItem(DB_KEY, JSON.stringify(dbData));
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
-const mockRow = (id: string): DbRow => {
+const mockRow = (id: string, known?: Row): DbRow => {
   const r = dbData.rows[id];
-  const page = rows.find((x) => x.id === id);
+  const page = known ?? rows.find((x) => x.id === id);
   let cover: string | null = null;
   try {
     const walk = (n: any): string | null => (n?.type === 'image' ? n.attrs?.src : (n?.content ?? []).map(walk).find(Boolean)) ?? null;
@@ -404,7 +404,7 @@ function mockCreateRows(
     }
     rows.push(page);
     dbData.rows[page.id] = { sortKey: n.sortKey, number: n.template ? 0 : schema.nextNumber++, cells: clone(n.cells ?? {}), ...(n.template ? { template: true } : {}) };
-    return { page: meta(page), row: mockRow(page.id) };
+    return { page: meta(page), row: mockRow(page.id, page) };
   });
 }
 function mockCreateDatabase(parentId: string | null, title: string, icon: string, input: any) {
@@ -455,7 +455,10 @@ mockIPC((cmd, payload) => {
       case 'list_databases':
         return Object.values(dbData.schemas).map(({ nextNumber: _n, ...d }) => clone({ ...d, automations: d.automations ?? [] }));
       case 'list_rows':
-        return Object.keys(dbData.rows).filter((id) => rows.some((r) => r.id === id)).map(mockRow);
+        {
+          const pages = new Map(rows.map((r) => [r.id, r]));
+          return Object.keys(dbData.rows).flatMap((id) => (pages.has(id) ? [mockRow(id, pages.get(id))] : []));
+        }
       case 'create_database':
         return mockCreateDatabase(a.parentId ?? null, a.title ?? '', a.icon ?? '', a.input ?? {});
       case 'update_database':
@@ -814,9 +817,17 @@ mockIPC((cmd, payload) => {
         return null;
     }
   } finally {
-    persist();
-    persistPlanner();
-    persistDb();
+    // A preview stress-tested with tens of thousands of rows stays in memory:
+    // saving it all after every call would be slow and overflow storage.
+    if (rows.length < 5000) {
+      try {
+        persist();
+        persistPlanner();
+        persistDb();
+      } catch {
+        /* storage full: keep going in memory */
+      }
+    }
   }
 });
 
