@@ -62,7 +62,7 @@
   /** The six most recently edited pages (one pass, no sort of every page). */
   const recentPages = $derived.by(() => {
     const top: PageMeta[] = [];
-    for (const p of store.pages) {
+    for (const p of store.all) {
       if (p.deletedAt || (top.length === 6 && p.updatedAt <= top[5].updatedAt) || store.isRow(p)) continue;
       top.push(p);
       top.sort((a, b) => b.updatedAt - a.updatedAt);

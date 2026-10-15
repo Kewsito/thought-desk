@@ -37,7 +37,8 @@ class Tags {
     const add = (tags: string[]) => {
       for (const t of tags) counts.set(t, (counts.get(t) ?? 0) + 1);
     };
-    for (const p of store.pages) if (!p.deletedAt) add(p.tags);
+    // Tags and the trash are place fields: typing a title doesn't redo this.
+    for (const p of store.placed.values()) if (!p.deletedAt) add(p.tags);
     for (const a of planner.live) add(a.tags);
     for (const e of planner.liveEvents) add(e.tags);
     for (const f of library.live) add(f.tags);
@@ -78,10 +79,13 @@ class Tags {
     const item = this.#item(table, id);
     if (!item) return;
     const clean = [...new Set(tags.map(cleanTag).filter(Boolean))];
-    item.tags = clean;
+    // Pages are never changed in place (see store.pages).
+    const put = (list: string[]) => (table === 'pages' ? store.editOne(id, { tags: list }) : (item.tags = list));
+    put(clean);
     try {
-      item.tags = await api.setItemTags(table, id, clean);
-      for (const t of item.tags) if (!this.list.some((x) => x.name === t)) this.list.push({ name: t, color: '' });
+      const saved = await api.setItemTags(table, id, clean);
+      put(saved);
+      for (const t of saved) if (!this.list.some((x) => x.name === t)) this.list.push({ name: t, color: '' });
     } catch (e) {
       ui.error(e);
     }
@@ -89,7 +93,7 @@ class Tags {
 
   itemsWith(name: string): Tagged {
     return {
-      pages: store.pages.filter((p) => !p.deletedAt && p.tags.includes(name)),
+      pages: store.all.filter((p) => !p.deletedAt && p.tags.includes(name)),
       assignments: planner.live.filter((a) => a.tags.includes(name)),
       events: planner.liveEvents.filter((e) => e.tags.includes(name)),
       files: library.live.filter((f) => f.tags.includes(name)),
@@ -112,7 +116,8 @@ class Tags {
       if (!item.tags.includes(from)) return;
       item.tags = [...new Set(item.tags.flatMap((t) => (t === from ? (to ? [to] : []) : [t])))];
     };
-    store.pages.forEach(swap);
+    const renamed = (tags: string[]) => [...new Set(tags.flatMap((t) => (t === from ? (to ? [to] : []) : [t])))];
+    store.edit(new Map(store.pages.filter((p) => p.tags.includes(from)).map((p) => [p.id, { tags: renamed(p.tags) }])));
     planner.assignments.forEach(swap);
     planner.events.forEach(swap);
     library.files.forEach(swap);

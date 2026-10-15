@@ -103,17 +103,26 @@ class Databases {
   canRedo = $state(false);
 
   /** Live databases, in the order they were made (the sidebar's list). */
-  list = $derived(
-    store.pages.filter((p) => p.kind === 'database' && !p.deletedAt && this.schemas[p.id]).sort((a, b) => a.createdAt - b.createdAt),
+  #listIds = $derived(
+    [...store.placed.values()]
+      .filter((p) => p.kind === 'database' && !p.deletedAt && this.schemas[p.id])
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .map((p) => p.id),
   );
+  list = $derived.by(() => {
+    const byId = store.byId;
+    return this.#listIds.flatMap((id) => byId.get(id) ?? []);
+  });
 
   /** Live rows of each database, in their own order (templates apart). */
   #split = $derived.by(() => {
     void this.#order;
     const rows = new Map<string, DbRow[]>();
     const templates = new Map<string, DbRow[]>();
+    // Where pages are, not what they say: typing a title doesn't redo this.
+    const placed = store.placed;
     for (const row of Object.values(this.rows)) {
-      const page = store.byId.get(row.id);
+      const page = placed.get(row.id);
       if (!page || page.deletedAt) continue;
       const map = row.template ? templates : rows;
       let list = map.get(row.dbId);
@@ -627,10 +636,7 @@ class Databases {
     this.#chain = this.#chain.then(async () => {
       try {
         const ts = await api.updateRows(batch);
-        for (const ch of batch) {
-          const page = store.byId.get(ch.id);
-          if (page && ch.cells) page.updatedAt = ts;
-        }
+        store.edit(new Map(batch.filter((ch) => ch.cells && store.byId.has(ch.id)).map((ch) => [ch.id, { updatedAt: ts }])));
       } catch (e) {
         ui.error(e);
       }
@@ -1843,7 +1849,7 @@ class Databases {
     for (const schema of Object.values(this.schemas)) {
       const dateProps = schema.properties.filter((p) => p.type === 'date' && p.config.onCalendar);
       if (!dateProps.length) continue;
-      const dbPage = store.byId.get(schema.id);
+      const dbPage = store.placed.get(schema.id);
       if (!dbPage || dbPage.deletedAt) continue;
       this.#track(schema.id);
       for (const row of this.rowsOf(schema.id)) {

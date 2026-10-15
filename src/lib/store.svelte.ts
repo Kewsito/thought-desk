@@ -1,5 +1,6 @@
 /** Page tree state and every action that changes it. */
 
+import { untrack } from 'svelte';
 import { api } from './api';
 import { prefs } from './prefs.svelte';
 import { ui } from './ui.svelte';
@@ -18,17 +19,37 @@ interface Entry {
   id: string | null;
 }
 
-function applyLocal(page: PageMeta, patch: PagePatch) {
-  if (patch.title !== undefined) page.title = patch.title;
-  if (patch.icon !== undefined) page.icon = patch.icon;
-  if (patch.fullWidth !== undefined) page.fullWidth = patch.fullWidth;
-  if (patch.favorite !== undefined && !!page.favorite !== patch.favorite) {
-    page.favorite = patch.favorite ? Date.now() : 0;
-  }
+/** The page fields a patch changes (null when it only touches the body). */
+function localFields(page: PageMeta, patch: PagePatch): Partial<PageMeta> | null {
+  const out: Partial<PageMeta> = {};
+  if (patch.title !== undefined) out.title = patch.title;
+  if (patch.icon !== undefined) out.icon = patch.icon;
+  if (patch.fullWidth !== undefined) out.fullWidth = patch.fullWidth;
+  if (patch.favorite !== undefined && !!page.favorite !== patch.favorite) out.favorite = patch.favorite ? Date.now() : 0;
+  return Object.keys(out).length ? out : null;
 }
 
+/**
+ * Fields that decide which lists a page is in and where (the tree, the
+ * trash, favorites, databases, tags), as opposed to what it shows.
+ */
+const PLACE_FIELDS = new Set<keyof PageMeta>(['parentId', 'position', 'deletedAt', 'kind', 'favorite', 'tags']);
+
 class Store {
-  pages = $state<PageMeta[]>([]);
+  /**
+   * Every page (database rows included), as plain objects that are never
+   * changed in place: an edit makes a new object for that page, and a new
+   * list (see `edit`). With tens of thousands of pages, tracking each field
+   * of each one would cost more memory than everything else in the window.
+   */
+  pages = $state.raw<PageMeta[]>([]);
+  /** Bumped on every change to pages. */
+  #ver = $state(0);
+  /** Bumped when pages come, go or change place (see PLACE_FIELDS), not when a title changes. */
+  #place = $state(0);
+  /** Pages by id and their index in `pages`, kept up to date as they change. */
+  #map = new Map<string, PageMeta>();
+  #index = new Map<string, number>();
   loaded = $state(false);
   view = $state<View>('page');
   /** The open page; null while an app view is showing. */
@@ -43,41 +64,121 @@ class Store {
   /** How the current view was reached, so it can animate in from that side. */
   navDirection = $state<'push' | 'back' | 'forward'>('push');
 
-  byId = $derived(new Map(this.pages.map((p) => [p.id, p])));
+  /** Pages by id. Reading it follows every change. */
+  get byId(): Map<string, PageMeta> {
+    void this.#ver;
+    return this.#map;
+  }
 
-  /** Live pages grouped by parent id ('' = top level), in sibling order.
+  /**
+   * The same map, following only pages coming, going or changing place: for
+   * long lists (a database's rows, the tree) that typing a title shouldn't
+   * redo. Read only place fields through it.
+   */
+  get placed(): Map<string, PageMeta> {
+    void this.#place;
+    return this.#map;
+  }
+
+  /** Every page (follows every change). */
+  get all(): PageMeta[] {
+    void this.#ver;
+    return this.pages;
+  }
+
+  #setPages(next: PageMeta[], moved: boolean) {
+    this.pages = next;
+    this.#map = new Map(next.map((p) => [p.id, p]));
+    this.#index = new Map(next.map((p, i) => [p.id, i]));
+    this.#ver++;
+    if (moved) this.#place++;
+  }
+
+  /** Changes fields of pages (by id): each changed page becomes a new object. */
+  edit(changes: Map<string, Partial<PageMeta>>) {
+    let next: PageMeta[] | null = null;
+    let moved = false;
+    for (const [id, fields] of changes) {
+      const i = this.#index.get(id);
+      if (i === undefined) continue;
+      next ??= this.pages.slice();
+      const page = { ...next[i], ...fields };
+      next[i] = page;
+      this.#map.set(id, page);
+      if (Object.keys(fields).some((k) => PLACE_FIELDS.has(k as keyof PageMeta))) moved = true;
+    }
+    if (!next) return;
+    this.pages = next;
+    this.#ver++;
+    if (moved) this.#place++;
+  }
+
+  editOne(id: string, fields: Partial<PageMeta>) {
+    this.edit(new Map([[id, fields]]));
+  }
+
+  // The lists below are worked out as ids when pages come, go or move, and
+  // turned into the pages' current versions when read: typing a title in a
+  // workspace of 50,000 pages doesn't redo them.
+
+  /** Live page ids grouped by parent id ('' = top level), in sibling order.
    * Databases and their rows aren't part of the tree (the sidebar lists
    * databases on their own). */
-  childrenMap = $derived.by(() => {
+  #childIds = $derived.by(() => {
+    void this.#place;
+    const pages = untrack(() => this.pages);
     const map = new Map<string, PageMeta[]>();
-    const databases = new Set(this.pages.filter((p) => p.kind === 'database').map((p) => p.id));
-    for (const p of this.pages) {
+    const databases = new Set(pages.filter((p) => p.kind === 'database').map((p) => p.id));
+    for (const p of pages) {
       if (p.deletedAt || p.kind === 'database' || (p.parentId && databases.has(p.parentId))) continue;
       const key = p.parentId ?? '';
       let list = map.get(key);
       if (!list) map.set(key, (list = []));
       list.push(p);
     }
-    for (const list of map.values()) list.sort((a, b) => a.position - b.position);
-    return map;
+    const ids = new Map<string, string[]>();
+    for (const [key, list] of map) ids.set(key, list.sort((a, b) => a.position - b.position).map((p) => p.id));
+    return ids;
   });
 
-  roots = $derived(this.childrenMap.get('') ?? []);
+  #favoriteIds = $derived.by(() => {
+    void this.#place;
+    return untrack(() => this.pages)
+      .filter((p) => p.favorite && !p.deletedAt)
+      .sort((a, b) => a.favorite - b.favorite)
+      .map((p) => p.id);
+  });
 
-  favorites = $derived(
-    this.pages.filter((p) => p.favorite && !p.deletedAt).sort((a, b) => a.favorite - b.favorite),
-  );
-
-  /** Trashed pages that were deleted on their own (not along with a parent). */
-  trash = $derived(
-    this.pages
+  #trashIds = $derived.by(() => {
+    void this.#place;
+    const map = this.#map;
+    return untrack(() => this.pages)
       .filter((p) => {
         if (!p.deletedAt) return false;
-        const parent = p.parentId ? this.byId.get(p.parentId) : undefined;
+        const parent = p.parentId ? map.get(p.parentId) : undefined;
         return !parent || parent.deletedAt !== p.deletedAt;
       })
-      .sort((a, b) => (b.deletedAt ?? 0) - (a.deletedAt ?? 0)),
-  );
+      .sort((a, b) => (b.deletedAt ?? 0) - (a.deletedAt ?? 0))
+      .map((p) => p.id);
+  });
+
+  #pagesOf(ids: string[]): PageMeta[] {
+    const byId = this.byId;
+    return ids.flatMap((id) => byId.get(id) ?? []);
+  }
+
+  get roots(): PageMeta[] {
+    return this.children(null);
+  }
+
+  get favorites(): PageMeta[] {
+    return this.#pagesOf(this.#favoriteIds);
+  }
+
+  /** Trashed pages that were deleted on their own (not along with a parent). */
+  get trash(): PageMeta[] {
+    return this.#pagesOf(this.#trashIds);
+  }
 
   current = $derived(this.currentId ? (this.byId.get(this.currentId) ?? null) : null);
   /** The open page and its ancestors (rows the sidebar always renders). */
@@ -94,7 +195,7 @@ class Store {
   }
 
   children(id: string | null): PageMeta[] {
-    return this.childrenMap.get(id ?? '') ?? [];
+    return this.#pagesOf(this.#childIds.get(id ?? '') ?? []);
   }
 
   /** Ancestors from the top level down to (not including) the page. */
@@ -117,7 +218,7 @@ class Store {
   // ---------------------------------------------------------------- loading
 
   async load() {
-    this.pages = await api.listPages();
+    this.#setPages(await api.listPages(), true);
     this.loaded = true;
     // Forget expanded state of pages that no longer exist.
     for (const id of Object.keys(prefs.expanded)) {
@@ -137,47 +238,50 @@ class Store {
   /** Reloads the page list, keeping local edits that aren't saved yet. */
   async refresh() {
     await this.#chain;
-    const pages = await api.listPages();
-    for (const p of pages) {
+    const pages = (await api.listPages()).map((p) => {
       const patch = this.#pending.get(p.id);
-      if (patch) applyLocal(p, patch);
-    }
+      const fields = patch ? localFields(p, patch) : null;
+      return fields ? { ...p, ...fields } : p;
+    });
     this.#merge(pages);
   }
 
   /**
-   * Takes a fresh page list but keeps the existing object of every page, only
-   * writing the fields that changed. Adding one page among thousands then
-   * re-renders that page and its reordered siblings, not the whole sidebar.
+   * Takes a fresh page list but keeps the existing object of every page that
+   * didn't change. Adding one page among thousands then re-renders that page
+   * and its reordered siblings, not the whole sidebar.
    */
   #merge(next: PageMeta[]) {
     const byId = this.byId;
     let same = next.length === this.pages.length;
+    let moved = !same;
     const merged = next.map((p, i) => {
       const cur = byId.get(p.id);
       if (!cur) {
         same = false;
+        moved = true;
         return p;
       }
+      let changed = false;
       for (const key of Object.keys(p) as (keyof PageMeta)[]) {
         const a = cur[key];
         const b = p[key];
         const equal = Array.isArray(a) && Array.isArray(b) ? a.length === b.length && a.every((x, j) => x === b[j]) : a === b;
-        if (!equal) (cur as unknown as Record<string, unknown>)[key] = b;
+        if (!equal) {
+          changed = true;
+          if (PLACE_FIELDS.has(key)) moved = true;
+        }
       }
-      if (same && this.pages[i] !== cur) same = false;
-      return cur;
+      if (changed || this.pages[i] !== cur) same = false;
+      return changed ? p : cur;
     });
-    if (!same) this.pages = merged;
+    if (!same) this.#setPages(merged, moved);
   }
 
   /** Takes pages made elsewhere (database rows) without reloading the list. */
   adopt(metas: PageMeta[]) {
     const fresh = metas.filter((m) => !this.byId.has(m.id));
-    // A few: added in place. Many (an import): a new list, since
-    // push(...fresh) would pass more arguments than a call allows.
-    if (fresh.length > 1000) this.pages = this.pages.concat(fresh);
-    else if (fresh.length) this.pages.push(...fresh);
+    if (fresh.length) this.#setPages(this.pages.concat(fresh), true);
   }
 
   // ------------------------------------------------------------- navigation
@@ -326,7 +430,8 @@ class Store {
   /** Updates a page locally right away and persists it shortly after. */
   update(id: string, patch: PagePatch, { immediate = false } = {}) {
     const page = this.byId.get(id);
-    if (page) applyLocal(page, patch);
+    const fields = page ? localFields(page, patch) : null;
+    if (fields) this.editOne(id, fields);
     this.#pending.set(id, { ...this.#pending.get(id), ...patch });
     clearTimeout(this.#timer);
     if (immediate) void this.flush();
@@ -345,7 +450,7 @@ class Store {
         try {
           const updatedAt = await api.updatePage(id, patch);
           const page = this.byId.get(id);
-          if (page) page.updatedAt = updatedAt;
+          if (page && page.updatedAt !== updatedAt) this.editOne(id, { updatedAt });
           if (patch.content !== undefined) {
             window.dispatchEvent(new CustomEvent('td:page-saved', { detail: { id, content: patch.content } }));
           }

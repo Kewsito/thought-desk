@@ -32,7 +32,7 @@ export const MentionSuggest = Extension.create({
         allow: ({ state, range }) => !state.doc.resolve(range.from).parent.type.spec.code,
         items: ({ query }) => {
           const q = query.trim();
-          const pages: MenuEntry[] = store.pages
+          const pages: MenuEntry[] = store.all
             .filter((p) => !p.deletedAt && p.id !== store.currentId)
             .sort((a, b) => b.updatedAt - a.updatedAt)
             .map((p) => {

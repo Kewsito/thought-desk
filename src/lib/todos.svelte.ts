@@ -36,8 +36,7 @@ class Todos {
     this.done[keyOf(t)] = checked;
     try {
       const updatedAt = await api.setTodo(t.pageId, t.index, t.key, checked);
-      const page = store.byId.get(t.pageId);
-      if (page) page.updatedAt = updatedAt;
+      if (store.byId.has(t.pageId)) store.editOne(t.pageId, { updatedAt });
     } catch (e) {
       ui.error(e);
       await this.load();

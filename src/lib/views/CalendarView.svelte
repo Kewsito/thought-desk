@@ -81,7 +81,7 @@
   // The selected day's agenda.
   const day = $derived(itemsByDay(calendar.selected, calendar.selected).get(calendar.selected));
   const dayPages = $derived(
-    store.pages
+    store.all
       .filter((p) => !p.deletedAt && p.kind !== 'database' && !store.isRow(p))
       .filter((p) => toISODate(new Date(p.createdAt)) === calendar.selected || toISODate(new Date(p.updatedAt)) === calendar.selected)
       .sort((a, b) => b.updatedAt - a.updatedAt)

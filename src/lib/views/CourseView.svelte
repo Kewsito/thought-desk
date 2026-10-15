@@ -68,7 +68,7 @@
     planner.updateCourse(id, { weights: { ...course.weights, [name]: Math.max(0, 100 - weightSum) } });
   }
 
-  const notes = $derived(folder ? (store.childrenMap.get(folder.id) ?? []) : []);
+  const notes = $derived(folder ? store.children(folder.id) : []);
 
   /** Files attached to this course's assignments. */
   const files = $derived.by(() => {
