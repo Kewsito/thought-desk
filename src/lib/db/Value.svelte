@@ -4,6 +4,7 @@
    * checkbox, chips for links and files, a bar for a progress number…
    * Used by table cells, cards and a row's property list.
    */
+  import PageIcon from '../components/PageIcon.svelte';
   import { openUrl } from '@tauri-apps/plugin-opener';
   import Icon from '../components/Icon.svelte';
   import { databases } from '../databases.svelte';
@@ -86,7 +87,7 @@
 
 {#if prop.type === 'title'}
   <span class="v-title" class:wrap>
-    {#if page?.icon}<span class="emoji">{page.icon}</span>{/if}
+    {#if page?.icon}<span class="emoji"><PageIcon icon={page.icon} /></span>{/if}
     <span class="t">{page?.title || ''}</span>
   </span>
 {:else if prop.type === 'text'}
@@ -177,7 +178,7 @@
           store.open(id);
         }}
       >
-        {#if p?.icon}<span class="emoji small">{p.icon}</span>{:else}<Icon name="page" size={12} />{/if}<span>{p?.title || 'Untitled'}</span>
+        {#if p?.icon}<span class="emoji small"><PageIcon icon={p.icon} /></span>{:else}<Icon name="page" size={12} />{/if}<span>{p?.title || 'Untitled'}</span>
       </button>
     {/each}
   </span>

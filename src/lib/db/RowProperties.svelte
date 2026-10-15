@@ -3,6 +3,7 @@
    * A row's properties, at the top of its page: every value, editable in
    * place, with its property's settings a click away.
    */
+  import PageIcon from '../components/PageIcon.svelte';
   import Icon from '../components/Icon.svelte';
   import Popover from './Popover.svelte';
   import Value from './Value.svelte';
@@ -49,7 +50,7 @@
   <div class="props" aria-label="Properties">
     <button class="db-link" onclick={() => store.open(dbId)}>
       <Icon name="database" size={13} />
-      {store.byId.get(dbId)?.icon ?? ''}
+      <PageIcon icon={store.byId.get(dbId)?.icon} />
       {store.byId.get(dbId)?.title || 'Untitled database'}
     </button>
     {#if row.template}

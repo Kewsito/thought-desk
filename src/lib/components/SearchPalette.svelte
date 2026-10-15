@@ -1,4 +1,5 @@
 <script lang="ts">
+  import PageIcon from './PageIcon.svelte';
   import { colorVar } from '../colors';
   import { importCalendar } from '../ics-import.svelte';
   import { cards } from '../cards.svelte';
@@ -339,7 +340,7 @@
         >
           <span class="hit-icon" style:color={row.color}>
             {#if row.file}<FileTile file={row.file} size={26} />
-            {:else if row.emoji}<span class="emoji">{row.emoji}</span>
+            {:else if row.emoji}<span class="emoji"><PageIcon icon={row.emoji} /></span>
             {:else if row.icon}<Icon name={row.icon} size={18} />{/if}
           </span>
           <span class="hit-main">

@@ -3,6 +3,7 @@
    * Links a row to rows of another (or the same) database: search, tick to
    * link or unlink, or make a new row there from what's typed.
    */
+  import PageIcon from '../components/PageIcon.svelte';
   import { onMount, untrack } from 'svelte';
   import Icon from '../components/Icon.svelte';
   import { databases } from '../databases.svelte';
@@ -76,7 +77,7 @@
       {#each candidates as r, i (r.id)}
         {@const p = store.byId.get(r.id)}
         <button class="pop-item" class:active={i === active} onmousemove={() => (active = i)} onclick={() => toggle(r)}>
-          {#if p?.icon}<span class="emoji">{p.icon}</span>{:else}<Icon name="page" size={14} />{/if}
+          {#if p?.icon}<span class="emoji"><PageIcon icon={p.icon} /></span>{:else}<Icon name="page" size={14} />{/if}
           <span class="grow">{p?.title || 'Untitled'}</span>
           {#if linked.includes(r.id)}<Icon name="check" size={14} stroke={2.4} />{/if}
         </button>

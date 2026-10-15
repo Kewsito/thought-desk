@@ -3,6 +3,7 @@
 import { keysBetween } from './order';
 import { STATUS_OPTIONS } from './schema';
 import type { DbView, Property, PropertyConfig, PropertyType, SelectOption, ViewConfig, ViewType } from '../types';
+import { lineIcon } from '../page-icon';
 
 export interface Template {
   key: string;
@@ -38,11 +39,11 @@ function make(key: string, name: string, icon: string, description: string, titl
 const priority = opts(['low', 'Low', 'gray'], ['medium', 'Medium', 'yellow'], ['high', 'High', 'red']);
 
 export const TEMPLATES: Template[] = [
-  make('blank', 'Empty database', '🗃️', 'A table to shape however you like', 'Name', [['notes', 'Notes', 'text']], [['table', 'Table', 'table']]),
+  make('blank', 'Empty database', lineIcon('database'), 'A table to shape however you like', 'Name', [['notes', 'Notes', 'text']], [['table', 'Table', 'table']]),
   make(
     'tasks',
     'Tasks',
-    '✅',
+    lineIcon('list-checks', 'blue'),
     'To-dos on a board, with due dates on your calendar',
     'Task',
     [
@@ -60,7 +61,7 @@ export const TEMPLATES: Template[] = [
   make(
     'projects',
     'Projects',
-    '🚀',
+    lineIcon('rocket', 'purple'),
     'Bigger pieces of work, how far along they are, and when they’re due',
     'Project',
     [
@@ -79,7 +80,7 @@ export const TEMPLATES: Template[] = [
   make(
     'reading',
     'Reading list',
-    '📚',
+    lineIcon('book-open', 'orange'),
     'Books and articles: what you’re reading, what you thought',
     'Title',
     [
@@ -99,7 +100,7 @@ export const TEMPLATES: Template[] = [
   make(
     'habits',
     'Habit tracker',
-    '🌱',
+    lineIcon('sprout', 'green'),
     'One row a day: tick what you did and watch the streak',
     'Day',
     [
@@ -119,7 +120,7 @@ export const TEMPLATES: Template[] = [
   make(
     'study',
     'Study log',
-    '⏱️',
+    lineIcon('clock', 'yellow'),
     'Time spent per course, adding up as you go',
     'Topic',
     [
@@ -137,7 +138,7 @@ export const TEMPLATES: Template[] = [
   make(
     'expenses',
     'Budget',
-    '💸',
+    lineIcon('wallet', 'teal'),
     'Spending by category, with totals',
     'Expense',
     [
@@ -155,7 +156,7 @@ export const TEMPLATES: Template[] = [
   make(
     'applications',
     'Applications',
-    '💼',
+    lineIcon('briefcase', 'indigo'),
     'Jobs, internships or programs: where each one stands',
     'Role',
     [
@@ -174,7 +175,7 @@ export const TEMPLATES: Template[] = [
   make(
     'contacts',
     'People',
-    '👥',
+    lineIcon('users', 'pink'),
     'Classmates, teachers and contacts in one place',
     'Name',
     [
@@ -192,7 +193,7 @@ export const TEMPLATES: Template[] = [
   make(
     'recipes',
     'Recipes',
-    '🍳',
+    lineIcon('utensils', 'red'),
     'A gallery of dishes, with the recipe in each page',
     'Dish',
     [

@@ -4,6 +4,7 @@
    * type, its settings (choices, number format, formula, what it links
    * to…), and what this view does with it (sort, filter, hide).
    */
+  import { iconText } from '../page-icon';
   import { onMount, untrack } from 'svelte';
   import Icon from '../components/Icon.svelte';
   import ActionsEditor from './ActionsEditor.svelte';
@@ -267,7 +268,7 @@
         <span class="label">Links to</span>
         <select class="pop-input small" value={prop.config.database ?? ''} onchange={(e) => chooseDatabase((e.currentTarget as HTMLSelectElement).value)}>
           <option value="" disabled>Choose a database</option>
-          {#each otherDbs as d (d.id)}<option value={d.id}>{d.icon ? `${d.icon} ` : ''}{d.title || 'Untitled'}{d.id === dbId ? ' (this one)' : ''}</option>{/each}
+          {#each otherDbs as d (d.id)}<option value={d.id}>{iconText(d.icon) ? `${iconText(d.icon)} ` : ''}{d.title || 'Untitled'}{d.id === dbId ? ' (this one)' : ''}</option>{/each}
         </select>
       </div>
       {#if prop.config.database}

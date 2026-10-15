@@ -4,6 +4,7 @@
    * templates. Click one to add a row from it; each template can be edited
    * (it's a page like any row), made the default, copied or deleted.
    */
+  import PageIcon from '../components/PageIcon.svelte';
   import Icon from '../components/Icon.svelte';
   import { databases } from '../databases.svelte';
   import { store } from '../store.svelte';
@@ -54,7 +55,7 @@
     {@const page = store.byId.get(t.id)}
     <div class="opt-row">
       <button class="pop-item" onclick={() => onpick(t.id)}>
-        {#if page?.icon}<span class="emoji">{page.icon}</span>{:else}<Icon name="template" size={14} />{/if}
+        {#if page?.icon}<span class="emoji"><PageIcon icon={page.icon} /></span>{:else}<Icon name="template" size={14} />{/if}
         <span class="grow name">{page?.title || 'Untitled template'}</span>
         {#if current === t.id}<span class="badge">Default</span>{/if}
       </button>

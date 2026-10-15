@@ -4,6 +4,7 @@
 </script>
 
 <script lang="ts">
+  import PageIcon from './PageIcon.svelte';
   import Icon from './Icon.svelte';
   import TreeItem from './TreeItem.svelte';
   import { prefs } from '../prefs.svelte';
@@ -122,7 +123,7 @@
 >
   <span class="lead">
     <span class="glyph" class:has-kids={kids.length > 0}>
-      {#if page.icon}<span class="emoji">{page.icon}</span>{:else}<Icon name={page.kind === 'database' ? 'database' : 'page'} />{/if}
+      {#if page.icon}<span class="emoji"><PageIcon icon={page.icon} /></span>{:else}<Icon name={page.kind === 'database' ? 'database' : 'page'} />{/if}
     </span>
     {#if kids.length}
       <button class="chev" class:open={expanded} onclick={toggle} tabindex="-1" aria-label={expanded ? 'Collapse' : 'Expand'}>

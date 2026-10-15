@@ -17,6 +17,7 @@ import { prefs } from './prefs.svelte';
 import { store } from './store.svelte';
 import { tags } from './tags.svelte';
 import { ui } from './ui.svelte';
+import { lineIcon } from './page-icon';
 import { byKey, keyBetween, keysBetween } from './db/order';
 import { FDate, FormulaError, isEmpty as emptyF, renameProperty, run, toText, type FValue, type Scope } from './db/formula';
 import { calculate, filterRows, groupRows, searchRows, sortRows, type Ctx, type Group, type Plain } from './db/query';
@@ -1750,7 +1751,7 @@ class Databases {
     const template: Template = {
       key: 'import',
       name,
-      icon: '📊',
+      icon: lineIcon('table', 'green'),
       description: '',
       properties: props,
       views: [{ id: 'table', name: 'Table', type: 'table', config: {}, sortKey: 'a0' }],

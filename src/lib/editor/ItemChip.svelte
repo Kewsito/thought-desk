@@ -3,6 +3,7 @@
    * A link to a page, assignment, event or file inside a page. Pages show as
    * an underlined title; assignments carry a live check and due date.
    */
+  import PageIcon from '../components/PageIcon.svelte';
   import Icon from '../components/Icon.svelte';
   import StatusCheck from '../ui/StatusCheck.svelte';
   import { clock } from '../clock.svelte';
@@ -68,7 +69,7 @@
     <span class="chip-icon"><FileTile {file} size={block ? 22 : 16} thumb={false} /></span>
   {:else}
     <span class="chip-icon" style:color={event && !missing ? planner.eventColor(event) : undefined}>
-      {#if page?.icon && !missing}<span class="emoji">{page.icon}</span>
+      {#if page?.icon && !missing}<span class="emoji"><PageIcon icon={page.icon} /></span>
       {:else}<Icon name={kind === 'page' ? 'page' : kind === 'event' ? 'calendar' : kind === 'assignment' ? 'assignment' : 'file'} size={block ? 18 : 15} />{/if}
     </span>
   {/if}

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import PageIcon from '../components/PageIcon.svelte';
   import Icon from '../components/Icon.svelte';
   import type { MenuEntry, SuggestionState } from './suggestion.svelte';
 
@@ -54,7 +55,7 @@
         onclick={() => ctl.pick(i)}
       >
         <span class="glyph">
-          {#if item.emoji}<span class="emoji">{item.emoji}</span>{:else if item.label}<span class="label">{item.label}</span>{:else if item.icon}<Icon name={item.icon} size={17} />{/if}
+          {#if item.emoji}<span class="emoji"><PageIcon icon={item.emoji} /></span>{:else if item.label}<span class="label">{item.label}</span>{:else if item.icon}<Icon name={item.icon} size={17} />{/if}
         </span>
         <span class="text">
           <span class="title">{item.title}</span>

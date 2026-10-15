@@ -7,6 +7,7 @@ import { planner } from './planner.svelte';
 import { prefs } from './prefs.svelte';
 import { store } from './store.svelte';
 import { ui } from './ui.svelte';
+import { lineIcon } from './page-icon';
 
 export type CaptureKind = 'todo' | 'note' | 'assignment' | 'event';
 
@@ -35,7 +36,7 @@ async function inbox(): Promise<string | null> {
     prefs.inboxId = byName.id;
     return byName.id;
   }
-  const meta = await store.create(null, { open: false, title: 'Inbox', icon: '📥', index: 0 });
+  const meta = await store.create(null, { open: false, title: 'Inbox', icon: lineIcon('inbox', 'blue'), index: 0 });
   if (!meta) return null;
   prefs.inboxId = meta.id;
   return meta.id;

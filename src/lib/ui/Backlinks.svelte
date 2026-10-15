@@ -1,5 +1,6 @@
 <script lang="ts">
   /** Pages that link to this page, assignment, event or file ("Linked from"). */
+  import PageIcon from '../components/PageIcon.svelte';
   import Icon from '../components/Icon.svelte';
   import { api } from '../api';
   import { store } from '../store.svelte';
@@ -47,7 +48,7 @@
     <div class="group">
       {#each pages as p (p.id)}
         <button class="group-row link" onclick={() => open(p.id)}>
-          <span class="icon">{#if p.icon}{p.icon}{:else}<Icon name="page" size={16} />{/if}</span>
+          <span class="icon">{#if p.icon}<PageIcon icon={p.icon} />{:else}<Icon name="page" size={16} />{/if}</span>
           <span class="text">
             <span class="title">{p.title || 'Untitled'}</span>
             {#if pathOf(p.id)}<span class="path">{pathOf(p.id)}</span>{/if}

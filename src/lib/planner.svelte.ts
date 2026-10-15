@@ -8,6 +8,7 @@ import { addDays, diffDays, formatDate, minutes, occurrences } from './dates';
 import { store } from './store.svelte';
 import { ui } from './ui.svelte';
 import type { Assignment, AssignmentPatch, CalEvent, Course, CoursePatch, EventPatch, OccurrencePage } from './types';
+import { lineIcon } from './page-icon';
 
 const byDue = (a: Assignment, b: Assignment) =>
   (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999') ||
@@ -145,7 +146,7 @@ class Planner {
     if (!c) return null;
     const page = c.pageId ? store.byId.get(c.pageId) : undefined;
     if (page && !page.deletedAt) return page.id;
-    const meta = await store.create(null, { open: false, title: c.name || 'Course', icon: '📘' });
+    const meta = await store.create(null, { open: false, title: c.name || 'Course', icon: lineIcon('book-open', c.color) });
     if (!meta) return null;
     this.updateCourse(courseId, { pageId: meta.id });
     return meta.id;
@@ -278,7 +279,7 @@ class Planner {
       const meta = await store.create(parent, {
         open: false,
         title: `${e.title || 'Class'} — ${formatDate(date, { month: 'short', day: 'numeric' })}`,
-        icon: '🗒️',
+        icon: lineIcon('notebook-pen', e.courseId ? this.courseById.get(e.courseId)?.color : null),
         index: 0,
       });
       if (!meta) return;
@@ -438,7 +439,7 @@ class Planner {
     const meta = await store.create(null, {
       open: false,
       title: item.title || 'Untitled',
-      icon: kind === 'assignment' ? '📝' : '🗓️',
+      icon: lineIcon(kind === 'assignment' ? 'file-text' : 'calendar-days', item.courseId ? this.courseById.get(item.courseId)?.color : null),
     });
     if (!meta) return null;
     const doc = {

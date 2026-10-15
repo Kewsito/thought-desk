@@ -3,6 +3,7 @@
    * Starting a database: an empty one, a ready-made template (tasks,
    * reading list, habit tracker…), or a spreadsheet file brought in as is.
    */
+  import PageIcon from '../components/PageIcon.svelte';
   import { untrack } from 'svelte';
   import Modal from '../components/Modal.svelte';
   import Icon from '../components/Icon.svelte';
@@ -55,7 +56,7 @@
     <div class="grid">
       {#each TEMPLATES as t (t.key)}
         <button class="tile" onclick={() => choose(t)} disabled={busy}>
-          <span class="icon">{t.icon}</span>
+          <span class="icon"><PageIcon icon={t.icon} /></span>
           <span class="name">{t.name}</span>
           <span class="desc">{t.description}</span>
           <span class="props">

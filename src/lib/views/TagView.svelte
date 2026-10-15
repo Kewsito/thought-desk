@@ -1,4 +1,5 @@
 <script lang="ts">
+  import PageIcon from '../components/PageIcon.svelte';
   import Icon from '../components/Icon.svelte';
   import AssignmentRow from '../ui/AssignmentRow.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
@@ -73,7 +74,7 @@
     <div class="group">
       {#each shown.pages as p (p.id)}
         <button class="group-row link-row" onclick={() => store.open(p.id)}>
-          <span class="icon">{#if p.icon}{p.icon}{:else}<Icon name="page" size={16} />{/if}</span>
+          <span class="icon">{#if p.icon}<PageIcon icon={p.icon} />{:else}<Icon name="page" size={16} />{/if}</span>
           <span class="title">{p.title || 'Untitled'}</span>
           <span class="meta">{relativeTime(p.updatedAt)}</span>
         </button>

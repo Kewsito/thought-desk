@@ -31,8 +31,10 @@ export interface MenuState {
 export interface IconPickerState {
   x: number;
   y: number;
-  onPick: (emoji: string) => void;
+  onPick: (icon: string) => void;
   onRemove?: () => void;
+  /** The icon there now, so the picker opens on its tab and colour. */
+  current?: string;
 }
 
 export interface ConfirmState {
@@ -163,9 +165,9 @@ class UI {
     this.tagPicker = { x: r.left, y: r.bottom + 6, table, id };
   }
 
-  pickIcon(anchor: Element | DOMRect, onPick: (emoji: string) => void, onRemove?: () => void) {
+  pickIcon(anchor: Element | DOMRect, onPick: (icon: string) => void, onRemove?: () => void, current?: string) {
     const r = anchor instanceof Element ? anchor.getBoundingClientRect() : anchor;
-    this.iconPicker = { x: r.left, y: r.bottom + 6, onPick, onRemove };
+    this.iconPicker = { x: r.left, y: r.bottom + 6, onPick, onRemove, current };
   }
 
   confirm(opts: { title: string; message: string; confirmLabel?: string; danger?: boolean }): Promise<boolean> {

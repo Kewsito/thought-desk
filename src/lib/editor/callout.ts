@@ -1,5 +1,6 @@
 import { Node, mergeAttributes } from '@tiptap/core';
 import { ui } from '../ui.svelte';
+import { renderIcon } from '../page-icon';
 
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
@@ -9,7 +10,7 @@ declare module '@tiptap/core' {
   }
 }
 
-/** A highlighted box with an emoji, holding any blocks. */
+/** A highlighted box with an icon (a line icon or an emoji), holding any blocks. */
 export const Callout = Node.create({
   name: 'callout',
   group: 'block',
@@ -19,8 +20,8 @@ export const Callout = Node.create({
   addAttributes() {
     return {
       icon: {
-        default: '💡',
-        parseHTML: (el) => el.getAttribute('data-icon') || '💡',
+        default: 'icon:lightbulb:yellow',
+        parseHTML: (el) => el.getAttribute('data-icon') || 'icon:lightbulb:yellow',
         renderHTML: (attrs) => ({ 'data-icon': attrs.icon }),
       },
     };
@@ -44,7 +45,7 @@ export const Callout = Node.create({
       icon.className = 'callout-icon';
       icon.contentEditable = 'false';
       icon.tabIndex = -1;
-      icon.textContent = node.attrs.icon;
+      renderIcon(icon, node.attrs.icon);
       icon.dataset.tip = 'Change icon';
 
       const content = document.createElement('div');
@@ -54,12 +55,17 @@ export const Callout = Node.create({
       icon.addEventListener('mousedown', (e) => e.preventDefault());
       icon.addEventListener('click', () => {
         if (!editor.isEditable) return;
-        ui.pickIcon(icon, (emoji) => {
-          const pos = getPos();
-          if (typeof pos === 'number') {
-            editor.view.dispatch(editor.view.state.tr.setNodeAttribute(pos, 'icon', emoji));
-          }
-        });
+        ui.pickIcon(
+          icon,
+          (picked) => {
+            const pos = getPos();
+            if (typeof pos === 'number') {
+              editor.view.dispatch(editor.view.state.tr.setNodeAttribute(pos, 'icon', picked));
+            }
+          },
+          undefined,
+          node.attrs.icon,
+        );
       });
 
       return {
@@ -67,7 +73,8 @@ export const Callout = Node.create({
         contentDOM: content,
         update(updated) {
           if (updated.type.name !== 'callout') return false;
-          icon.textContent = updated.attrs.icon;
+          if (updated.attrs.icon !== node.attrs.icon) renderIcon(icon, updated.attrs.icon);
+          node = updated;
           return true;
         },
         stopEvent: (e) => icon.contains(e.target as globalThis.Node),

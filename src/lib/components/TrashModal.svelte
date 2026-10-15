@@ -1,4 +1,5 @@
 <script lang="ts">
+  import PageIcon from './PageIcon.svelte';
   import Icon from './Icon.svelte';
   import Modal from './Modal.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
@@ -69,7 +70,7 @@
           <div class="group-row item">
             <span class="icon" style:color={it.color}>
               {#if it.file}<FileTile file={it.file} size={28} />
-              {:else if it.emoji}<span class="emoji">{it.emoji}</span>
+              {:else if it.emoji}<span class="emoji"><PageIcon icon={it.emoji} /></span>
               {:else}<Icon name={it.icon} size={17} />{/if}
             </span>
             <div class="main">

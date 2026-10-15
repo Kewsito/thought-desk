@@ -1,4 +1,5 @@
 <script lang="ts">
+  import PageIcon from '../components/PageIcon.svelte';
   import { shortcuts } from '../shortcuts.svelte';
   import { importCalendar } from '../ics-import.svelte';
   import Icon from '../components/Icon.svelte';
@@ -217,7 +218,7 @@
             {#each day.rows as r (r.key)}
               {@const p = store.byId.get(r.row.id)}
               <button class="group-row page-row" onclick={() => store.open(r.row.id)}>
-                <span class="page-icon">{#if p?.icon}{p.icon}{:else}<span class="square" style:--c={r.color}></span>{/if}</span>
+                <span class="page-icon">{#if p?.icon}<PageIcon icon={p.icon} />{:else}<span class="square" style:--c={r.color}></span>{/if}</span>
                 <span class="page-title">{p?.title || 'Untitled'}</span>
                 <span class="page-meta">{r.time ? `${formatTime(r.time)} · ` : ''}{store.byId.get(r.dbId)?.title || 'Database'}</span>
               </button>
@@ -230,7 +231,7 @@
           <div class="group">
             {#each dayPages as p (p.id)}
               <button class="group-row page-row" onclick={() => store.open(p.id)}>
-                <span class="page-icon">{#if p.icon}{p.icon}{:else}<Icon name="page" size={16} />{/if}</span>
+                <span class="page-icon">{#if p.icon}<PageIcon icon={p.icon} />{:else}<Icon name="page" size={16} />{/if}</span>
                 <span class="page-title">{p.title || 'Untitled'}</span>
                 <span class="page-meta">{toISODate(new Date(p.createdAt)) === calendar.selected ? 'Created' : 'Edited'}</span>
               </button>

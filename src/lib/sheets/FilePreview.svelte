@@ -1,4 +1,5 @@
 <script lang="ts">
+  import PageIcon from '../components/PageIcon.svelte';
   import { onMount } from 'svelte';
   import Icon from '../components/Icon.svelte';
   import Modal from '../components/Modal.svelte';
@@ -105,7 +106,7 @@
           <div class="group">
             {#each used.pages as p (p.id)}
               <button class="group-row compact use" onclick={() => openPage(p.id)}>
-                <span class="use-icon">{#if p.icon}{p.icon}{:else}<Icon name="page" size={15} />{/if}</span>
+                <span class="use-icon">{#if p.icon}<PageIcon icon={p.icon} />{:else}<Icon name="page" size={15} />{/if}</span>
                 <span class="use-name">{p.title || 'Untitled'}</span>
                 <Icon name="chevron-right" size={13} stroke={2} />
               </button>

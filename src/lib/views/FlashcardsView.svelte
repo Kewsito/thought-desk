@@ -1,4 +1,5 @@
 <script lang="ts">
+  import PageIcon from '../components/PageIcon.svelte';
   import { onMount } from 'svelte';
   import Icon from '../components/Icon.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
@@ -116,7 +117,7 @@
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div class="group-row deck" oncontextmenu={(e) => menu(e, d)}>
           <button class="deck-main" onclick={() => store.open(d.pageId)}>
-            <span class="page-icon">{#if page?.icon}{page.icon}{:else}<Icon name="cards" size={16} />{/if}</span>
+            <span class="page-icon">{#if page?.icon}<PageIcon icon={page.icon} />{:else}<Icon name="cards" size={16} />{/if}</span>
             <span class="deck-text">
               <span class="deck-title">{page?.title || 'Untitled'}</span>
               <span class="meta">

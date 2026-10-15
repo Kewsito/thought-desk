@@ -1,4 +1,5 @@
 <script lang="ts">
+  import PageIcon from './PageIcon.svelte';
   import Icon from './Icon.svelte';
   import TreeItem, { drag } from './TreeItem.svelte';
   import { prefs } from '../prefs.svelte';
@@ -238,7 +239,7 @@
                   }}
                   ondragend={() => (drag.id = null)}
                 >
-                  <span class="lead">{#if d.icon}<span class="emoji">{d.icon}</span>{:else}<Icon name="database" />{/if}</span>
+                  <span class="lead">{#if d.icon}<span class="emoji"><PageIcon icon={d.icon} /></span>{:else}<Icon name="database" />{/if}</span>
                   <span class="label">{d.title || 'Untitled database'}</span>
                 </button>
                 <button class="row-more" onclick={(e) => dbMenu(e, d.id, e.currentTarget as Element)} aria-label="More" data-tip="More"><Icon name="more" size={15} /></button>

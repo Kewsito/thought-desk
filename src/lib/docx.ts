@@ -7,6 +7,7 @@
 import type { JNode } from './markdown';
 import type { ExportedImage } from './export-images';
 import { zip } from './zip';
+import { iconText } from './page-icon';
 
 type Kind = 'page' | 'assignment' | 'event' | 'file';
 
@@ -180,7 +181,7 @@ class Writer {
       case 'callout': {
         const inner = { ...frame, shade: true };
         const [first, ...rest] = n.content ?? [];
-        const icon = this.run(`${n.attrs?.icon ?? '💡'}  `);
+        const icon = this.run(`${iconText(n.attrs?.icon) || '💡'}  `);
         const head = first?.type === 'paragraph' ? this.para(icon + this.inline(first.content), inner) : this.para(icon, inner) + (first ? await this.block(first, inner) : '');
         return head + (await this.blocks(rest, inner));
       }

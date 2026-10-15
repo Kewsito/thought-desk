@@ -1,4 +1,5 @@
 <script lang="ts">
+  import PageIcon from './PageIcon.svelte';
   import { onMount, tick } from 'svelte';
   import Icon from './Icon.svelte';
   import Editor from '../editor/Editor.svelte';
@@ -6,7 +7,7 @@
   import TagRow from '../ui/TagRow.svelte';
   import RowProperties from '../db/RowProperties.svelte';
   import { databases } from '../databases.svelte';
-  import { randomEmoji } from '../emoji';
+  import { randomIcon } from '../page-icon';
   import { store } from '../store.svelte';
   import { ui } from '../ui.svelte';
   import { STARTERS, type Starter } from '../editor/starters';
@@ -79,6 +80,7 @@
       e.currentTarget as Element,
       (emoji) => store.update(page.id, { icon: emoji }, { immediate: true }),
       () => store.update(page.id, { icon: '' }, { immediate: true }),
+      store.byId.get(page.id)?.icon,
     );
   }
 
@@ -91,12 +93,12 @@
 <article class="page" class:full={meta?.fullWidth}>
   <div class="head" class:has-icon={!!meta?.icon}>
     {#if meta?.icon}
-      <button class="page-icon" onclick={pickIcon} data-tip="Change icon">{meta.icon}</button>
+      <button class="page-icon" onclick={pickIcon} data-tip="Change icon"><PageIcon icon={meta.icon} /></button>
     {/if}
     {#if !meta?.icon || !meta?.tags.length}
       <div class="head-tools">
         {#if !meta?.icon}
-          <button class="tool" onclick={() => store.update(page.id, { icon: randomEmoji() }, { immediate: true })}>
+          <button class="tool" onclick={() => store.update(page.id, { icon: randomIcon() }, { immediate: true })}>
             <Icon name="smile" size={16} />
             Add icon
           </button>
@@ -135,7 +137,7 @@
     <div class="starters" aria-label="Start this page">
       <span class="starters-label">Start with</span>
       {#each STARTERS as s (s.key)}
-        <button class="starter" onclick={() => useStarter(s)} data-tip={s.hint}><span class="starter-icon">{s.icon}</span>{s.label}</button>
+        <button class="starter" onclick={() => useStarter(s)} data-tip={s.hint}><span class="starter-icon"><PageIcon icon={s.icon} /></span>{s.label}</button>
       {/each}
       <button class="starter" onclick={startDatabase} data-tip="A table, board or tracker in this page"><Icon name="database" size={14} />Database</button>
     </div>
@@ -183,6 +185,12 @@
     transition:
       background-color var(--dur-fast) var(--ease),
       transform var(--dur) var(--ease-out);
+  }
+  /* A line icon this big reads best a little smaller and finer than an emoji. */
+  .page-icon :global(.page-glyph) {
+    width: 0.86em;
+    height: 0.86em;
+    stroke-width: 1.4;
   }
   .page-icon:hover {
     background: var(--fill);

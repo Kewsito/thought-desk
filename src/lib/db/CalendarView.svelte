@@ -3,6 +3,7 @@
    * A month of rows, placed by a date property. Drag a row to another day to
    * move it (its time and length come along); click a day's + to add one.
    */
+  import PageIcon from '../components/PageIcon.svelte';
   import Icon from '../components/Icon.svelte';
   import { databases } from '../databases.svelte';
   import { clock } from '../clock.svelte';
@@ -154,7 +155,7 @@
                 onclick={() => store.open(item.row.id)}
               >
                 {#if item.time}<span class="time">{timeFmt(item.time)}</span>{/if}
-                {#if page?.icon}<span>{page.icon}</span>{/if}
+                {#if page?.icon}<span><PageIcon icon={page.icon} /></span>{/if}
                 <span class="t">{page?.title || 'Untitled'}</span>
               </button>
             {/each}

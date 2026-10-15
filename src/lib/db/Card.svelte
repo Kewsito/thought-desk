@@ -1,5 +1,6 @@
 <script lang="ts">
   /** A row as a card (boards and galleries): picture, title, properties. */
+  import PageIcon from '../components/PageIcon.svelte';
   import { untrack } from 'svelte';
   import Icon from '../components/Icon.svelte';
   import Value from './Value.svelte';
@@ -110,7 +111,7 @@
       />
     {:else}
       <div class="title">
-        {#if page?.icon}<span class="emoji">{page.icon}</span>{/if}
+        {#if page?.icon}<span class="emoji"><PageIcon icon={page.icon} /></span>{/if}
         <span class:untitled={!page?.title}>{page?.title || 'Untitled'}</span>
       </div>
     {/if}

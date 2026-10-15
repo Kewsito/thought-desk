@@ -414,7 +414,7 @@ const WELCOME_HTML: &str = r#"<p>Thought Desk is a quiet place to write. Everyth
 <tr><td><p>Alt+← / Alt+→</p></td><td><p>Go back / forward</p></td></tr>
 <tr><td><p>Ctrl+Shift+L</p></td><td><p>Switch between light and dark</p></td></tr>
 </tbody></table>
-<div data-callout="" data-icon="💡"><p>Pages can be nested as deep as you like. Drag pages in the sidebar to reorder them or drop one onto another to nest it.</p></div>
+<div data-callout="" data-icon="icon:lightbulb:yellow"><p>Pages can be nested as deep as you like. Drag pages in the sidebar to reorder them or drop one onto another to nest it.</p></div>
 <h2>Plan your work</h2>
 <ul>
 <li><p><strong>Home</strong> (<code>Ctrl+1</code>) shows your day: classes, what's due and open to-dos from every page.</p></li>
@@ -476,7 +476,7 @@ impl Db {
             let ts = now();
             tx.execute(
                 "INSERT INTO pages (id, title, icon, content, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
-                params![new_id(), "Getting started", "👋", WELCOME_HTML, ts],
+                params![new_id(), "Getting started", "icon:compass:blue", WELCOME_HTML, ts],
             )?;
             tx.execute(
                 "INSERT INTO pages_fts (rowid, title, body) VALUES (?1, ?2, ?3)",

@@ -8,6 +8,7 @@ import { ui } from '../ui.svelte';
 import { databases } from '../databases.svelte';
 import { insertFiles, insertImage, pickImageFile } from './images';
 import { rank, suggestionRenderer, type MenuEntry } from './suggestion.svelte';
+import { iconText } from '../page-icon';
 
 const clear = (editor: Editor, range: Range) => editor.chain().focus().deleteRange(range);
 
@@ -263,8 +264,8 @@ export const SLASH_ITEMS: MenuEntry[] = [
               { header: 'Show a database' },
               ...list.map((d) => ({
                 label: d.title || 'Untitled database',
-                icon: d.icon ? undefined : 'database',
-                hint: d.icon || undefined,
+                icon: 'database',
+                hint: iconText(d.icon) || undefined,
                 action: () => {
                   if (!e.isDestroyed) e.chain().focus().insertContent([{ type: 'databaseBlock', attrs: { id: d.id } }, { type: 'paragraph' }]).run();
                 },

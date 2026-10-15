@@ -1,4 +1,5 @@
 <script lang="ts">
+  import PageIcon from '../components/PageIcon.svelte';
   import { onMount } from 'svelte';
   import { calendar, itemsByDay, type DayItems } from '../calendar.svelte';
   import { clock } from '../clock.svelte';
@@ -147,7 +148,7 @@
             data-tip={store.byId.get(r.dbId)?.title}
           >
             <span class="square"></span>
-            <span class="label">{page?.icon ? `${page.icon} ` : ''}{page?.title || 'Untitled'}</span>
+            <span class="label">{#if page?.icon}<PageIcon icon={page.icon} />&nbsp;{/if}{page?.title || 'Untitled'}</span>
             {#if r.time}<span class="t">{formatTime(r.time)}</span>{/if}
           </button>
         {/each}

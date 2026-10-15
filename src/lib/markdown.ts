@@ -1,5 +1,7 @@
 /** Converts editor JSON into GitHub-flavored Markdown. */
 
+import { iconText } from './page-icon';
+
 interface Mark {
   type: string;
   attrs?: Record<string, any>;
@@ -106,7 +108,7 @@ function block(n: JNode, titleOf: TitleOf): string {
     case 'blockquote':
       return prefixLines(blocks(n.content, titleOf), '> ', '> ');
     case 'callout':
-      return prefixLines(`${n.attrs?.icon ?? '💡'} ${blocks(n.content, titleOf)}`, '> ', '> ');
+      return prefixLines(`${iconText(n.attrs?.icon) || '💡'} ${blocks(n.content, titleOf)}`, '> ', '> ');
     case 'codeBlock': {
       const code = (n.content ?? []).map((t) => t.text ?? '').join('');
       const fence = code.includes('```') ? '````' : '```';

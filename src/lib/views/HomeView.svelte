@@ -1,4 +1,5 @@
 <script lang="ts">
+  import PageIcon from '../components/PageIcon.svelte';
   import { onMount } from 'svelte';
   import Icon from '../components/Icon.svelte';
   import AssignmentRow from '../ui/AssignmentRow.svelte';
@@ -141,7 +142,7 @@
           <div class="group">
             {#each shownTodos as { group: g, items } (g.page.id)}
               <button class="group-row compact todo-page" onclick={() => store.open(g.page.id)}>
-                <span class="page-icon">{#if g.page.icon}{g.page.icon}{:else}<Icon name="page" size={14} />{/if}</span>
+                <span class="page-icon">{#if g.page.icon}<PageIcon icon={g.page.icon} />{:else}<Icon name="page" size={14} />{/if}</span>
                 <span class="page-title">{g.page.title || 'Untitled'}</span>
                 <Icon name="chevron-right" size={12} stroke={2.2} />
               </button>
@@ -175,7 +176,7 @@
         <div class="group">
           {#each recentPages as p (p.id)}
             <button class="group-row compact link-row" onclick={() => store.open(p.id)}>
-              <span class="page-icon">{#if p.icon}{p.icon}{:else}<Icon name="page" size={16} />{/if}</span>
+              <span class="page-icon">{#if p.icon}<PageIcon icon={p.icon} />{:else}<Icon name="page" size={16} />{/if}</span>
               <span class="page-title">{p.title || 'Untitled'}</span>
               <span class="meta">{relativeTime(p.updatedAt)}</span>
             </button>

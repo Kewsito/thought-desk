@@ -76,14 +76,14 @@ if (rows.length === 0) {
   const welcome = make(
     null,
     'Getting started',
-    '👋',
-    '<p>This is the <strong>browser preview</strong> with an in-memory backend.</p><h2>Try it</h2><ul data-type="taskList"><li data-type="taskItem" data-checked="true"><p>Open this page</p></li><li data-type="taskItem" data-checked="false"><p>Type <code>/</code> for blocks</p></li></ul><div data-callout="" data-icon="💡"><p>Callouts hold any blocks.</p></div><p></p>',
+    'icon:compass:blue',
+    '<p>This is the <strong>browser preview</strong> with an in-memory backend.</p><h2>Try it</h2><ul data-type="taskList"><li data-type="taskItem" data-checked="true"><p>Open this page</p></li><li data-type="taskItem" data-checked="false"><p>Type <code>/</code> for blocks</p></li></ul><div data-callout="" data-icon="icon:lightbulb:yellow"><p>Callouts hold any blocks.</p></div><p></p>',
   );
   rows.push(welcome);
-  const projects = make(null, 'Projects', '🗂️');
+  const projects = make(null, 'Projects', 'icon:folder:orange');
   projects.position = 1;
   rows.push(projects);
-  const child = make(projects.id, 'Roadmap', '🧭');
+  const child = make(projects.id, 'Roadmap', 'icon:map:teal');
   rows.push(child);
   const notes = make(projects.id, 'Meeting notes');
   notes.position = 1;
@@ -92,7 +92,7 @@ if (rows.length === 0) {
   const showcase = make(
     null,
     'Design review',
-    '🎨',
+    'icon:palette:pink',
     `<p>Thought Desk is a <strong>quiet place</strong> to write. Text can be <em>italic</em>, <u>underlined</u>, <s>struck</s>, <code>inline code</code>, <mark>highlighted</mark> or a <a href="https://example.com">link</a>. Long paragraphs should wrap with a comfortable measure and an even rhythm from line to line, without orphans.</p>
 <h1>Heading one</h1>
 <p>Body text directly after a heading.</p>
@@ -102,7 +102,7 @@ if (rows.length === 0) {
 <h3>Heading three</h3>
 <ul data-type="taskList"><li data-type="taskItem" data-checked="true"><p>A finished task</p></li><li data-type="taskItem" data-checked="false"><p>Something still to do</p></li></ul>
 <blockquote><p>Simplicity is the ultimate sophistication.</p></blockquote>
-<div data-callout="" data-icon="💡"><p>Callouts hold any blocks and draw the eye to what matters.</p></div>
+<div data-callout="" data-icon="icon:lightbulb:yellow"><p>Callouts hold any blocks and draw the eye to what matters.</p></div>
 <details open=""><summary>A toggle that is open</summary><div data-type="detailsContent"><p>Hidden content, revealed.</p></div></details>
 <pre><code>fn main() {
     println!("Hello, Thought Desk");
@@ -115,7 +115,7 @@ if (rows.length === 0) {
   showcase.favorite = Date.now();
   rows.push(showcase);
   // A page saved as editor JSON, so its to-dos roll up onto Home.
-  const plan = make(null, 'Study plan', '📚');
+  const plan = make(null, 'Study plan', 'icon:book-open:purple');
   plan.position = 3;
   plan.tags = ['exam'];
   const task = (text: string, checked = false) => ({
@@ -209,9 +209,9 @@ function newEvent(startDate: string): CalEvent {
 function seedPlanner(): PlannerData {
   const ts = Date.now();
   // Biology's notes folder holds a flashcard deck.
-  const folder = make(null, 'Biology', '📘');
+  const folder = make(null, 'Biology', 'icon:dna:green');
   folder.position = 4;
-  const deck = make(folder.id, 'Cell vocabulary', '🧬');
+  const deck = make(folder.id, 'Cell vocabulary', 'icon:layers:green');
   const fc = (id: string, front: string, back: string) => ({
     type: 'flashcard',
     attrs: { id },
@@ -436,7 +436,7 @@ if (!FRESH && !Object.keys(dbData.schemas).length && !localStorage.getItem(DB_KE
     ['The Selfish Gene', 'Richard Dawkins', 'want', ['science', 'course'], 360],
     ['Middlemarch', 'George Eliot', 'want', ['fiction', 'course'], 880],
   ];
-  mockCreateDatabase(null, 'Reading list', '📚', {
+  mockCreateDatabase(null, 'Reading list', 'icon:book-open:purple', {
     properties: t.properties,
     views: t.views,
     rows: books.map(([title, author, status, genre, pages, rating], i) => ({

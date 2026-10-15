@@ -4,6 +4,7 @@
    * of days, weeks, months or quarters. Drag a bar to move it, its ends to
    * change how long it runs, and click an empty lane to give a row a date.
    */
+  import PageIcon from '../components/PageIcon.svelte';
   import { tick, untrack } from 'svelte';
   import Icon from '../components/Icon.svelte';
   import Segmented from '../ui/Segmented.svelte';
@@ -378,7 +379,7 @@
                     />
                   {:else}
                     <button class="title" onclick={() => store.open(row.id)} ondblclick={() => (naming = row.id)}>
-                      {#if page?.icon}<span class="emoji">{page.icon}</span>{:else}<Icon name="page" size={14} />{/if}
+                      {#if page?.icon}<span class="emoji"><PageIcon icon={page.icon} /></span>{:else}<Icon name="page" size={14} />{/if}
                       <span class="t" class:untitled={!page?.title}>{page?.title || 'Untitled'}</span>
                     </button>
                     {#if s}

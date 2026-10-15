@@ -1,11 +1,12 @@
 /**
  * Ways to start an empty page: lecture notes, a study guide, a flashcard
- * deck, a checklist. Each is editor JSON, plus a title and icon for a page
+ * deck, a checklist. Each is editor JSON, plus a title and line icon for a page
  * that has none yet.
  */
 
 import type { JSONContent } from '@tiptap/core';
 import { newCardId } from './flashcard';
+import { lineIcon } from '../page-icon';
 
 export interface Starter {
   key: string;
@@ -42,7 +43,7 @@ export const STARTERS: Starter[] = [
   {
     key: 'lecture',
     label: 'Lecture notes',
-    icon: '📝',
+    icon: lineIcon('notebook-pen', 'blue'),
     hint: 'Key ideas, questions and a summary',
     title: (date) => `Lecture notes · ${date}`,
     content: () => [
@@ -59,7 +60,7 @@ export const STARTERS: Starter[] = [
   {
     key: 'study',
     label: 'Study guide',
-    icon: '📚',
+    icon: lineIcon('graduation-cap', 'purple'),
     hint: 'Topics to cover, key terms as flashcards, practice questions',
     title: () => 'Study guide',
     content: () => [
@@ -75,7 +76,7 @@ export const STARTERS: Starter[] = [
   {
     key: 'cards',
     label: 'Flashcards',
-    icon: '🗂️',
+    icon: lineIcon('layers', 'orange'),
     hint: 'Type a question, Enter for the answer, Enter again for the next card',
     title: () => 'Flashcards',
     content: () => [card()],
@@ -83,7 +84,7 @@ export const STARTERS: Starter[] = [
   {
     key: 'checklist',
     label: 'Checklist',
-    icon: '✅',
+    icon: lineIcon('list-checks', 'green'),
     hint: 'A list of things to do (they show on Home too)',
     title: () => 'To do',
     content: () => [todos('')],

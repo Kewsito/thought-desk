@@ -1,4 +1,5 @@
 <script lang="ts">
+  import PageIcon from './PageIcon.svelte';
   import { onMount } from 'svelte';
   import Icon from './Icon.svelte';
   import WindowControls from './WindowControls.svelte';
@@ -127,7 +128,7 @@
         <span class="gap" data-tauri-drag-region>…</span>
       {:else}
         <button class="crumb" class:current={i === crumbs.length - 1} onclick={() => store.open(c.id)}>
-          {#if c.icon}<span class="emoji">{c.icon}</span>{:else if c.kind === 'database'}<Icon name="database" size={13} />{/if}
+          {#if c.icon}<span class="emoji"><PageIcon icon={c.icon} /></span>{:else if c.kind === 'database'}<Icon name="database" size={13} />{/if}
           <span class="crumb-title">{c.title || (c.kind === 'database' ? 'Untitled database' : 'Untitled')}</span>
         </button>
       {/if}

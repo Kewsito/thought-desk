@@ -1406,6 +1406,14 @@ input[type='time']::-webkit-calendar-picker-indicator {
   border-radius: var(--r-md);
   corner-shape: var(--corner);
 }
+ /* A page's line icon (PageIcon), sized like the emoji it stands in for. */
+.page-glyph {
+  display: inline-block;
+  flex: none;
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.125em;
+}
 .prose .callout-icon {
   flex: none;
   display: grid;

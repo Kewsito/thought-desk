@@ -1,5 +1,6 @@
 <script lang="ts">
   /** A list: one line per row, title on the left and properties on the right. */
+  import PageIcon from '../components/PageIcon.svelte';
   import { tick } from 'svelte';
   import Icon from '../components/Icon.svelte';
   import Value from './Value.svelte';
@@ -99,7 +100,7 @@
       {@const d = depth.get(row.id) ?? 0}
       {#if editing?.id === row.id}
         <div class="line editing" style:padding-left="{8 + d * 22}px">
-          <span class="lead">{#if page?.icon}{page.icon}{:else}<Icon name="page" size={15} />{/if}</span>
+          <span class="lead">{#if page?.icon}<PageIcon icon={page.icon} />{:else}<Icon name="page" size={15} />{/if}</span>
           <input
             bind:this={input}
             bind:value={editing.title}
@@ -123,7 +124,7 @@
             >
           {/if}
         <button class="line" class:nested onclick={() => store.open(row.id)} oncontextmenu={(e) => menu(e, row)}>
-          <span class="lead">{#if page?.icon}{page.icon}{:else}<Icon name="page" size={15} />{/if}</span>
+          <span class="lead">{#if page?.icon}<PageIcon icon={page.icon} />{:else}<Icon name="page" size={15} />{/if}</span>
           <span class="title" class:untitled={!page?.title}>{page?.title || 'Untitled'}</span>
           <span class="allProps">
             {#each shownFor(row) as p (p.id)}<span class="prop" data-tip={p.name}><Value {dbId} {row} prop={p} compact /></span>{/each}

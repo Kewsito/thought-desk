@@ -5,6 +5,7 @@
    * a page of its own, or inside another page (embedded: a smaller header,
    * and the view choice belongs to the block).
    */
+  import PageIcon from '../components/PageIcon.svelte';
   import { tick } from 'svelte';
   import Icon from '../components/Icon.svelte';
   import Popover from './Popover.svelte';
@@ -25,7 +26,7 @@
   import { prefs } from '../prefs.svelte';
   import { store } from '../store.svelte';
   import { ui } from '../ui.svelte';
-  import { randomEmoji } from '../emoji';
+  import { randomIcon } from '../page-icon';
   import { OPS, RELATIVE_DAYS, ruleActive } from './query';
   import { option } from './schema';
   import type { DbView, FilterRule, Property, ViewType } from '../types';
@@ -98,6 +99,7 @@
       e.currentTarget as Element,
       (emoji) => store.update(id, { icon: emoji }, { immediate: true }),
       () => store.update(id, { icon: '' }, { immediate: true }),
+      store.byId.get(id)?.icon,
     );
   }
 
@@ -260,17 +262,17 @@
     {#if embedded}
       <div class="emb-head">
         <button class="emb-title" onclick={() => store.open(id)} data-tip="Open as a full page">
-          {#if meta.icon}<span class="emoji">{meta.icon}</span>{:else}<Icon name="database" size={16} />{/if}
+          {#if meta.icon}<span class="emoji"><PageIcon icon={meta.icon} /></span>{:else}<Icon name="database" size={16} />{/if}
           <span>{meta.title || 'Untitled database'}</span>
         </button>
       </div>
     {:else}
       <header class="head" class:has-icon={!!meta.icon}>
         {#if meta.icon}
-          <button class="db-icon" onclick={pickIcon} data-tip="Change icon">{meta.icon}</button>
+          <button class="db-icon" onclick={pickIcon} data-tip="Change icon"><PageIcon icon={meta.icon} /></button>
         {:else}
           <div class="head-tools">
-            <button class="tool" onclick={() => store.update(id, { icon: randomEmoji() }, { immediate: true })}><Icon name="smile" size={16} /> Add icon</button>
+            <button class="tool" onclick={() => store.update(id, { icon: randomIcon() }, { immediate: true })}><Icon name="smile" size={16} /> Add icon</button>
           </div>
         {/if}
         <!-- svelte-ignore a11y_missing_content -->
@@ -481,6 +483,11 @@
     line-height: 1;
     border-radius: var(--r-lg);
     transition: background-color var(--dur-fast) var(--ease);
+  }
+  .db-icon :global(.page-glyph) {
+    width: 0.86em;
+    height: 0.86em;
+    stroke-width: 1.4;
   }
   .db-icon:hover {
     background: var(--fill);
