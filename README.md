@@ -43,6 +43,8 @@ Databases were tested the same way: a 50,000-row tracker linked to a 5,000-row o
 - **A gentle first run:** Home shows a "Get set up for the semester" checklist (add courses, bring in your class schedule, add an assignment, make a flashcard deck) that ticks itself off and can be hidden. An empty page offers starters (lecture notes, study guide, flashcards, checklist, database), the Calendar explains how to import a Canvas, Google or Outlook schedule until it has one, and Flashcards offers to start a deck.
 - **Page icons:** about 120 line icons for subjects and everyday life (search them, tint them in any label colour), or an emoji if you prefer. Everything the app names itself (courses, lecture notes, the Inbox, database templates) gets a line icon in its course's colour.
 - **Block editor:** headings, to-dos, bullets, numbers, toggles, quotes, callouts, code, tables (resizable columns), images, dividers.
+- **Math (LaTeX, typeset with KaTeX):** type `$x^2$` for a formula in a sentence, `$$` then Space for one on its own line, or press `Ctrl+Shift+E` (it turns selected text into math). Click a formula to edit it in place; it updates as you type and keeps its last good form while a command is half-typed. Typing `\` suggests commands with a preview, Tab moves between the empty `{}` slots a suggestion leaves (and then out of the group), braces close themselves, and a Symbols palette has structures, Greek letters, operators, relations and arrows (it wraps selected LaTeX, e.g. into `\sqrt{…}`). Arrow keys stop on a formula so Enter edits it; Backspace in an empty one removes it. Chemistry works too (`\ce{2H2 + O2 -> 2H2O}`).
+- **Math comes along:** pasting text with `\( \)`, `\[ \]`, `$ $` or `$$ $$` (ChatGPT's copy button, a `.md` or `.tex` file) brings it in typeset along with its headings, lists, bold and code, while prices like "$5 and $10" stay text; pasted KaTeX or MathML pages (ChatGPT, Wikipedia) keep their LaTeX. Flashcards can hold formulas on either side, search finds a formula's LaTeX, Markdown export writes `$…$` / `$$…$$`, and Word export turns every formula into a real, editable Word equation. KaTeX loads the first time a page shows math, with only its woff2 fonts bundled.
 - **`/` command menu** with fuzzy matching, and **Markdown shortcuts** (`#`, `-`, `1.`, `[]`, `>`, ```` ``` ````, `---`).
 - **Block handle:** hover a block, drag `⋮⋮` to move it, click it for *Turn into / Duplicate / Move / Delete*, or press `+` to insert below.
 - **Formatting bubble** on selection: bold, italic, underline, strike, code, highlight, links, and turn into.
@@ -96,6 +98,7 @@ Databases were tested the same way: a 50,000-row tracker linked to a 5,000-row o
 | `Ctrl+Shift+L` | Toggle dark mode |
 | `Ctrl+,` | Settings |
 | `Ctrl+/` | Every shortcut on one sheet |
+| `Ctrl+Shift+E` | Inline math (or turn the selection into math) |
 | `Ctrl+D` | Duplicate block |
 | `Ctrl+Click` on a link | Open in browser |
 | `Ctrl+Z` / `Ctrl+Y` in a database | Undo / redo database edits |

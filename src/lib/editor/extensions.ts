@@ -19,6 +19,8 @@ import { ImageDrop } from './images';
 import { FileBlock } from './file-block';
 import { DatabaseNode } from './database-block.svelte';
 import { Flashcard, FlashcardBack, FlashcardFront } from './flashcard';
+import { InlineMath, MathBlock } from './math';
+import { MathPaste } from './math-paste';
 import { ui } from '../ui.svelte';
 
 /** Editor-wide shortcuts that don't belong to a single node type. */
@@ -156,6 +158,9 @@ export function buildExtensions(handle: BlockHandleOptions): AnyExtension[] {
     Mention,
     FileBlock,
     DatabaseNode,
+    InlineMath,
+    MathBlock,
+    MathPaste,
     Flashcard,
     FlashcardFront,
     FlashcardBack,

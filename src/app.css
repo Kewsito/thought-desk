@@ -1406,7 +1406,86 @@ input[type='time']::-webkit-calendar-picker-indicator {
   border-radius: var(--r-md);
   corner-shape: var(--corner);
 }
- /* A page's line icon (PageIcon), sized like the emoji it stands in for. */
+ /* Math: inline formulas and display blocks (KaTeX). */
+.prose .math-inline {
+  display: inline-block;
+  max-width: 100%;
+  padding: 0 2px;
+  margin: 0 1px;
+  border-radius: var(--r-xs);
+  vertical-align: baseline;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease);
+}
+.prose .math-inline:hover,
+.prose .math-inline.editing {
+  background: var(--fill);
+}
+.prose .math-inline.ProseMirror-selectednode,
+.prose .math-block.ProseMirror-selectednode > .math-out {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  outline: none;
+}
+.prose .math-inline .katex {
+  font-size: 1.08em;
+}
+.prose .math-out[data-pending],
+.prose .math-out.math-empty {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  color: var(--text-3);
+}
+.prose .math-inline .math-empty::before {
+  content: '√';
+  margin-right: 4px;
+  font-family: var(--font-ui);
+}
+.prose .math-block {
+  margin: 6px 0;
+  border-radius: var(--r-md);
+}
+.prose .math-block > .math-out {
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  overflow-x: auto;
+  overflow-y: hidden;
+  text-align: center;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease);
+}
+.prose .math-block > .math-out:hover,
+.prose .math-block.editing > .math-out {
+  background: var(--fill);
+}
+.prose .math-block > .math-out.math-empty {
+  padding: 14px 12px;
+  background: var(--fill);
+  text-align: left;
+  font-family: var(--font-ui);
+  font-size: var(--fs-ui);
+}
+.prose .math-block .katex-display {
+  margin: 0;
+}
+.prose .math-host {
+  margin: 6px 0 2px;
+  padding: 10px;
+  border-radius: var(--r-md);
+  background: var(--bg-elevated);
+  box-shadow:
+    0 0 0 1px var(--separator),
+    var(--shadow-sm, 0 1px 3px rgb(0 0 0 / 0.06));
+  cursor: auto;
+}
+.math-pop {
+  position: fixed;
+  z-index: 96;
+  width: 400px;
+  max-width: calc(100vw - 16px);
+  padding: 10px;
+}
+
+/* A page's line icon (PageIcon), sized like the emoji it stands in for. */
 .page-glyph {
   display: inline-block;
   flex: none;

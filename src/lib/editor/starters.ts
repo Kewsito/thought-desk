@@ -30,6 +30,7 @@ const todos = (...items: string[]): JSONContent => ({
   type: 'taskList',
   content: items.map((t) => ({ type: 'taskItem', attrs: { checked: false }, content: [paragraph(t)] })),
 });
+const math = (latex = ''): JSONContent => ({ type: 'mathBlock', attrs: { latex } });
 const card = (front = '', back = ''): JSONContent => ({
   type: 'flashcard',
   attrs: { id: newCardId() },
@@ -71,6 +72,22 @@ export const STARTERS: Starter[] = [
       card(),
       heading('Practice questions'),
       bullets(''),
+    ],
+  },
+  {
+    key: 'formulas',
+    label: 'Formula sheet',
+    icon: lineIcon('sigma', 'indigo'),
+    hint: 'Equations to know, what each symbol means, and a worked example',
+    title: () => 'Formula sheet',
+    content: () => [
+      heading('Key formulas'),
+      math(),
+      paragraph('where …'),
+      heading('Worked example'),
+      paragraph(),
+      heading('Remember'),
+      card(),
     ],
   },
   {

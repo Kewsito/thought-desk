@@ -74,6 +74,7 @@ export const RESERVED: Record<string, string> = {
   'Mod+Shift+KeyZ': 'Redo',
   'Mod+Shift+KeyS': 'Strikethrough',
   'Mod+Shift+KeyH': 'Highlight',
+  'Mod+Shift+KeyE': 'Inline math',
   'Mod+Alt+Digit1': 'Heading 1',
   'Mod+Alt+Digit2': 'Heading 2',
   'Mod+Alt+Digit3': 'Heading 3',
@@ -87,6 +88,9 @@ export const EDITOR_KEYS: { label: string; keys: string[][] }[] = [
   { label: 'Add a link to selected text', keys: [['Ctrl', 'K']] },
   { label: 'Bold, italic, underline', keys: [['Ctrl', 'B'], ['Ctrl', 'I'], ['Ctrl', 'U']] },
   { label: 'Duplicate block', keys: [['Ctrl', 'D']] },
+  { label: 'Inline math (or turn selected text into math)', keys: [['Ctrl', 'Shift', 'E']] },
+  { label: 'Inline math as you type', keys: [['$', 'x^2', '$']] },
+  { label: 'In a formula: suggestions, next gap, done', keys: [['\\'], ['Tab'], ['Enter']] },
   { label: 'Indent list item', keys: [['Tab'], ['Shift', 'Tab']] },
   { label: 'Flashcards: show answer, then rate', keys: [['Space'], ['1'], ['2'], ['3'], ['4']] },
 ];
@@ -99,6 +103,7 @@ export const MARKDOWN_KEYS: { label: string; type: string; now?: boolean }[] = [
   { label: 'Checklist', type: '[ ]' },
   { label: 'Quote', type: '>' },
   { label: 'Code block', type: '```' },
+  { label: 'Math block', type: '$$' },
   { label: 'Divider', type: '---', now: true },
 ];
 

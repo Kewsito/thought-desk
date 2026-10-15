@@ -128,6 +128,7 @@
     <button class="fmt" class:on={active.underline} onmousedown={keep} onclick={() => editor.chain().focus().toggleUnderline().run()} data-tip="Underline" data-tip-key="Ctrl+U"><Icon name="underline" stroke={2.1} /></button>
     <button class="fmt" class:on={active.strike} onmousedown={keep} onclick={() => editor.chain().focus().toggleStrike().run()} data-tip="Strikethrough" data-tip-key="Ctrl+Shift+S"><Icon name="strike" stroke={2.1} /></button>
     <button class="fmt" class:on={active.code} onmousedown={keep} onclick={() => editor.chain().focus().toggleCode().run()} data-tip="Inline code" data-tip-key="Ctrl+E"><Icon name="code" stroke={2.1} /></button>
+    <button class="fmt" onmousedown={keep} onclick={() => editor.chain().focus().insertInlineMath().run()} data-tip="Math" data-tip-key="Ctrl+Shift+E"><Icon name="function" stroke={2.1} /></button>
     <button class="fmt" class:on={active.highlight} onmousedown={keep} onclick={() => editor.chain().focus().toggleHighlight().run()} data-tip="Highlight" data-tip-key="Ctrl+Shift+H"><Icon name="highlight" stroke={2} /></button>
     <span class="sep"></span>
     <button class="fmt link" class:on={active.link} onmousedown={keep} onclick={startLink} data-tip="Link" data-tip-key="Ctrl+K"><Icon name="link" stroke={2} /><span>Link</span></button>

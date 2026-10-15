@@ -8,6 +8,8 @@ import type { JNode } from './markdown';
 import type { ExportedImage } from './export-images';
 import { zip } from './zip';
 import { iconText } from './page-icon';
+import { toOmml } from './math/omml';
+import { loadKatex } from './math/katex';
 
 type Kind = 'page' | 'assignment' | 'event' | 'file';
 
@@ -40,7 +42,8 @@ const NS =
   'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ' +
   'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" ' +
   'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" ' +
-  'xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"';
+  'xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" ' +
+  'xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"';
 
 /** Text safe inside XML (control characters dropped, specials escaped). */
 function esc(s: string): string {
@@ -108,6 +111,9 @@ class Writer {
         out += link ? `<w:hyperlink r:id="${this.relId('hyperlink', link, true)}">${r}</w:hyperlink>` : r;
       } else if (n.type === 'hardBreak') {
         out += '<w:r><w:br/></w:r>';
+      } else if (n.type === 'inlineMath') {
+        const latex = String(n.attrs?.latex ?? '');
+        out += toOmml(latex, false) ?? this.run(latex, [{ type: 'code' }], style);
       } else if (n.type === 'mention') {
         out += this.run(this.ctx.titleOf(n.attrs?.id, n.attrs?.kind ?? 'page'), [{ type: 'underline' }], style);
       } else if (n.content) {
@@ -167,6 +173,11 @@ class Writer {
     switch (n.type) {
       case 'paragraph':
         return this.para(this.inline(n.content, { bold: frame.bold }), frame);
+      case 'mathBlock': {
+        const latex = String(n.attrs?.latex ?? '');
+        const omml = toOmml(latex, true);
+        return omml ? this.para(omml, frame) : this.para(this.run(latex, [{ type: 'code' }]), frame);
+      }
       case 'heading': {
         const level = Math.min(3, Math.max(1, n.attrs?.level ?? 1));
         return this.para(this.inline(n.content, { bold: frame.bold }), frame, { style: `Heading${level}`, keepNext: true });
@@ -394,6 +405,8 @@ function pageSize(): string {
 }
 
 export async function toDocx(doc: JNode, title: string, ctx: DocxContext): Promise<Uint8Array> {
+  // Equations are built from KaTeX's MathML.
+  if (/"(inlineMath|mathBlock)"/.test(JSON.stringify(doc))) await loadKatex().catch(() => {});
   const w = new Writer(ctx);
   const titlePara = w.para(w.run(title || 'Untitled'), { indent: 0 }, { style: 'Title' });
   const body = await w.blocks(doc.content, { indent: 0 });

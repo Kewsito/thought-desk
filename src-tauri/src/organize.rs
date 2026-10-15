@@ -55,6 +55,11 @@ pub(crate) fn inline_text(node: &Value, titles: Option<&HashMap<String, String>>
     match node.get("type").and_then(Value::as_str) {
         Some("text") => out.push_str(node.get("text").and_then(Value::as_str).unwrap_or("")),
         Some("hardBreak") => out.push(' '),
+        Some("inlineMath") => {
+            out.push('$');
+            out.push_str(node.pointer("/attrs/latex").and_then(Value::as_str).unwrap_or(""));
+            out.push('$');
+        }
         Some("mention") => {
             let id = node.pointer("/attrs/id").and_then(Value::as_str).unwrap_or("");
             match titles {

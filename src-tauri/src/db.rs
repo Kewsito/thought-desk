@@ -405,6 +405,9 @@ const WELCOME_HTML: &str = r#"<p>Thought Desk is a quiet place to write. Everyth
 </ul>
 <h2>Markdown shortcuts</h2>
 <p>Start a line with <code>#</code>, <code>##</code> or <code>###</code> for headings, <code>-</code> for bullets, <code>1.</code> for numbers, <code>[]</code> for a to-do, <code>&gt;</code> for a quote, <code>```</code> for code and <code>---</code> for a divider.</p>
+<h2>Math</h2>
+<p>Type <code>$E = mc^2$</code> for a formula in a sentence, like <span data-math-inline="" data-latex="E = mc^2">E = mc^2</span>, or <code>$$</code> then Space for one on its own line. Click a formula to change it: type <code>\</code> for suggestions, Tab moves between the gaps, and Symbols has the Greek letters and operators. Pasted math from ChatGPT comes in typeset.</p>
+<div data-math-block="" data-latex="\int_a^b f(x)\,dx = F(b) - F(a)">\int_a^b f(x)\,dx = F(b) - F(a)</div>
 <h2>Keyboard</h2>
 <table><tbody>
 <tr><th><p>Shortcut</p></th><th><p>Action</p></th></tr>

@@ -311,6 +311,7 @@ function itemText(item: any, titles: boolean): string {
   const run = (n: any): string => {
     if (n.type === 'text') return n.text ?? '';
     if (n.type === 'hardBreak') return ' ';
+    if (n.type === 'inlineMath') return `$${n.attrs?.latex ?? ''}$`;
     if (n.type === 'mention') {
       if (!titles) return n.attrs?.id ?? '';
       const id = n.attrs?.id;

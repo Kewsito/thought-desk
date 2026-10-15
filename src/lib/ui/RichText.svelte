@@ -1,9 +1,10 @@
 <script lang="ts">
   /**
    * Read-only inline content as the editor stores it (a flashcard side):
-   * text with its marks, line breaks, and links shown as their titles.
+   * text with its marks, line breaks, formulas, and links shown as their titles.
    */
   import RichText from './RichText.svelte';
+  import MathView from '../math/MathView.svelte';
   import { titleOf, type MentionKind } from '../editor/page-link';
   import type { RichNode } from '../types';
 
@@ -24,6 +25,7 @@
 {#each nodes as n, i (i)}
   {#if n.type === 'text'}<span class={classes(n)}>{n.text}</span>
   {:else if n.type === 'hardBreak'}<br />
+  {:else if n.type === 'inlineMath'}<MathView latex={String(n.attrs?.latex ?? '')} />
   {:else if n.type === 'mention' || n.type === 'pageLink'}<span class="ref">{titleOf(String(n.attrs?.id ?? ''), (n.attrs?.kind as MentionKind) ?? 'page')}</span>
   {:else if n.content}<RichText nodes={n.content} />
   {/if}

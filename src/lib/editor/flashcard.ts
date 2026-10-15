@@ -10,6 +10,10 @@ declare module '@tiptap/core' {
   }
 }
 
+/** A side's text, with formulas as their LaTeX (for search). */
+const sideText = (side: PMNode | null) =>
+  side ? side.textBetween(0, side.content.size, ' ', (leaf) => (leaf.type.name === 'inlineMath' ? `$${leaf.attrs.latex}$` : (leaf.type.spec.leafText?.(leaf) ?? ''))) : '';
+
 /** Short random ids; review progress is kept per page and card id. */
 export const newCardId = () => Math.random().toString(36).slice(2, 10);
 
@@ -102,7 +106,7 @@ export const Flashcard = Node.create({
 
   parseHTML: () => [{ tag: 'div[data-flashcard]' }],
   renderHTML: ({ HTMLAttributes }) => ['div', mergeAttributes(HTMLAttributes, { 'data-flashcard': '', class: 'flashcard' }), 0],
-  renderText: ({ node }) => `${node.firstChild?.textContent ?? ''} :: ${node.lastChild?.textContent ?? ''}`,
+  renderText: ({ node }) => `${sideText(node.firstChild)} :: ${sideText(node.lastChild)}`,
 
   addCommands() {
     return {

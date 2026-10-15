@@ -66,6 +66,7 @@ function inline(nodes: JNode[] | undefined, titleOf: TitleOf): string {
         return kind === 'page' ? `[[${titleOf(n.attrs?.id)}]]` : `**${escapeText(titleOf(n.attrs?.id, kind))}**`;
       }
       if (n.type === 'image') return `![${n.attrs?.alt ?? ''}](${n.attrs?.src ?? ''})`;
+      if (n.type === 'inlineMath') return `$${n.attrs?.latex ?? ''}$`;
       return inline(n.content, titleOf);
     })
     .join('');
@@ -121,6 +122,8 @@ function block(n: JNode, titleOf: TitleOf): string {
       const [front, back] = n.content ?? [];
       return `${inline(front?.content, titleOf)} :: ${inline(back?.content, titleOf)}`;
     }
+    case 'mathBlock':
+      return `$$\n${n.attrs?.latex ?? ''}\n$$`;
     case 'image':
       return `![${n.attrs?.alt ?? ''}](${n.attrs?.src ?? ''})`;
     case 'pageLink':
