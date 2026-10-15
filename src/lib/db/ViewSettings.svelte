@@ -10,6 +10,7 @@
   import { databases, VIEW_NAMES } from '../databases.svelte';
   import { canGroup } from './query';
   import { typeInfo } from './schema';
+  import { store } from '../store.svelte';
   import type { DbView, ViewType } from '../types';
 
   let { dbId, view, onclose, onswitch }: { dbId: string; view: DbView; onclose: () => void; onswitch: (viewId: string) => void } = $props();
@@ -21,9 +22,13 @@
     { type: 'list', icon: 'list', hint: 'A tidy list' },
     { type: 'calendar', icon: 'calendar', hint: 'By date' },
     { type: 'chart', icon: 'chart', hint: 'Totals at a glance' },
+    { type: 'timeline', icon: 'timeline', hint: 'Dates as bars' },
+    { type: 'form', icon: 'form', hint: 'Add rows by filling in' },
   ];
 
   const allProps = $derived(databases.props(dbId));
+  const subs = $derived(databases.subItems(dbId));
+  const templates = $derived(databases.templatesOf(dbId));
   const c = $derived(view.config);
   const cards = $derived(view.type === 'board' || view.type === 'gallery' || view.type === 'list');
   const groupable = $derived(allProps.filter(canGroup));
@@ -79,11 +84,51 @@
     {/if}
   {/if}
 
-  {#if view.type === 'calendar'}
+  {#if view.type === 'calendar' || view.type === 'timeline'}
     <div class="pop-row">
-      <span class="label">Show by</span>
+      <span class="label">{view.type === 'timeline' ? 'Starts on' : 'Show by'}</span>
       <select class="pop-input small" value={c.dateProp ?? ''} onchange={(e) => set({ dateProp: (e.currentTarget as HTMLSelectElement).value })}>
         {#each dates as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
+      </select>
+    </div>
+  {/if}
+  {#if view.type === 'timeline'}
+    <div class="pop-row">
+      <span class="label">Ends on</span>
+      <select class="pop-input small" value={c.endProp ?? ''} onchange={(e) => set({ endProp: (e.currentTarget as HTMLSelectElement).value || null })}>
+        <option value="">Its own end date</option>
+        {#each dates.filter((p) => p.id !== c.dateProp) as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
+      </select>
+    </div>
+    <div class="pop-row">
+      <span class="label">List of titles</span>
+      <Switch on={c.showTable !== false} label="List of titles" onchange={() => set({ showTable: c.showTable === false })} />
+    </div>
+  {/if}
+
+  {#if view.type === 'table' || view.type === 'list'}
+    <div class="pop-row">
+      <span class="label">Sub-items</span>
+      {#if subs}
+        <select class="pop-input small" value={c.subItems ?? 'nested'} onchange={(e) => set({ subItems: (e.currentTarget as HTMLSelectElement).value as 'nested' | 'flat' })}>
+          <option value="nested">Under their parent</option>
+          <option value="flat">As plain rows</option>
+        </select>
+      {:else}
+        <button class="btn small raised" onclick={() => void databases.enableSubItems(dbId)}><Icon name="list-tree" size={13} /> Turn on</button>
+      {/if}
+    </div>
+    {#if subs}
+      <button class="pop-item" onclick={() => void databases.disableSubItems(dbId)}><Icon name="x" size={14} /><span class="grow">Turn off sub-items</span></button>
+    {/if}
+  {/if}
+
+  {#if view.type !== 'chart' && templates.length}
+    <div class="pop-row">
+      <span class="label">New rows start from</span>
+      <select class="pop-input small" value={templates.some((t) => t.id === c.template) ? c.template : ''} onchange={(e) => set({ template: (e.currentTarget as HTMLSelectElement).value })}>
+        <option value="">An empty row</option>
+        {#each templates as t (t.id)}<option value={t.id}>{store.byId.get(t.id)?.title || 'Untitled template'}</option>{/each}
       </select>
     </div>
   {/if}
@@ -165,7 +210,7 @@
     </div>
   {/if}
 
-  {#if view.type !== 'chart'}
+  {#if view.type !== 'chart' && view.type !== 'form' && view.type !== 'timeline'}
     <div class="pop-head">
       <span>{view.type === 'table' ? 'Columns' : 'On each card'}</span>
       {#if cards && c.shown}<button class="link" onclick={() => set({ shown: undefined })}>Automatic</button>{/if}
@@ -224,7 +269,7 @@
   }
   .layouts {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 4px;
     padding: 0 4px 6px;
   }

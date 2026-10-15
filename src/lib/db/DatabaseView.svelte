@@ -14,6 +14,10 @@
   import ListView from './ListView.svelte';
   import CalendarView from './CalendarView.svelte';
   import ChartView from './ChartView.svelte';
+  import TimelineView from './TimelineView.svelte';
+  import FormView from './FormView.svelte';
+  import TemplatesPanel from './TemplatesPanel.svelte';
+  import AutomationsPanel from './AutomationsPanel.svelte';
   import FilterPanel from './FilterPanel.svelte';
   import SortPanel from './SortPanel.svelte';
   import ViewSettings from './ViewSettings.svelte';
@@ -99,10 +103,12 @@
 
   // -------------------------------------------------------------- popovers
 
-  let panel = $state<{ kind: 'filter' | 'sort' | 'settings'; anchor: Element } | null>(null);
+  let panel = $state<{ kind: 'filter' | 'sort' | 'settings' | 'templates' | 'automations'; anchor: Element } | null>(null);
   let filterBtn = $state<HTMLButtonElement>();
   let settingsBtn = $state<HTMLButtonElement>();
-  let table = $state<{ addRow: () => Promise<void> }>();
+  let table = $state<{ addRow: (template?: string) => Promise<void> }>();
+  const activeRules = $derived(databases.automations(id).filter((a) => !a.config.off).length);
+  const templateCount = $derived(databases.templatesOf(id).length);
 
   const activeFilters = $derived((view?.config.filters ?? []).filter((r) => ruleActive(r, databases.prop(id, r.prop), databases.ctx(id))));
   const sorts = $derived((view?.config.sorts ?? []).filter((s) => databases.prop(id, s.prop)));
@@ -143,6 +149,8 @@
       { type: 'list', icon: 'list', hint: 'Simple and tidy' },
       { type: 'calendar', icon: 'calendar', hint: 'By date' },
       { type: 'chart', icon: 'chart', hint: 'Totals at a glance' },
+      { type: 'timeline', icon: 'timeline', hint: 'Dates as bars' },
+      { type: 'form', icon: 'form', hint: 'Add rows by filling in' },
     ];
     ui.openMenuAt(
       e.currentTarget as Element,
@@ -192,15 +200,26 @@
     });
   }
 
-  const ICONS: Record<ViewType, string> = { table: 'table', board: 'board', gallery: 'grid', list: 'list', calendar: 'calendar', chart: 'chart' };
+  const ICONS: Record<ViewType, string> = {
+    table: 'table',
+    board: 'board',
+    gallery: 'grid',
+    list: 'list',
+    calendar: 'calendar',
+    chart: 'chart',
+    timeline: 'timeline',
+    form: 'form',
+  };
 
-  async function addRow() {
+  /** Adds a row (from `template`, or the view's default) where the view shows it. */
+  async function addRow(template?: string) {
     if (!view) return;
+    panel = null;
     if (view.type === 'table' && table) {
-      await table.addRow();
+      await table.addRow(template);
       return;
     }
-    const row = await databases.addRow(id, { view });
+    const row = await databases.addRow(id, { view, template });
     if (row) {
       store.open(row.id);
       ui.focusTitle = row.id;
@@ -299,7 +318,9 @@
         <button class="icon-btn add-view" onclick={addViewMenu} aria-label="Add a view" data-tip="Add a view"><Icon name="plus" size={15} /></button>
       </div>
       <div class="tools">
-        {#if searching || search}
+        {#if view.type === 'form'}
+          <!-- A form only adds rows. -->
+        {:else if searching || search}
           <!-- svelte-ignore a11y_autofocus -->
           <input
             class="pop-input search"
@@ -318,6 +339,7 @@
         {:else}
           <button class="icon-btn" onclick={() => (searching = true)} aria-label="Search" data-tip="Search rows"><Icon name="search" size={15} /></button>
         {/if}
+        {#if view.type !== 'form'}
         <button
           class="icon-btn"
           class:active={activeFilters.length > 0}
@@ -328,16 +350,36 @@
         >
           <Icon name="filter" size={15} />
         </button>
-        {#if view.type !== 'chart' && view.type !== 'calendar'}
+        {/if}
+        {#if view.type !== 'chart' && view.type !== 'calendar' && view.type !== 'form'}
           <button class="icon-btn" class:active={sorts.length > 0} onclick={(e) => (panel = { kind: 'sort', anchor: e.currentTarget as Element })} aria-label="Sort" data-tip="Sort">
             <Icon name="sort" size={15} />
           </button>
         {/if}
+        <button
+          class="icon-btn"
+          class:active={activeRules > 0}
+          onclick={(e) => (panel = { kind: 'automations', anchor: e.currentTarget as Element })}
+          aria-label="Automations"
+          data-tip={activeRules ? `${activeRules} automation${activeRules === 1 ? '' : 's'} on` : 'Automations'}
+        >
+          <Icon name="bolt" size={15} />
+        </button>
         <button class="icon-btn" bind:this={settingsBtn} onclick={(e) => (panel = { kind: 'settings', anchor: e.currentTarget as Element })} aria-label="View settings" data-tip="Layout, grouping and properties">
           <Icon name="sliders" size={15} />
         </button>
-        {#if view.type !== 'chart'}
-          <button class="btn small primary new" onclick={addRow}><Icon name="plus" size={14} stroke={2.2} /> New</button>
+        {#if view.type !== 'chart' && view.type !== 'form'}
+          <div class="new-group">
+            <button class="btn small primary new" onclick={() => addRow()}><Icon name="plus" size={14} stroke={2.2} /> New</button>
+            <button
+              class="btn small primary new-more"
+              onclick={(e) => (panel = { kind: 'templates', anchor: e.currentTarget as Element })}
+              aria-label="Templates"
+              data-tip={templateCount ? `${templateCount} template${templateCount === 1 ? '' : 's'}` : 'Templates'}
+            >
+              <Icon name="chevron-down" size={13} stroke={2.2} />
+            </button>
+          </div>
         {/if}
       </div>
     </div>
@@ -379,6 +421,10 @@
           <CalendarView dbId={id} {view} rows={result.rows} onsettings={openSettings} />
         {:else if view.type === 'chart'}
           <ChartView dbId={id} {view} rows={result.rows} onsettings={openSettings} />
+        {:else if view.type === 'timeline'}
+          <TimelineView dbId={id} {view} rows={result.rows} onsettings={openSettings} />
+        {:else if view.type === 'form'}
+          <FormView dbId={id} {view} />
         {/if}
       {/key}
     </div>
@@ -388,8 +434,18 @@
   </section>
 
   {#if panel}
-    <Popover anchor={panel.anchor} align="end" width={panel.kind === 'settings' ? 300 : panel.kind === 'filter' ? 440 : 360} onclose={() => (panel = null)} label={panel.kind}>
-      {#if panel.kind === 'filter'}
+    <Popover
+      anchor={panel.anchor}
+      align="end"
+      width={panel.kind === 'settings' ? 300 : panel.kind === 'filter' ? 440 : panel.kind === 'templates' ? 280 : panel.kind === 'automations' ? 420 : 360}
+      onclose={() => (panel = null)}
+      label={panel.kind}
+    >
+      {#if panel.kind === 'templates'}
+        <TemplatesPanel dbId={id} {view} onpick={(t) => void addRow(t)} onclose={() => (panel = null)} />
+      {:else if panel.kind === 'automations'}
+        <AutomationsPanel dbId={id} />
+      {:else if panel.kind === 'filter'}
         <FilterPanel dbId={id} {view} />
       {:else if panel.kind === 'sort'}
         <SortPanel dbId={id} {view} />
@@ -552,8 +608,21 @@
     height: 28px;
     margin-right: 4px;
   }
-  .new {
+  .new-group {
+    display: flex;
     margin-left: 6px;
+  }
+  .new {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+  .new-more {
+    width: 24px;
+    padding: 0;
+    justify-content: center;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    box-shadow: inset 1px 0 0 color-mix(in srgb, var(--on-accent, #fff) 25%, transparent);
   }
   .chips {
     display: flex;

@@ -320,7 +320,7 @@ const monthFmt = new Intl.DateTimeFormat(undefined, { month: 'long', year: 'nume
 
 /** Properties a view can be grouped by. */
 export function canGroup(p: Property): boolean {
-  return !['title', 'id', 'rollup', 'created', 'edited', 'files'].includes(p.type);
+  return !['title', 'id', 'rollup', 'created', 'edited', 'files', 'button'].includes(p.type);
 }
 
 export function groupRows(rows: DbRow[], p: Property, ctx: Ctx): Group[] {

@@ -7,6 +7,7 @@
  * its values here. Edits apply right away and are saved in batches.
  */
 
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { api } from './api';
 import { clock } from './clock.svelte';
 import { colorVar } from './colors';
@@ -42,7 +43,23 @@ import {
 import { parse as parseCsv, stringify } from './db/csv';
 import { TEMPLATES, type Template } from './db/templates';
 import type { JNode } from './markdown';
-import type { CalcFn, CellValue, DatabaseSchema, DateValue, DbRow, DbView, NewRow, PageMeta, Property, PropertyType, ViewConfig, ViewType } from './types';
+import type {
+  ActionValue,
+  Automation,
+  CalcFn,
+  CellValue,
+  DatabaseSchema,
+  DateValue,
+  DbAction,
+  DbRow,
+  DbView,
+  NewRow,
+  PageMeta,
+  Property,
+  PropertyType,
+  ViewConfig,
+  ViewType,
+} from './types';
 
 interface UndoStep {
   label: string;
@@ -79,19 +96,25 @@ class Databases {
     store.pages.filter((p) => p.kind === 'database' && !p.deletedAt && this.schemas[p.id]).sort((a, b) => a.createdAt - b.createdAt),
   );
 
-  /** Live rows of each database, in their own order. */
-  byDb = $derived.by(() => {
-    const map = new Map<string, DbRow[]>();
+  /** Live rows of each database, in their own order (templates apart). */
+  #split = $derived.by(() => {
+    const rows = new Map<string, DbRow[]>();
+    const templates = new Map<string, DbRow[]>();
     for (const row of Object.values(this.rows)) {
       const page = store.byId.get(row.id);
       if (!page || page.deletedAt) continue;
+      const map = row.template ? templates : rows;
       let list = map.get(row.dbId);
       if (!list) map.set(row.dbId, (list = []));
       list.push(row);
     }
-    for (const list of map.values()) list.sort(byKey);
-    return map;
+    for (const list of [...rows.values(), ...templates.values()]) list.sort(byKey);
+    return { rows, templates };
   });
+  byDb = $derived(this.#split.rows);
+
+  /** Sub-items shown under their parent (by row id; for this session). */
+  expanded = $state<Record<string, boolean>>({});
 
   /** Properties by id, per database. */
   #props = $derived(new Map(Object.values(this.schemas).map((s) => [s.id, new Map(s.properties.map((p) => [p.id, p]))])));
@@ -130,6 +153,19 @@ class Databases {
 
   rowsOf(dbId: string): DbRow[] {
     return this.byDb.get(dbId) ?? [];
+  }
+
+  /** A database's templates: pages its new rows can start from. */
+  templatesOf(dbId: string): DbRow[] {
+    return this.#split.templates.get(dbId) ?? [];
+  }
+
+  isTemplate(id: string | null | undefined): boolean {
+    return !!id && !!this.rows[id]?.template;
+  }
+
+  automations(dbId: string): Automation[] {
+    return this.schemas[dbId]?.automations ?? [];
   }
 
   props(dbId: string): Property[] {
@@ -213,6 +249,8 @@ class Databases {
         return page ? { start: stamp(page.updatedAt) } : null;
       case 'id':
         return row.number;
+      case 'button':
+        return null;
       case 'formula':
       case 'rollup': {
         const v = p.type === 'formula' ? this.formula(row, p) : this.rollup(row, p);
@@ -263,6 +301,8 @@ class Databases {
         return formatTimestamp(store.byId.get(row.id)?.updatedAt ?? 0);
       case 'id':
         return p.config.prefix ? `${p.config.prefix}-${row.number}` : String(row.number);
+      case 'button':
+        return '';
       case 'formula':
       case 'rollup': {
         const r = p.type === 'formula' ? this.formula(row, p) : this.rollup(row, p);
@@ -566,15 +606,26 @@ class Databases {
     return v === undefined ? null : $state.snapshot(v) as CellValue;
   }
 
-  /** Sets values (one cell, a pasted block, a column fill…) as one undo step. */
-  set(changes: CellSet[], { undo = true, label = 'edit' }: { undo?: boolean; label?: string } = {}) {
+  /**
+   * Sets values (one cell, a pasted block, a column fill…) as one undo step.
+   * Edits made by hand run the database's automations, whose changes join
+   * the same undo step.
+   */
+  set(changes: CellSet[], { undo = true, label = 'edit', automate = undo }: { undo?: boolean; label?: string; automate?: boolean } = {}) {
     if (!changes.length) return;
+    let later: (() => unknown)[] = [];
+    if (automate) {
+      const fired = this.#triggered(changes);
+      changes = [...changes, ...fired.sets];
+      later = fired.later;
+    }
     const before: CellSet[] = changes.map((c) => ({ row: c.row, prop: c.prop, value: this.raw(c.row, c.prop) }));
     for (const c of changes) this.#write(c.row, c.prop, c.value, true);
     if (undo) {
       const after = changes.map((c) => ({ ...c }));
       this.#push({ label, undo: () => this.set(before, { undo: false }), redo: () => this.set(after, { undo: false }) });
     }
+    for (const run of later) void run();
   }
 
   setOne(row: DbRow, prop: Property, value: CellValue) {
@@ -594,6 +645,7 @@ class Databases {
       case 'id':
       case 'formula':
       case 'rollup':
+      case 'button':
         return;
     }
     if (p.type === 'relation' && syncBack) this.#syncBack(row, p, asList(row.cells[p.id]), asList(value));
@@ -687,8 +739,12 @@ class Databases {
 
   // --------------------------------------------------------------- rows
 
-  /** What a new row needs to show up in a view (its filters and group). */
-  #defaults(dbId: string, view?: DbView, group?: { prop: string; key: string }): Record<string, CellValue> {
+  /**
+   * What a new row starts with: a status at its first stage, a template's
+   * values (`base`), then what it needs to show up in a view (its filters
+   * and group).
+   */
+  #defaults(dbId: string, view?: DbView, group?: { prop: string; key: string }, base: Record<string, CellValue> = {}): Record<string, CellValue> {
     const out: Record<string, CellValue> = {};
     // A status starts at its first "to do" stage.
     for (const p of this.props(dbId)) {
@@ -696,6 +752,7 @@ class Databases {
       const first = options(p).find((o) => (o.group ?? 'todo') === 'todo') ?? options(p)[0];
       if (first) out[p.id] = first.id;
     }
+    Object.assign(out, base);
     for (const f of view?.config.filters ?? []) {
       const p = this.prop(dbId, f.prop);
       if (!p || !EDITABLE_CELL.has(p.type)) continue;
@@ -719,10 +776,31 @@ class Databases {
     return out;
   }
 
-  /** Adds a row (at the end, or after/before another) and returns it. */
+  /** The template a new row starts from: the one asked for, or the view's default. */
+  #templateFor(dbId: string, id: string | null | undefined): DbRow | undefined {
+    const t = id ? this.rows[id] : undefined;
+    const page = t ? store.byId.get(t.id) : undefined;
+    return t?.template && t.dbId === dbId && page && !page.deletedAt ? t : undefined;
+  }
+
+  /**
+   * Adds a row (at the end, or after/before another) and returns it. It
+   * starts from `template` (or the view's default template; '' for none),
+   * and runs the database's "row added" automations unless `automate` is off.
+   */
   async addRow(
     dbId: string,
-    opts: { after?: string; before?: string; title?: string; cells?: Record<string, CellValue>; view?: DbView; group?: { prop: string; key: string }; tags?: string[] } = {},
+    opts: {
+      after?: string;
+      before?: string;
+      title?: string;
+      cells?: Record<string, CellValue>;
+      view?: DbView;
+      group?: { prop: string; key: string };
+      tags?: string[];
+      template?: string | null;
+      automate?: boolean;
+    } = {},
   ): Promise<DbRow | null> {
     const rows = this.rowsOf(dbId);
     let a: string | null = rows.at(-1)?.sortKey ?? null;
@@ -735,17 +813,31 @@ class Databases {
       a = rows[at - 1]?.sortKey ?? null;
       b = rows[at].sortKey;
     }
+    const tpl = this.#templateFor(dbId, opts.template !== undefined ? opts.template : opts.view?.config.template);
+    const tplPage = tpl ? store.byId.get(tpl.id) : undefined;
+    const cells = { ...this.#defaults(dbId, opts.view, opts.group, tpl ? (structuredClone($state.snapshot(tpl.cells)) as Record<string, CellValue>) : {}), ...opts.cells };
     const created = await this.#create(dbId, [
-      { title: opts.title ?? '', sortKey: keyBetween(a, b), cells: { ...this.#defaults(dbId, opts.view, opts.group), ...opts.cells } },
+      { title: opts.title ?? tplPage?.title ?? '', icon: tplPage?.icon || undefined, sortKey: keyBetween(a, b), cells, fromTemplate: tpl?.id },
     ]);
     const row = created[0] ?? null;
     if (row) {
       const groupTags = opts.group && this.prop(dbId, opts.group.prop)?.type === 'tags' && opts.group.key ? [opts.group.key] : [];
       const t = [...(opts.tags ?? []), ...groupTags];
-      if (t.length) void tags.set('pages', row.id, t);
+      if (t.length) void tags.set('pages', row.id, [...new Set([...(store.byId.get(row.id)?.tags ?? []), ...t])]);
+      this.#linkNew([row]);
       this.#push({ label: 'new row', undo: () => this.#trash([row.id]), redo: () => this.#restore([row.id]) });
+      if (opts.automate !== false) this.#added([row]);
     }
     return row;
+  }
+
+  /** New rows' links show up on the other side of two-way relations. */
+  #linkNew(rows: DbRow[]) {
+    for (const row of rows) {
+      for (const p of this.props(row.dbId)) {
+        if (p.type === 'relation' && p.config.back && asList(row.cells[p.id]).length) this.#syncBack(row, p, [], asList(row.cells[p.id]));
+      }
+    }
   }
 
   /** Adds many rows at once (pasting a sheet), after `afterKey`. */
@@ -758,8 +850,312 @@ class Databases {
       list.map((r, i) => ({ title: r.title, sortKey: keys[i], cells: r.cells })),
     );
     const ids = created.map((r) => r.id);
+    this.#linkNew(created);
     if (ids.length) this.#push({ label: ids.length === 1 ? 'a new row' : `${ids.length} new rows`, undo: () => this.#trash(ids), redo: () => this.#restore(ids) });
+    this.#added(created);
     return created;
+  }
+
+  // ------------------------------------------------------------ templates
+
+  /**
+   * Makes a template: empty, or a copy of a row (its values, icon and page).
+   * A new empty one opens, to be filled in like any row.
+   */
+  async newTemplate(dbId: string, from?: DbRow): Promise<DbRow | null> {
+    const list = this.templatesOf(dbId);
+    const page = from ? store.byId.get(from.id) : undefined;
+    if (from) {
+      await store.flush();
+      await this.flush();
+    }
+    const made = await this.#create(dbId, [
+      {
+        title: page ? page.title : '',
+        icon: page?.icon || undefined,
+        sortKey: keyBetween(list.at(-1)?.sortKey ?? null, null),
+        cells: from ? (structuredClone($state.snapshot(from.cells)) as Record<string, CellValue>) : this.#defaults(dbId),
+        template: true,
+        fromTemplate: from?.id,
+      },
+    ]);
+    const t = made[0] ?? null;
+    if (!t) return null;
+    if (from) {
+      ui.toast(`Saved “${page?.title || 'Untitled'}” as a template`, { label: 'Edit', run: () => store.open(t.id) });
+    } else {
+      store.open(t.id);
+      ui.focusTitle = t.id;
+    }
+    return t;
+  }
+
+  /** The template new rows start from in a view (or every view: `viewId` null). */
+  setDefaultTemplate(dbId: string, templateId: string, viewId: string | null) {
+    for (const v of this.views(dbId)) if (viewId === null || v.id === viewId) this.updateView(dbId, v.id, { template: templateId });
+  }
+
+  // -------------------------------------------------------------- sub-items
+
+  /** The relation that holds each row's parent, and its twin listing sub-items. */
+  subItems(dbId: string): { parent: Property; children: Property | undefined } | null {
+    const parent = this.props(dbId).find((p) => p.type === 'relation' && p.config.parent && p.config.database === dbId);
+    if (!parent) return null;
+    return { parent, children: parent.config.back ? this.prop(dbId, parent.config.back) : undefined };
+  }
+
+  /** Lets rows hold sub-items: a "Parent item" relation and its "Sub-items" twin. */
+  async enableSubItems(dbId: string) {
+    if (this.subItems(dbId)) return;
+    const parent = await this.addProperty(dbId, 'relation', { name: this.freeName(dbId, 'Parent item'), config: { database: dbId, parent: true } });
+    if (parent) await this.linkBack(dbId, parent.id, true, this.freeName(dbId, 'Sub-items'));
+  }
+
+  async disableSubItems(dbId: string) {
+    const s = this.subItems(dbId);
+    if (!s) return;
+    const ok = await ui.confirm({
+      title: 'Turn off sub-items?',
+      message: `“${s.parent.name}” and “${s.children?.name ?? 'Sub-items'}” are deleted, so rows stop being nested. Undo brings them back.`,
+      confirmLabel: 'Turn off',
+    });
+    if (!ok) return;
+    if (s.children) await this.deleteProperty(dbId, s.children.id);
+    await this.deleteProperty(dbId, s.parent.id);
+  }
+
+  /** The parent a row sits under (when it's among `ids`). */
+  parentOf(row: DbRow, ids?: Set<string>): string | undefined {
+    const s = this.subItems(row.dbId);
+    if (!s) return undefined;
+    return asList(row.cells[s.parent.id]).find((x) => x !== row.id && (ids ? ids.has(x) : !!this.#live(x)));
+  }
+
+  /**
+   * Rows put in tree order: each under its parent (when the parent is shown
+   * too), folded unless expanded. Returns null when there are no sub-items.
+   */
+  nest(dbId: string, list: DbRow[]): { rows: DbRow[]; depth: Map<string, number>; kids: Map<string, number> } | null {
+    if (!this.subItems(dbId)) return null;
+    const ids = new Set(list.map((r) => r.id));
+    const children = new Map<string, DbRow[]>();
+    const roots: DbRow[] = [];
+    for (const r of list) {
+      const pid = this.parentOf(r, ids);
+      if (!pid) roots.push(r);
+      else {
+        let kids = children.get(pid);
+        if (!kids) children.set(pid, (kids = []));
+        kids.push(r);
+      }
+    }
+    // Rows only reachable through a loop of parents start at the top.
+    const reached = new Set<string>();
+    const reach = (r: DbRow) => {
+      if (reached.has(r.id)) return;
+      reached.add(r.id);
+      for (const k of children.get(r.id) ?? []) reach(k);
+    };
+    roots.forEach(reach);
+    for (const r of list) if (!reached.has(r.id)) {
+      roots.push(r);
+      reach(r);
+    }
+    const isRoot = new Set(roots.map((r) => r.id));
+    const rows: DbRow[] = [];
+    const depth = new Map<string, number>();
+    const kids = new Map<string, number>();
+    const seen = new Set<string>();
+    const walk = (r: DbRow, d: number) => {
+      if (seen.has(r.id)) return;
+      seen.add(r.id);
+      rows.push(r);
+      depth.set(r.id, d);
+      const k = (children.get(r.id) ?? []).filter((x) => !isRoot.has(x.id));
+      kids.set(r.id, k.length);
+      if (this.expanded[r.id]) for (const c of k) walk(c, d + 1);
+    };
+    for (const r of roots) walk(r, 0);
+    return { rows, depth, kids };
+  }
+
+  toggleExpanded(id: string) {
+    this.expanded[id] = !this.expanded[id];
+  }
+
+  /** Adds a row under another, after its last sub-item. */
+  async addSubItem(parent: DbRow, view?: DbView): Promise<DbRow | null> {
+    const s = this.subItems(parent.dbId);
+    if (!s) return null;
+    this.expanded[parent.id] = true;
+    const siblings = this.rowsOf(parent.dbId).filter((r) => this.parentOf(r) === parent.id);
+    return this.addRow(parent.dbId, { after: siblings.at(-1)?.id ?? parent.id, view, cells: { [s.parent.id]: [parent.id] } });
+  }
+
+  // ----------------------------------------------- buttons and automations
+
+  /** What a "set" action puts in a property of a row. */
+  #actionValue(row: DbRow, p: Property, v: ActionValue): CellValue {
+    switch (v.mode) {
+      case 'clear':
+        return p.type === 'checkbox' ? false : null;
+      case 'today': {
+        const d = new Date();
+        d.setDate(d.getDate() + (v.days ?? 0));
+        return { start: isoDate(d) };
+      }
+      case 'now':
+        return { start: stamp(Date.now()) };
+      case 'toggle':
+        return this.get(row, p) !== true;
+      case 'add': {
+        const n = this.get(row, p);
+        return (typeof n === 'number' ? n : 0) + (Number(v.by) || 0);
+      }
+      case 'value':
+        return structuredClone($state.snapshot(v.value)) as CellValue;
+    }
+  }
+
+  /** Text with {Property} replaced by a row's values ("Review of {Name}"). */
+  fill(text: string, row: DbRow): string {
+    return text.replace(/\{([^{}]+)\}/g, (whole, name: string) => {
+      const n = name.trim().toLowerCase();
+      const q = this.props(row.dbId).find((x) => x.name.trim().toLowerCase() === n);
+      return q ? (q.type === 'title' ? this.title(row) : this.text(row, q)) : whole;
+    });
+  }
+
+  /** Actions as values to set now and things to do after. */
+  #plan(row: DbRow, actions: DbAction[]): { sets: CellSet[]; later: (() => unknown)[] } {
+    const sets: CellSet[] = [];
+    const later: (() => unknown)[] = [];
+    for (const a of actions) {
+      if (a.type === 'set') {
+        const p = this.prop(row.dbId, a.prop);
+        if (p && ACTION_TYPES.has(p.type)) sets.push({ row, prop: p, value: this.#actionValue(row, p, a.value) });
+      } else if (a.type === 'add') later.push(() => this.#addFrom(row, a));
+      else if (a.type === 'open') later.push(() => store.open(row.id));
+      else if (a.type === 'url' && a.url.trim()) {
+        const url = this.fill(a.url.trim(), row);
+        later.push(() => openUrl(/^[a-z][a-z0-9+.-]*:/i.test(url) ? url : `https://${url}`).catch((e) => ui.error(e)));
+      }
+    }
+    return { sets, later };
+  }
+
+  async #addFrom(row: DbRow, a: Extract<DbAction, { type: 'add' }>) {
+    const db = a.db || row.dbId;
+    if (!this.schemas[db] || !this.list.some((d) => d.id === db)) return;
+    const link = this.prop(db, a.link);
+    const cells: Record<string, CellValue> = link?.type === 'relation' && link.config.database === row.dbId ? { [link.id]: [row.id] } : {};
+    if (link?.config.parent) this.expanded[row.id] = true;
+    const made = await this.addRow(db, { title: this.fill(a.title ?? '', row), cells, automate: false });
+    if (!made) return;
+    if (a.open) {
+      store.open(made.id);
+      ui.focusTitle = made.id;
+    } else if (db !== row.dbId) ui.toast(`Added a row to ${store.byId.get(db)?.title || 'Untitled'}`, { label: 'Open', run: () => store.open(made.id) });
+  }
+
+  /** Clicks a button property on a row. */
+  press(row: DbRow, p: Property) {
+    const actions = p.config.actions ?? [];
+    if (!actions.length) {
+      ui.toast('This button doesn’t do anything yet: add actions in its settings');
+      return;
+    }
+    const { sets, later } = this.#plan(row, actions);
+    if (sets.length) this.set(sets, { label: `“${p.config.label || p.name}”` });
+    for (const run of later) void run();
+  }
+
+  /** Whether a change of a value starts an automation. */
+  #fires(a: Automation, p: Property, before: CellValue, after: CellValue): boolean {
+    const norm = (v: CellValue) => (v === undefined || v === '' || v === false || (Array.isArray(v) && !v.length) ? null : v);
+    if (JSON.stringify(norm(before)) === JSON.stringify(norm(after))) return false;
+    const to = a.config.to;
+    if (to === undefined || to === null) return true;
+    if (p.type === 'checkbox') return (after === true) === to;
+    if (p.type === 'multiSelect') return asList(after).includes(to as string) && !asList(before).includes(to as string);
+    return after === to;
+  }
+
+  /** Changes that automations make in answer to `changes`. */
+  #triggered(changes: CellSet[]): { sets: CellSet[]; later: (() => unknown)[] } {
+    const sets: CellSet[] = [];
+    const later: (() => unknown)[] = [];
+    // What's set by hand wins over what a rule would set.
+    const touched = new Set(changes.map((c) => `${c.row.id}|${c.prop.id}`));
+    for (const c of changes) {
+      if (c.row.template) continue;
+      for (const a of this.automations(c.row.dbId)) {
+        if (a.config.off || a.type !== 'changed' || a.config.prop !== c.prop.id) continue;
+        if (!this.#fires(a, c.prop, this.raw(c.row, c.prop), c.value)) continue;
+        const plan = this.#plan(c.row, a.config.actions ?? []);
+        for (const s of plan.sets) {
+          const key = `${s.row.id}|${s.prop.id}`;
+          if (touched.has(key)) continue;
+          touched.add(key);
+          sets.push(s);
+        }
+        later.push(...plan.later);
+      }
+    }
+    return { sets, later };
+  }
+
+  /** Runs "row added" automations on new rows. */
+  #added(rows: DbRow[]) {
+    const later: (() => unknown)[] = [];
+    for (const row of rows) {
+      if (row.template) continue;
+      for (const a of this.automations(row.dbId)) {
+        if (a.config.off || a.type !== 'added') continue;
+        const plan = this.#plan(row, a.config.actions ?? []);
+        for (const s of plan.sets) this.#write(s.row, s.prop, s.value, true);
+        later.push(...plan.later);
+      }
+    }
+    for (const run of later) void run();
+  }
+
+  #autoTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+  #saveAutomation(dbId: string, a: Automation, immediate = false) {
+    const key = `${dbId}/${a.id}`;
+    clearTimeout(this.#autoTimers.get(key));
+    const send = () => {
+      this.#autoTimers.delete(key);
+      api.saveAutomation(dbId, $state.snapshot(a) as Automation).catch((e) => ui.error(e));
+    };
+    if (immediate) send();
+    else this.#autoTimers.set(key, setTimeout(send, 400));
+  }
+
+  addAutomation(dbId: string, type: Automation['type'] = 'changed'): Automation | null {
+    const schema = this.schemas[dbId];
+    if (!schema) return null;
+    const a: Automation = { id: shortId(), name: '', type, config: { actions: [] }, sortKey: keyBetween(schema.automations.at(-1)?.sortKey ?? null, null) };
+    schema.automations.push(a);
+    const live = schema.automations.at(-1)!;
+    this.#saveAutomation(dbId, live, true);
+    return live;
+  }
+
+  updateAutomation(dbId: string, id: string, patch: Partial<Omit<Automation, 'id'>>) {
+    const a = this.automations(dbId).find((x) => x.id === id);
+    if (!a) return;
+    Object.assign(a, patch);
+    this.#saveAutomation(dbId, a);
+  }
+
+  async deleteAutomation(dbId: string, id: string) {
+    const schema = this.schemas[dbId];
+    if (!schema) return;
+    clearTimeout(this.#autoTimers.get(`${dbId}/${id}`));
+    schema.automations = schema.automations.filter((a) => a.id !== id);
+    await api.deleteAutomation(dbId, id).catch((e) => ui.error(e));
   }
 
   async #create(dbId: string, list: NewRow[]): Promise<DbRow[]> {
@@ -1023,7 +1419,7 @@ class Databases {
   }
 
   /** Makes a relation two-way: a twin property in the other database. */
-  async linkBack(dbId: string, propId: string, on: boolean) {
+  async linkBack(dbId: string, propId: string, on: boolean, twinName?: string) {
     const p = this.prop(dbId, propId);
     const other = p?.config.database;
     if (!p || !other || !this.schemas[other]) return;
@@ -1033,7 +1429,7 @@ class Databases {
       if (twin) await this.deleteProperty(other, twin, { undo: false });
       return;
     }
-    const name = this.freeName(other, store.byId.get(dbId)?.title || 'Related');
+    const name = twinName ?? this.freeName(other, store.byId.get(dbId)?.title || 'Related');
     const twin = await this.addProperty(other, 'relation', { name, config: { database: dbId, back: p.id } });
     if (!twin) return;
     this.updateProperty(dbId, propId, { config: { ...p.config, back: twin.id } }, { immediate: true, undo: false });
@@ -1097,6 +1493,12 @@ class Databases {
         const d = first('date') ?? (await this.addProperty(dbId, 'date', { name: this.freeName(dbId, 'Date') }));
         return { dateProp: d?.id };
       }
+      case 'timeline': {
+        const d = first('date') ?? (await this.addProperty(dbId, 'date', { name: this.freeName(dbId, 'Dates') }));
+        return { dateProp: d?.id, scale: 'week', showTable: true };
+      }
+      case 'form':
+        return { form: { fields: props.filter((p) => FORM_TYPES.has(p.type)).map((p) => ({ prop: p.id, required: p.type === 'title' })) } };
       case 'chart': {
         const x = first('status', 'select', 'course', 'multiSelect', 'checkbox', 'tags', 'date');
         const y = first('number');
@@ -1116,7 +1518,12 @@ class Databases {
     const needs = await this.defaultsFor(dbId, type);
     const c = v.config;
     const missing =
-      (type === 'board' && !this.prop(dbId, c.group)) || (type === 'calendar' && !this.prop(dbId, c.dateProp)) || (type === 'chart' && !c.chart) || (type === 'gallery' && !c.cover);
+      (type === 'board' && !this.prop(dbId, c.group)) ||
+      ((type === 'calendar' || type === 'timeline') && !this.prop(dbId, c.dateProp)) ||
+      (type === 'timeline' && !c.scale) ||
+      (type === 'form' && !c.form) ||
+      (type === 'chart' && !c.chart) ||
+      (type === 'gallery' && !c.cover);
     v.type = type;
     v.config = missing ? { ...c, ...needs } : c;
     // A view still named after its old layout takes the new one's name.
@@ -1364,6 +1771,12 @@ class Databases {
   });
 }
 
+/** Types a button or automation can set. */
+export const ACTION_TYPES = new Set<PropertyType>(['title', 'text', 'number', 'select', 'multiSelect', 'status', 'date', 'checkbox', 'url', 'email', 'phone', 'course']);
+
+/** Types a form can ask for. */
+export const FORM_TYPES = new Set<PropertyType>(['title', 'text', 'number', 'select', 'multiSelect', 'status', 'date', 'checkbox', 'url', 'email', 'phone', 'course', 'relation', 'files', 'tags']);
+
 /** Types whose cells a new row can be given from a view's filters. */
 const EDITABLE_CELL = new Set<PropertyType>(['text', 'number', 'select', 'multiSelect', 'status', 'date', 'checkbox', 'url', 'email', 'phone', 'course']);
 
@@ -1374,10 +1787,12 @@ export const VIEW_NAMES: Record<ViewType, string> = {
   list: 'List',
   calendar: 'Calendar',
   chart: 'Chart',
+  timeline: 'Timeline',
+  form: 'Form',
 };
 
 function sortSchema(s: DatabaseSchema): DatabaseSchema {
-  return { ...s, properties: [...s.properties].sort(byKey), views: [...s.views].sort(byKey) };
+  return { ...s, properties: [...s.properties].sort(byKey), views: [...s.views].sort(byKey), automations: [...(s.automations ?? [])].sort(byKey) };
 }
 
 export const databases = new Databases();

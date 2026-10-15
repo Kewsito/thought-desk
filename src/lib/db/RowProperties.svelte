@@ -10,6 +10,7 @@
   import PropertyMenu from './PropertyMenu.svelte';
   import { databases } from '../databases.svelte';
   import { store } from '../store.svelte';
+  import { ui } from '../ui.svelte';
   import { EDITABLE, TYPES, typeInfo } from './schema';
   import type { Property, PropertyType } from '../types';
 
@@ -25,6 +26,7 @@
 
   const empty = (p: Property) => {
     if (!row) return true;
+    if (p.type === 'button') return false;
     const v = databases.get(row, p);
     return v === null || v === '' || (Array.isArray(v) && !v.length);
   };
@@ -50,6 +52,22 @@
       {store.byId.get(dbId)?.icon ?? ''}
       {store.byId.get(dbId)?.title || 'Untitled database'}
     </button>
+    {#if row.template}
+      <div class="tpl-banner">
+        <Icon name="template" size={15} />
+        <span class="grow">This is a <strong>template</strong>. New rows made from it start with these values, this icon and everything written on this page.</span>
+        <button
+          class="btn small raised"
+          onclick={async () => {
+            const made = await databases.addRow(dbId, { template: row.id });
+            if (made) {
+              store.open(made.id);
+              ui.focusTitle = made.id;
+            }
+          }}>Use it</button
+        >
+      </div>
+    {/if}
     {#each shown as p (p.id)}
       <div class="prop">
         <button class="name" data-row-prop={p.id} onclick={(e) => (menuFor = { prop: p, el: e.currentTarget as Element })} data-tip={p.config.description || undefined}>
@@ -128,6 +146,26 @@
     font-size: var(--fs-footnote);
     font-weight: var(--fw-500);
     color: var(--text-3);
+  }
+  .tpl-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 10px;
+    padding: 10px 12px;
+    border-radius: var(--r-md);
+    background: color-mix(in srgb, var(--accent) 8%, var(--bg));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+    font-size: var(--fs-ui);
+    line-height: 1.4;
+    color: var(--text-2);
+  }
+  .tpl-banner :global(.icon) {
+    flex: none;
+    color: var(--accent);
+  }
+  .tpl-banner .grow {
+    flex: 1;
   }
   .db-link:hover {
     background: var(--fill);

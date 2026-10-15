@@ -136,6 +136,12 @@
     'arrow-up-down': '<path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/>',
     palette:
       '<circle cx="13.5" cy="6.5" r="1" fill="currentColor"/><circle cx="17.5" cy="10.5" r="1" fill="currentColor"/><circle cx="8.5" cy="7.5" r="1" fill="currentColor"/><circle cx="6.5" cy="12.5" r="1" fill="currentColor"/><path d="M12 2a10 10 0 0 0 0 20c.9 0 1.7-.8 1.7-1.7 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1a1.6 1.6 0 0 1 1.6-1.7h2A5.6 5.6 0 0 0 22 11c0-5-4.5-9-10-9Z"/>',
+    timeline: '<rect x="3" y="4" width="10" height="4" rx="1.2"/><rect x="8" y="10" width="13" height="4" rx="1.2"/><rect x="5" y="16" width="9" height="4" rx="1.2"/>',
+    form: '<path d="M4 3.5h7"/><rect x="4" y="6" width="16" height="4.5" rx="1.2"/><path d="M4 14h7"/><rect x="4" y="16.5" width="16" height="4.5" rx="1.2"/>',
+    pointer: '<path d="M14 4.1 12 6"/><path d="m5.1 8-2.9-.8"/><path d="m6 12-1.9 2"/><path d="M7.2 2.2 8 5.1"/><path d="M9.04 9.69a.5.5 0 0 1 .65-.65l11 4.5a.5.5 0 0 1-.07.95l-4.35 1.04a1 1 0 0 0-.74.74l-1.04 4.35a.5.5 0 0 1-.95.07z"/>',
+    'list-tree': '<path d="M21 12h-8"/><path d="M21 6H8"/><path d="M21 18h-8"/><path d="M3 6v4c0 1.1.9 2 2 2h3"/><path d="M3 10v6c0 1.1.9 2 2 2h3"/>',
+    template: '<rect width="18" height="7" x="3" y="3" rx="1.2"/><rect width="9" height="7" x="3" y="14" rx="1.2"/><rect width="5" height="7" x="16" y="14" rx="1.2"/>',
+    'corner-down-right': '<path d="m15 10 5 5-5 5"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/>',
   };
 </script>
 

@@ -150,6 +150,8 @@ fn main() {
             commands::delete_property,
             commands::save_view,
             commands::delete_view,
+            commands::save_automation,
+            commands::delete_automation,
             commands::create_rows,
             commands::update_rows,
             commands::sync_pending,

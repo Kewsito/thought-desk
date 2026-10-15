@@ -1,10 +1,13 @@
-//! Databases: pages laid out as a table, board, gallery, list or calendar.
+//! Databases: pages laid out as a table, board, gallery, list, calendar,
+//! chart, timeline or form.
 //!
 //! A database is a page whose `kind` is "database", and each row is a page
 //! inside it, so a row has a body, links, tags, search, favourites and the
 //! trash like any other page (and the row's title is its page's title). What
-//! makes it a database lives here: typed properties and saved views (the
-//! schema), and each row's values (`cells`, keyed by property id).
+//! makes it a database lives here: typed properties, saved views and
+//! automations (the schema), and each row's values (`cells`, keyed by
+//! property id). A row can also be a template: a page that new rows start
+//! from (its values and its body), kept apart from the rows themselves.
 //!
 //! Everything is shaped to sync between devices later (see sync.rs):
 //! properties, views and select options have stable ids; rows, properties
@@ -43,9 +46,13 @@ const PROPERTY_TYPES: &[&str] = &[
     "tags",
     "course",
     "id",
+    "button",
 ];
 
-const VIEW_TYPES: &[&str] = &["table", "board", "gallery", "list", "calendar", "chart"];
+const VIEW_TYPES: &[&str] = &["table", "board", "gallery", "list", "calendar", "chart", "timeline", "form"];
+
+/// What starts an automation: a row being added, or a value changing.
+const AUTOMATION_TYPES: &[&str] = &["added", "changed"];
 
 /// The title property's fixed id (its values are the row pages' titles).
 const TITLE: &str = "title";
@@ -79,6 +86,7 @@ pub struct Database {
     pub description: String,
     pub properties: Vec<SchemaItem>,
     pub views: Vec<SchemaItem>,
+    pub automations: Vec<SchemaItem>,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -95,6 +103,9 @@ pub struct Row {
     /// The first image in the row's page (a gallery card's picture).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cover: Option<String>,
+    /// A template new rows can start from, not a row of its own.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub template: bool,
 }
 
 #[derive(Deserialize, Default)]
@@ -104,6 +115,11 @@ pub struct NewRow {
     pub icon: String,
     pub sort_key: String,
     pub cells: Map<String, Value>,
+    /// Make a template rather than a row.
+    pub template: bool,
+    /// A template (or row) of the same database whose body and tags the new
+    /// row starts with: making a row from a template, or a template from a row.
+    pub from_template: String,
 }
 
 #[derive(Deserialize, Default)]
@@ -112,6 +128,7 @@ pub struct DatabaseInput {
     pub description: String,
     pub properties: Vec<SchemaItem>,
     pub views: Vec<SchemaItem>,
+    pub automations: Vec<SchemaItem>,
     pub rows: Vec<NewRow>,
 }
 
@@ -202,6 +219,17 @@ fn parse_map(raw: &str) -> Map<String, Value> {
     }
 }
 
+/// The schema tables, and what their records are called in the sync outbox.
+const SCHEMA_TABLES: &[(&str, &str)] = &[("db_properties", "property"), ("db_views", "view"), ("db_automations", "automation")];
+
+fn entity_of(table: &str) -> &'static str {
+    SCHEMA_TABLES.iter().find(|(t, _)| *t == table).map_or("view", |(_, e)| e)
+}
+
+fn table_of(entity: &str) -> Option<&'static str> {
+    SCHEMA_TABLES.iter().find(|(_, e)| *e == entity).map(|(t, _)| *t)
+}
+
 // --------------------------------------------------------------------- reading
 
 fn item_from(r: &rusqlite::Row) -> rusqlite::Result<(String, SchemaItem)> {
@@ -244,10 +272,11 @@ fn database_by_id(conn: &Connection, id: &str) -> Result<Database> {
         description,
         properties: items(conn, "db_properties", Some(id))?.remove(id).unwrap_or_default(),
         views: items(conn, "db_views", Some(id))?.remove(id).unwrap_or_default(),
+        automations: items(conn, "db_automations", Some(id))?.remove(id).unwrap_or_default(),
     })
 }
 
-const ROW_COLS: &str = "r.page_id, p.parent_id, r.sort_key, r.number, r.cells, c.content";
+const ROW_COLS: &str = "r.page_id, p.parent_id, r.sort_key, r.number, r.cells, c.content, r.template";
 const ROW_FROM: &str = "db_rows r JOIN pages p ON p.id = r.page_id JOIN page_content c ON c.rid = p.rid";
 
 fn row_from(r: &rusqlite::Row) -> rusqlite::Result<Row> {
@@ -258,6 +287,7 @@ fn row_from(r: &rusqlite::Row) -> rusqlite::Result<Row> {
         number: r.get(3)?,
         cells: parse_map(&r.get::<_, String>(4)?),
         cover: first_image(&r.get::<_, String>(5)?),
+        template: r.get(6)?,
     })
 }
 
@@ -304,8 +334,7 @@ fn put_item(conn: &Connection, table: &str, db_id: &str, item: &SchemaItem, stam
         ),
         params![db_id, item.id, item.name, item.kind, item.config.to_string(), item.sort_key, stamp],
     )?;
-    let entity = if table == "db_properties" { "property" } else { "view" };
-    sync::mark(conn, entity, &format!("{db_id}/{}", item.id), stamp)
+    sync::mark(conn, entity_of(table), &format!("{db_id}/{}", item.id), stamp)
 }
 
 fn next_number(conn: &Connection, db_id: &str) -> Result<i64> {
@@ -321,21 +350,49 @@ fn insert_rows(tx: &Transaction, db_id: &str, rows: &[NewRow], stamp: &str) -> R
     for new in rows {
         check_key(&new.sort_key)?;
         check_cells(&new.cells)?;
-        let id = insert_page(tx, Some(db_id), &new.title, &new.icon, "", "")?;
+        let (content, text) = if new.from_template.is_empty() { Default::default() } else { template_body(tx, db_id, &new.from_template)? };
+        let id = insert_page(tx, Some(db_id), &new.title, &new.icon, &content, &text)?;
+        if !new.from_template.is_empty() {
+            tx.execute("UPDATE pages SET tags = (SELECT tags FROM pages WHERE id = ?1) WHERE id = ?2", params![new.from_template, id])?;
+        }
         let mut clocks = Map::new();
         for key in new.cells.keys().map(String::as_str).chain(["$title", "$icon", "$order"]) {
             clocks.insert(key.to_string(), Value::String(stamp.to_string()));
         }
+        // Templates aren't counted (their number is never shown).
+        let n = if new.template { 0 } else { number };
         tx.execute(
-            "INSERT INTO db_rows (page_id, sort_key, number, cells, clocks) VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![id, new.sort_key, number, Value::Object(new.cells.clone()).to_string(), Value::Object(clocks).to_string()],
+            "INSERT INTO db_rows (page_id, sort_key, number, cells, clocks, template) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![id, new.sort_key, n, Value::Object(new.cells.clone()).to_string(), Value::Object(clocks).to_string(), new.template],
         )?;
         sync::mark(tx, "row", &id, stamp)?;
         out.push(CreatedRow { page: meta_by_id(tx, &id)?, row: row_by_id(tx, &id)? });
-        number += 1;
+        if !new.template {
+            number += 1;
+        }
     }
     tx.execute("UPDATE databases SET next_number = ?1 WHERE page_id = ?2", params![number, db_id])?;
     Ok(out)
+}
+
+/// The body of a template or row of `db_id`: its editor JSON and its
+/// searchable text.
+fn template_body(conn: &Connection, db_id: &str, id: &str) -> Result<(String, String)> {
+    let found: Option<(String, String)> = conn
+        .query_row(
+            "SELECT c.content, coalesce(f.body, '') FROM db_rows r
+               JOIN pages p ON p.id = r.page_id
+               JOIN page_content c ON c.rid = p.rid
+               LEFT JOIN pages_fts f ON f.rowid = p.rid
+             WHERE r.page_id = ?1 AND p.parent_id = ?2",
+            params![id, db_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?;
+    match found {
+        Some(body) => Ok(body),
+        None => fail("That template no longer exists"),
+    }
 }
 
 /// Stamps fields of a row (its cells by property id, or "$title", "$icon",
@@ -368,6 +425,7 @@ impl Db {
         let conn = self.conn();
         let mut props = items(&conn, "db_properties", None)?;
         let mut views = items(&conn, "db_views", None)?;
+        let mut automations = items(&conn, "db_automations", None)?;
         let mut stmt = conn.prepare("SELECT page_id, description FROM databases")?;
         let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
         let mut out = Vec::new();
@@ -376,6 +434,7 @@ impl Db {
             out.push(Database {
                 properties: props.remove(&id).unwrap_or_default(),
                 views: views.remove(&id).unwrap_or_default(),
+                automations: automations.remove(&id).unwrap_or_default(),
                 id,
                 description,
             });
@@ -435,6 +494,9 @@ impl Db {
         for v in &views {
             check_item(v, VIEW_TYPES, "view")?;
         }
+        for a in &input.automations {
+            check_item(a, AUTOMATION_TYPES, "automation")?;
+        }
 
         let id = insert_page(&tx, parent_id, title, icon, "", "")?;
         tx.execute("UPDATE pages SET kind = 'database' WHERE id = ?1", [&id])?;
@@ -450,6 +512,9 @@ impl Db {
         }
         for v in &views {
             put_item(&tx, "db_views", &id, v, &stamp)?;
+        }
+        for a in &input.automations {
+            put_item(&tx, "db_automations", &id, a, &stamp)?;
         }
         let rows = insert_rows(&tx, &id, &input.rows, &stamp)?;
         let created = CreatedDatabase { page: meta_by_id(&tx, &id)?, database: database_by_id(&tx, &id)?, rows };
@@ -511,6 +576,22 @@ impl Db {
         self.tombstone("db_views", db_id, id)
     }
 
+    /// Adds or changes an automation (or brings back a deleted one).
+    pub fn save_automation(&self, db_id: &str, automation: SchemaItem) -> Result<()> {
+        check_item(&automation, AUTOMATION_TYPES, "automation")?;
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        live_database(&tx, db_id)?;
+        let stamp = sync::tick(&tx)?;
+        put_item(&tx, "db_automations", db_id, &automation, &stamp)?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn delete_automation(&self, db_id: &str, id: &str) -> Result<()> {
+        self.tombstone("db_automations", db_id, id)
+    }
+
     fn tombstone(&self, table: &str, db_id: &str, id: &str) -> Result<()> {
         let mut conn = self.conn();
         let tx = conn.transaction()?;
@@ -520,8 +601,7 @@ impl Db {
             params![stamp, db_id, id],
         )?;
         if n > 0 {
-            let entity = if table == "db_properties" { "property" } else { "view" };
-            sync::mark(&tx, entity, &format!("{db_id}/{id}"), &stamp)?;
+            sync::mark(&tx, entity_of(table), &format!("{db_id}/{id}"), &stamp)?;
         }
         tx.commit()?;
         Ok(())
@@ -728,7 +808,7 @@ pub(crate) fn duplicated(tx: &Transaction, map: &HashMap<String, String>) -> Res
             params![new, description, next, stamp],
         )?;
         sync::mark(tx, "database", new, &stamp)?;
-        for table in ["db_properties", "db_views"] {
+        for (table, _) in SCHEMA_TABLES {
             for mut item in items(tx, table, Some(old))?.remove(old).unwrap_or_default() {
                 item.config = serde_json::from_str(&replace_ids(&item.config.to_string(), map)).unwrap_or_else(|_| empty_object());
                 put_item(tx, table, new, &item, &stamp)?;
@@ -736,27 +816,30 @@ pub(crate) fn duplicated(tx: &Transaction, map: &HashMap<String, String>) -> Res
         }
     }
     for (old, new) in map {
-        let found: Option<(String, i64, String, Option<String>)> = tx
+        let found: Option<(String, i64, String, Option<String>, bool)> = tx
             .query_row(
-                "SELECT r.sort_key, r.number, r.cells, p.parent_id FROM db_rows r JOIN pages p ON p.id = r.page_id WHERE r.page_id = ?1",
+                "SELECT r.sort_key, r.number, r.cells, p.parent_id, r.template FROM db_rows r JOIN pages p ON p.id = r.page_id WHERE r.page_id = ?1",
                 [old],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
             )
             .optional()?;
-        let Some((sort_key, number, cells, parent)) = found else {
+        let Some((sort_key, number, cells, parent, template)) = found else {
             continue;
         };
         let stamp = stamp_now(tx)?;
         let db_id = parent.unwrap_or_default();
         // A row copied on its own goes right after the original and gets
-        // the next number; rows of a copied database keep theirs.
+        // the next number (a template isn't numbered); rows of a copied
+        // database keep theirs.
+        let after = |key: String| if key.len() < 255 { format!("{key}V") } else { key };
         let (sort_key, number) = if map.contains_key(&db_id) {
             (sort_key, number)
+        } else if template {
+            (after(sort_key), 0)
         } else {
             let n = next_number(tx, &db_id)?;
             tx.execute("UPDATE databases SET next_number = ?1 WHERE page_id = ?2", params![n + 1, db_id])?;
-            let key = if sort_key.len() < 255 { format!("{sort_key}V") } else { sort_key };
-            (key, n)
+            (after(sort_key), n)
         };
         let cells = parse_map(&replace_ids(&cells, map));
         let mut clocks = Map::new();
@@ -764,8 +847,8 @@ pub(crate) fn duplicated(tx: &Transaction, map: &HashMap<String, String>) -> Res
             clocks.insert(key.to_string(), Value::String(stamp.clone()));
         }
         tx.execute(
-            "INSERT INTO db_rows (page_id, sort_key, number, cells, clocks) VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![new, sort_key, number, Value::Object(cells).to_string(), Value::Object(clocks).to_string()],
+            "INSERT INTO db_rows (page_id, sort_key, number, cells, clocks, template) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![new, sort_key, number, Value::Object(cells).to_string(), Value::Object(clocks).to_string(), template],
         )?;
         sync::mark(tx, "row", new, &stamp)?;
     }
@@ -800,6 +883,12 @@ pub enum Change {
         deleted: bool,
         clock: String,
     },
+    Automation {
+        db_id: String,
+        item: SchemaItem,
+        deleted: bool,
+        clock: String,
+    },
     Row {
         id: String,
         db_id: String,
@@ -808,6 +897,9 @@ pub enum Change {
         sort_key: String,
         number: i64,
         deleted: bool,
+        /// A template rather than a row (fixed when it's made).
+        #[serde(default)]
+        template: bool,
         cells: Map<String, Value>,
         /// Stamp of each cell (by property id) and of "$title", "$icon",
         /// "$order" and "$deleted".
@@ -822,7 +914,7 @@ impl Change {
     fn rank(&self) -> u8 {
         match self {
             Change::Database { .. } => 0,
-            Change::Property { .. } | Change::View { .. } => 1,
+            Change::Property { .. } | Change::View { .. } | Change::Automation { .. } => 1,
             Change::Row { .. } => 2,
             Change::Gone { .. } => 3,
         }
@@ -833,7 +925,9 @@ fn schema_change(conn: &Connection, entity: &str, key: &str) -> Result<Option<Ch
     let Some((db_id, id)) = key.split_once('/') else {
         return Ok(None);
     };
-    let table = if entity == "property" { "db_properties" } else { "db_views" };
+    let Some(table) = table_of(entity) else {
+        return Ok(None);
+    };
     let found = conn
         .query_row(
             &format!("SELECT db_id, id, name, type, config, sort_key, deleted, clock FROM {table} WHERE db_id = ?1 AND id = ?2"),
@@ -841,12 +935,10 @@ fn schema_change(conn: &Connection, entity: &str, key: &str) -> Result<Option<Ch
             |r| Ok((item_from(r)?, r.get::<_, bool>(6)?, r.get::<_, String>(7)?)),
         )
         .optional()?;
-    Ok(found.map(|((db_id, item), deleted, clock)| {
-        if entity == "property" {
-            Change::Property { db_id, item, deleted, clock }
-        } else {
-            Change::View { db_id, item, deleted, clock }
-        }
+    Ok(found.map(|((db_id, item), deleted, clock)| match entity {
+        "property" => Change::Property { db_id, item, deleted, clock },
+        "automation" => Change::Automation { db_id, item, deleted, clock },
+        _ => Change::View { db_id, item, deleted, clock },
     }))
 }
 
@@ -926,10 +1018,10 @@ impl Db {
                         },
                     )
                     .optional()?,
-                "property" | "view" => schema_change(&conn, &entity, &id)?,
+                "property" | "view" | "automation" => schema_change(&conn, &entity, &id)?,
                 "row" => conn
                     .query_row(
-                        "SELECT p.parent_id, p.title, p.icon, p.deleted_at IS NOT NULL, r.sort_key, r.number, r.cells, r.clocks
+                        "SELECT p.parent_id, p.title, p.icon, p.deleted_at IS NOT NULL, r.sort_key, r.number, r.cells, r.clocks, r.template
                          FROM db_rows r JOIN pages p ON p.id = r.page_id WHERE r.page_id = ?1",
                         [&id],
                         |r| {
@@ -943,6 +1035,7 @@ impl Db {
                                 number: r.get(5)?,
                                 cells: parse_map(&r.get::<_, String>(6)?),
                                 clocks: parse_map(&r.get::<_, String>(7)?),
+                                template: r.get(8)?,
                             })
                         },
                     )
@@ -1010,7 +1103,11 @@ impl Db {
                     sync::observe(&tx, &clock)?;
                     apply_item(&tx, "db_views", &db_id, &item, deleted, &clock)?;
                 }
-                Change::Row { id, db_id, title, icon, sort_key, number, deleted, cells, clocks } => {
+                Change::Automation { db_id, item, deleted, clock } => {
+                    sync::observe(&tx, &clock)?;
+                    apply_item(&tx, "db_automations", &db_id, &item, deleted, &clock)?;
+                }
+                Change::Row { id, db_id, title, icon, sort_key, number, deleted, template, cells, clocks } => {
                     for stamp in clocks.values().filter_map(Value::as_str) {
                         sync::observe(&tx, stamp)?;
                     }
@@ -1026,8 +1123,8 @@ impl Db {
                         None => {
                             insert_page_as(&tx, &id, Some(&db_id), &title, &icon, "", "")?;
                             tx.execute(
-                                "INSERT INTO db_rows (page_id, sort_key, number, cells, clocks) VALUES (?1, ?2, ?3, ?4, ?5)",
-                                params![id, sort_key, number, Value::Object(cells).to_string(), Value::Object(clocks).to_string()],
+                                "INSERT INTO db_rows (page_id, sort_key, number, cells, clocks, template) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                                params![id, sort_key, number, Value::Object(cells).to_string(), Value::Object(clocks).to_string(), template],
                             )?;
                             tx.execute(
                                 "UPDATE databases SET next_number = max(next_number, ?1) WHERE page_id = ?2",
@@ -1103,6 +1200,7 @@ mod tests {
             icon: String::new(),
             sort_key: key.into(),
             cells: cells.as_object().cloned().unwrap_or_default(),
+            ..Default::default()
         }
     }
 
@@ -1118,6 +1216,7 @@ mod tests {
                     prop("pages", "Pages", "number", "a2", json!({})),
                 ],
                 views: vec![],
+                automations: vec![],
                 rows: vec![
                     new_row("Dune", "a0", json!({"status": "todo", "pages": 412})),
                     new_row("Emma", "a1", json!({"status": "done"})),
@@ -1328,6 +1427,7 @@ mod tests {
             sort_key: "a0".into(),
             number: 1,
             deleted: false,
+            template: false,
             cells: json!({"pages": 1}).as_object().cloned().unwrap(),
             clocks: json!({"pages": future}).as_object().cloned().unwrap(),
         }])
@@ -1335,5 +1435,68 @@ mod tests {
         assert_eq!(row(&b, &dune).cells["pages"], json!(1));
         set(&b, &dune, json!({"pages": 2}));
         assert_eq!(row(&b, &dune).cells["pages"], json!(2));
+    }
+
+    #[test]
+    fn templates_and_automations() {
+        let db = temp_db();
+        let created = reading_list(&db);
+        let id = created.page.id.clone();
+
+        // A template is a page with values, kept apart and not numbered.
+        let made = db
+            .create_rows(&id, vec![NewRow { template: true, ..new_row("Book report", "a5", json!({"status": "done"})) }])
+            .unwrap();
+        let tpl = made[0].row.clone();
+        assert!(tpl.template);
+        assert_eq!(tpl.number, 0);
+        db.update_page(
+            &tpl.id,
+            PagePatch {
+                content: Some(r#"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Summary"}]}]}"#.into()),
+                text: Some("Summary".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        // A row made from it starts with its body, and takes the next number.
+        let from = db
+            .create_rows(&id, vec![NewRow { from_template: tpl.id.clone(), ..new_row("Book report", "a6", json!({"status": "done"})) }])
+            .unwrap();
+        let fresh = &from[0].row;
+        assert!(!fresh.template);
+        assert_eq!(fresh.number, 3);
+        assert!(db.get_page(&fresh.id).unwrap().content.contains("Summary"));
+        // A row can become a template the same way; a page from elsewhere can't.
+        let saved = db
+            .create_rows(&id, vec![NewRow { template: true, from_template: fresh.id.clone(), ..new_row("Report 2", "a7", json!({})) }])
+            .unwrap();
+        assert!(db.get_page(&saved[0].row.id).unwrap().content.contains("Summary"));
+        let elsewhere = db.create_page(None, None, "", "").unwrap();
+        assert!(db
+            .create_rows(&id, vec![NewRow { from_template: elsewhere.id, ..new_row("x", "a8", json!({})) }])
+            .is_err());
+
+        // Duplicating a template makes another template.
+        let copy = db.duplicate_page(&tpl.id).unwrap();
+        assert!(row(&db, &copy.id).template);
+
+        // Automations are part of the schema, deleted as tombstones, and sync.
+        let rule = prop("r1", "Finished date", "changed", "a0", json!({"prop": "status", "actions": []}));
+        db.save_automation(&id, rule.clone()).unwrap();
+        assert!(db.save_automation(&id, prop("r2", "x", "nonsense", "a1", json!({}))).is_err());
+        assert_eq!(db.list_databases().unwrap()[0].automations, vec![rule.clone()]);
+
+        let other = temp_db();
+        other.sync_apply(db.sync_pending().unwrap()).unwrap();
+        let schemas = other.list_databases().unwrap();
+        assert_eq!(schemas[0].automations, vec![rule]);
+        assert!(other.list_rows().unwrap().iter().any(|r| r.id == tpl.id && r.template));
+
+        db.delete_automation(&id, "r1").unwrap();
+        assert!(db.list_databases().unwrap()[0].automations.is_empty());
+        other.sync_apply(db.sync_pending().unwrap()).unwrap();
+        assert!(other.list_databases().unwrap()[0].automations.is_empty());
     }
 }

@@ -15,7 +15,7 @@
   let { dbId, view }: { dbId: string; view: DbView } = $props();
 
   const rules = $derived(view.config.filters ?? []);
-  const allProps = $derived(databases.props(dbId));
+  const allProps = $derived(databases.props(dbId).filter((p) => p.type !== 'button'));
 
   function save(next: FilterRule[]) {
     databases.updateView(dbId, view.id, { filters: next });

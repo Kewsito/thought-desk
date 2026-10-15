@@ -370,6 +370,23 @@ CREATE TABLE sync_outbox (
 ) WITHOUT ROWID;
 ";
 
+/// Row templates (pages a database's new rows can start from) and
+/// automations (rules that run when rows change).
+const SCHEMA_V8: &str = "
+ALTER TABLE db_rows ADD COLUMN template INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE db_automations (
+  db_id    TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+  id       TEXT NOT NULL,
+  name     TEXT NOT NULL DEFAULT '',
+  type     TEXT NOT NULL,
+  config   TEXT NOT NULL DEFAULT '{}',
+  sort_key TEXT NOT NULL,
+  deleted  INTEGER NOT NULL DEFAULT 0,
+  clock    TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY (db_id, id)
+) WITHOUT ROWID;
+";
+
 const WELCOME_HTML: &str = r#"<p>Thought Desk is a quiet place to write. Everything stays on this computer, in a single local database.</p>
 <h2>The basics</h2>
 <ul data-type="taskList">
@@ -512,6 +529,12 @@ impl Db {
             // This copy's name in the clocks of everything it writes.
             tx.execute("INSERT INTO sync_meta (key, value) VALUES ('device', ?1)", [new_id()])?;
             tx.execute_batch("PRAGMA user_version = 7;")?;
+            tx.commit()?;
+        }
+        if version < 8 {
+            let tx = conn.transaction()?;
+            tx.execute_batch(SCHEMA_V8)?;
+            tx.execute_batch("PRAGMA user_version = 8;")?;
             tx.commit()?;
         }
         Ok(())

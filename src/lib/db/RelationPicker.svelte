@@ -39,12 +39,14 @@
   });
 
   function toggle(r: DbRow) {
-    onchange(linked.includes(r.id) ? linked.filter((x) => x !== r.id) : [...linked, r.id]);
+    // A row has one parent: picking another replaces it.
+    if (prop.config.parent) onchange(linked.includes(r.id) ? [] : [r.id]);
+    else onchange(linked.includes(r.id) ? linked.filter((x) => x !== r.id) : [...linked, r.id]);
   }
 
   async function create() {
     const made = await databases.addRow(target, { title: query.trim() });
-    if (made) onchange([...linked, made.id]);
+    if (made) onchange(prop.config.parent ? [made.id] : [...linked, made.id]);
     query = '';
   }
 

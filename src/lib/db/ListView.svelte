@@ -16,16 +16,30 @@
   const AUTO_SKIP = new Set(['title', 'created', 'edited', 'text', 'id']);
   const allProps = $derived(databases.props(dbId));
   const lazy = new Progressive(80, 150);
-  const sections = $derived(
-    groups
-      ? takeGrouped(
-          groups.filter((g) => g.rows.length || (!c.hideEmptyGroups && g.key !== '')),
-          (g) => g.rows,
-          lazy.limit,
-        )
-      : [{ group: null as Group | null, items: rows.slice(0, lazy.limit) }],
-  );
-  const total = $derived(groups ? groups.reduce((n, g) => n + g.rows.length, 0) : rows.length);
+  // Sub-items sit under their parent (folded until opened).
+  const nested = $derived((c.subItems ?? 'nested') === 'nested' && !!databases.subItems(dbId));
+  const shaped = $derived.by(() => {
+    const depth = new Map<string, number>();
+    const kids = new Map<string, number>();
+    const fold = (list: DbRow[]): DbRow[] => {
+      const n = nested ? databases.nest(dbId, list) : null;
+      if (!n) return list;
+      n.depth.forEach((v, k) => depth.set(k, v));
+      n.kids.forEach((v, k) => kids.set(k, v));
+      return n.rows;
+    };
+    const folded = groups
+      ? groups.filter((g) => g.rows.length || (!c.hideEmptyGroups && g.key !== '')).map((g) => ({ ...g, total: g.rows.length, rows: fold(g.rows) }))
+      : null;
+    const plain = folded ? [] : fold(rows);
+    const sections = folded ? takeGrouped(folded, (g) => g.rows, lazy.limit) : [{ group: null as (Group & { total?: number }) | null, items: plain.slice(0, lazy.limit) }];
+    const count = folded ? folded.reduce((n, g) => n + g.rows.length, 0) : plain.length;
+    return { sections, depth, kids, count };
+  });
+  const sections = $derived(shaped.sections);
+  const depth = $derived(shaped.depth);
+  const kids = $derived(shaped.kids);
+  const total = $derived(shaped.count);
   let editing = $state<{ id: string; title: string } | null>(null);
   let input = $state<HTMLInputElement>();
 
@@ -38,8 +52,8 @@
     return allProps.filter((p) => !AUTO_SKIP.has(p.type) && filled(p)).slice(0, 4);
   }
 
-  async function add(group?: Group | null) {
-    const row = await databases.addRow(dbId, { view, group: group && c.group ? { prop: c.group, key: group.key } : undefined });
+  async function add(group?: Group | null, parent?: DbRow) {
+    const row = parent ? await databases.addSubItem(parent, view) : await databases.addRow(dbId, { view, group: group && c.group ? { prop: c.group, key: group.key } : undefined });
     if (!row) return;
     editing = { id: row.id, title: '' };
     await tick();
@@ -59,7 +73,9 @@
       y: e.clientY,
       items: [
         { label: 'Open', icon: 'expand', action: () => store.open(row.id) },
+        ...(databases.subItems(dbId) ? [{ label: 'Add a sub-item', icon: 'corner-down-right', action: () => void add(null, row) }] : []),
         { label: 'Duplicate', icon: 'copy', action: () => void databases.duplicateRows([row.id]) },
+        { label: 'Save as template', icon: 'template', action: () => void databases.newTemplate(dbId, row) },
         { separator: true },
         { label: 'Delete', icon: 'trash', danger: true, action: () => void databases.deleteRows([row.id]) },
       ],
@@ -72,13 +88,14 @@
     {#if s.group}
       <div class="group">
         {#if s.group.color}<span class="pill" style:--pill={s.group.color}><span>{s.group.label}</span></span>{:else}<span class="g-label">{s.group.label}</span>{/if}
-        <span class="count">{s.group.rows.length}</span>
+        <span class="count">{s.group.total ?? s.group.rows.length}</span>
       </div>
     {/if}
     {#each s.items as row (row.id)}
       {@const page = store.byId.get(row.id)}
+      {@const d = depth.get(row.id) ?? 0}
       {#if editing?.id === row.id}
-        <div class="line editing">
+        <div class="line editing" style:padding-left="{8 + d * 22}px">
           <span class="lead">{#if page?.icon}{page.icon}{:else}<Icon name="page" size={15} />{/if}</span>
           <input
             bind:this={input}
@@ -90,13 +107,26 @@
           />
         </div>
       {:else}
-        <button class="line" onclick={() => store.open(row.id)} oncontextmenu={(e) => menu(e, row)}>
+        {@const k = kids.get(row.id) ?? 0}
+        <div class="line-wrap" style:--indent="{d * 22}px">
+          {#if k}
+            <button
+              class="twisty"
+              class:open={databases.expanded[row.id]}
+              onclick={() => databases.toggleExpanded(row.id)}
+              aria-label={databases.expanded[row.id] ? 'Hide sub-items' : 'Show sub-items'}
+              aria-expanded={!!databases.expanded[row.id]}
+              data-tip="{k} sub-item{k === 1 ? '' : 's'}"><Icon name="chevron-right" size={12} stroke={2.4} /></button
+            >
+          {/if}
+        <button class="line" class:nested onclick={() => store.open(row.id)} oncontextmenu={(e) => menu(e, row)}>
           <span class="lead">{#if page?.icon}{page.icon}{:else}<Icon name="page" size={15} />{/if}</span>
           <span class="title" class:untitled={!page?.title}>{page?.title || 'Untitled'}</span>
           <span class="allProps">
             {#each shownFor(row) as p (p.id)}<span class="prop" data-tip={p.name}><Value {dbId} {row} prop={p} compact /></span>{/each}
           </span>
         </button>
+        </div>
       {/if}
     {/each}
   {/each}
@@ -140,6 +170,35 @@
   }
   .line:hover {
     background: var(--fill);
+  }
+  .line-wrap {
+    position: relative;
+  }
+  .line.nested {
+    padding-left: calc(8px + var(--indent) + 22px);
+  }
+  .twisty {
+    position: absolute;
+    z-index: 1;
+    top: 50%;
+    left: calc(6px + var(--indent));
+    translate: 0 -50%;
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    border-radius: var(--r-xs);
+    color: var(--text-3);
+  }
+  .twisty:hover {
+    background: var(--fill-2);
+    color: var(--text);
+  }
+  .twisty :global(.icon) {
+    transition: transform var(--dur-fast) var(--ease);
+  }
+  .twisty.open :global(.icon) {
+    transform: rotate(90deg);
   }
   .lead {
     flex: none;

@@ -32,6 +32,7 @@ export const TYPES: TypeInfo[] = [
   { type: 'relation', label: 'Relation', icon: 'relation', hint: 'Links to rows of a database', group: 'Advanced' },
   { type: 'rollup', label: 'Rollup', icon: 'sigma', hint: 'Totals from related rows', group: 'Advanced' },
   { type: 'formula', label: 'Formula', icon: 'function', hint: 'Calculated from other properties', group: 'Advanced' },
+  { type: 'button', label: 'Button', icon: 'pointer', hint: 'Does something in one click', group: 'Advanced' },
   { type: 'id', label: 'ID', icon: 'hash', hint: 'A number for each row (TASK-12)', group: 'Automatic' },
   { type: 'created', label: 'Created time', icon: 'clock', hint: 'When the row was added', group: 'Automatic' },
   { type: 'edited', label: 'Last edited', icon: 'clock', hint: 'When the row last changed', group: 'Automatic' },
@@ -81,6 +82,8 @@ export function defaultConfig(type: PropertyType): PropertyConfig {
       return { fn: 'count' };
     case 'id':
       return { prefix: '' };
+    case 'button':
+      return { label: '', actions: [] };
     default:
       return {};
   }

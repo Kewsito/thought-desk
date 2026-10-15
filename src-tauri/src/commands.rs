@@ -468,6 +468,16 @@ pub fn delete_view(db: State<Db>, db_id: String, id: String) -> Result<()> {
 }
 
 #[tauri::command(async)]
+pub fn save_automation(db: State<Db>, db_id: String, automation: SchemaItem) -> Result<()> {
+    db.save_automation(&db_id, automation)
+}
+
+#[tauri::command(async)]
+pub fn delete_automation(db: State<Db>, db_id: String, id: String) -> Result<()> {
+    db.delete_automation(&db_id, &id)
+}
+
+#[tauri::command(async)]
 pub fn create_rows(db: State<Db>, db_id: String, rows: Vec<NewRow>) -> Result<Vec<CreatedRow>> {
     db.create_rows(&db_id, rows)
 }

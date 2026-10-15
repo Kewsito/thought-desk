@@ -9,7 +9,7 @@
   let { dbId, view }: { dbId: string; view: DbView } = $props();
 
   const rules = $derived(view.config.sorts ?? []);
-  const allProps = $derived(databases.props(dbId));
+  const allProps = $derived(databases.props(dbId).filter((p) => p.type !== 'button'));
   const unused = $derived(allProps.filter((p) => !rules.some((r) => r.prop === p.id)));
 
   function save(next: SortRule[]) {

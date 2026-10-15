@@ -112,6 +112,20 @@
   </span>
 {:else if prop.type === 'date'}
   {#if v}<span class="v-text">{formatDateValue(v as DateValue)}</span>{/if}
+{:else if prop.type === 'button'}
+  <button
+    class="v-button"
+    class:empty={!(prop.config.actions ?? []).length}
+    tabindex="-1"
+    onmousedown={(e) => e.stopPropagation()}
+    onclick={(e) => {
+      e.stopPropagation();
+      databases.press(row, prop);
+    }}
+  >
+    <Icon name="pointer" size={12} />
+    <span>{prop.config.label || prop.name}</span>
+  </button>
 {:else if prop.type === 'checkbox'}
   <button
     class="v-check round"
@@ -349,5 +363,36 @@
     stroke: var(--accent);
     stroke-width: 2.5;
     stroke-linecap: round;
+  }
+  .v-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    max-width: 100%;
+    height: 22px;
+    padding: 0 8px;
+    border-radius: var(--r-xs);
+    background: var(--bg-elevated);
+    box-shadow:
+      0 0 0 0.5px var(--hairline),
+      var(--shadow-sm);
+    font-size: var(--fs-footnote);
+    font-weight: var(--fw-600);
+    color: var(--text);
+    white-space: nowrap;
+    transition: background-color var(--dur-fast) var(--ease);
+  }
+  .v-button span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .v-button:hover {
+    background: var(--fill-2);
+  }
+  .v-button:active {
+    transform: translateY(0.5px);
+  }
+  .v-button.empty {
+    color: var(--text-3);
   }
 </style>

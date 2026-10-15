@@ -58,9 +58,44 @@
 
   const lazy = new Progressive(80, 150);
   const collapsed = $derived(new Set(c.collapsed ?? []));
-  const shownGroups = $derived(groups ? groups.filter((g) => g.rows.length || (!c.hideEmptyGroups && g.key !== '')) : null);
+
+  // Sub-items sit under their parent row (folded until opened).
+  const sub = $derived((c.subItems ?? 'nested') === 'nested' ? databases.subItems(dbId) : null);
+  const tree = $derived.by(() => {
+    if (!sub) return null;
+    const depth = new Map<string, number>();
+    const kids = new Map<string, number>();
+    const fold = (list: DbRow[]) => {
+      const n = databases.nest(dbId, list);
+      if (!n) return list;
+      n.depth.forEach((v, k) => depth.set(k, v));
+      n.kids.forEach((v, k) => kids.set(k, v));
+      return n.rows;
+    };
+    return {
+      rows: groups ? rows : fold(rows),
+      groups: groups ? groups.map((g) => ({ ...g, total: g.rows.length, rows: fold(g.rows) })) : null,
+      depth,
+      kids,
+    };
+  });
+  const listRows = $derived(tree?.rows ?? rows);
+  const listGroups = $derived<(Group & { total?: number })[] | null>(tree?.groups ?? groups);
+
+  const shownGroups = $derived(listGroups ? listGroups.filter((g) => g.rows.length || (!c.hideEmptyGroups && g.key !== '')) : null);
   /** Every row the keyboard can reach, top to bottom. */
-  const flat = $derived(shownGroups ? shownGroups.filter((g) => !collapsed.has(g.key)).flatMap((g) => g.rows) : rows);
+  const flat = $derived(shownGroups ? shownGroups.filter((g) => !collapsed.has(g.key)).flatMap((g) => g.rows) : listRows);
+
+  async function addSub(parent: DbRow) {
+    const made = await databases.addSubItem(parent, view);
+    if (!made) return;
+    await tick();
+    const r = flat.findIndex((x) => x.id === made.id);
+    if (r >= 0) {
+      await select({ r, c: 0 });
+      startEdit({ r, c: 0 });
+    }
+  }
   const visible = $derived(flat.slice(0, lazy.limit));
   const indexOf = $derived(new Map(visible.map((r, i) => [r.id, i])));
 
@@ -126,6 +161,7 @@
     if (!row || !prop || !el) return;
     if (!EDITABLE.has(prop.type)) {
       if (prop.type === 'formula') ui.formula = { dbId, propId: prop.id };
+      else if (prop.type === 'button' && initial === undefined) databases.press(row, prop);
       return;
     }
     editing = { row, prop, el, initial };
@@ -484,12 +520,12 @@
   // ------------------------------------------------------------ adding
 
   /** Adds a row at the end and starts typing its title (the toolbar's New). */
-  export function addRow(): Promise<void> {
-    return newRow();
+  export function addRow(template?: string): Promise<void> {
+    return newRow(undefined, template);
   }
 
-  async function newRow(group?: Group) {
-    const made = await databases.addRow(dbId, { view, group: group && c.group ? { prop: c.group, key: group.key } : undefined });
+  async function newRow(group?: Group, template?: string) {
+    const made = await databases.addRow(dbId, { view, template, group: group && c.group ? { prop: c.group, key: group.key } : undefined });
     if (!made) return;
     await tick();
     const r = flat.findIndex((x) => x.id === made.id);
@@ -571,11 +607,39 @@
         onmouseenter={() => onCellEnter(r, col)}
         ondblclick={() => startEdit({ r, c: col })}
       >
+        {#if tree && p.type === 'title'}
+          {@const kids = tree.kids.get(row.id) ?? 0}
+          <span class="indent" style:width="{(tree.depth.get(row.id) ?? 0) * 20}px"></span>
+          {#if kids}
+            <button
+              class="twisty"
+              class:open={databases.expanded[row.id]}
+              tabindex="-1"
+              onmousedown={(e) => e.stopPropagation()}
+              onclick={(e) => {
+                e.stopPropagation();
+                databases.toggleExpanded(row.id);
+              }}
+              aria-label={databases.expanded[row.id] ? 'Hide sub-items' : 'Show sub-items'}
+              aria-expanded={!!databases.expanded[row.id]}
+              data-tip="{kids} sub-item{kids === 1 ? '' : 's'}"
+            ><Icon name="chevron-right" size={12} stroke={2.4} /></button>
+          {:else}
+            <span class="twisty-space"></span>
+          {/if}
+        {/if}
         <Value {dbId} {row} prop={p} wrap={c.wrap} oncheck={p.type === 'checkbox' ? () => databases.setOne(row, p, !databases.get(row, p)) : undefined} />
         {#if p.type === 'title'}
-          <button class="open" tabindex="-1" onclick={() => store.open(row.id)} data-tip="Open as a page" data-tip-key="Ctrl+Enter">
-            <Icon name="expand" size={12} /> Open
-          </button>
+          <span class="row-tools">
+            {#if sub}
+              <button class="open" tabindex="-1" onmousedown={(e) => e.stopPropagation()} onclick={() => void addSub(row)} data-tip="Add a sub-item" aria-label="Add a sub-item">
+                <Icon name="corner-down-right" size={12} />
+              </button>
+            {/if}
+            <button class="open" tabindex="-1" onclick={() => store.open(row.id)} data-tip="Open as a page" data-tip-key="Ctrl+Enter">
+              <Icon name="expand" size={12} /> Open
+            </button>
+          </span>
         {/if}
       </div>
     {/each}
@@ -658,7 +722,7 @@
             <div class="group-row">
               <button class="chev" class:closed={collapsed.has(g.key)} onclick={() => toggleGroup(g.key)} aria-label={collapsed.has(g.key) ? 'Show group' : 'Hide group'}><Icon name="chevron-down" size={13} stroke={2.2} /></button>
               {#if g.key && g.color}<span class="pill" class:status={databases.prop(dbId, c.group)?.type === 'status'} style:--pill={g.color}><span>{g.label}</span></span>{:else}<span class="g-label">{g.label}</span>{/if}
-              <span class="g-count">{g.rows.length}</span>
+              <span class="g-count">{g.total ?? g.rows.length}</span>
               <button class="icon-btn g-add" onclick={() => newRow(g)} aria-label="New row in {g.label}" data-tip="New row here"><Icon name="plus" size={14} /></button>
             </div>
             {#if !collapsed.has(g.key)}
@@ -687,10 +751,12 @@
         <div></div>
         {#each columns as p (p.id)}
           {@const fn = c.calc?.[p.id] ?? 'none'}
-          <button class="calc-cell" class:set={fn !== 'none'} class:right={p.type === 'number'} onclick={(e) => calcMenu(e, p)}>
-            {#if fn !== 'none'}
+          <button class="calc-cell" class:set={fn !== 'none'} class:right={p.type === 'number'} disabled={p.type === 'button'} onclick={(e) => calcMenu(e, p)}>
+            {#if p.type === 'button'}
+              <span></span>
+            {:else if fn !== 'none'}
               <span class="calc-label" data-tip={calcLabel(fn)}>{CALC_SHORT[fn]}</span>
-              <span class="calc-value">{databases.calc(dbId, flat, p, fn)}</span>
+              <span class="calc-value">{databases.calc(dbId, rows, p, fn)}</span>
             {:else}
               <span class="calc-label hover">Calculate</span>
             {/if}
@@ -944,11 +1010,42 @@
       inset 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent),
       inset -1px 0 0 var(--separator);
   }
-  .open {
+  .row-tools {
     position: absolute;
     right: 6px;
     top: 50%;
     translate: 0 -50%;
+    display: flex;
+    gap: 4px;
+  }
+  .indent {
+    flex: none;
+    margin-right: -6px;
+  }
+  .twisty,
+  .twisty-space {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    margin: 0 -2px 0 -4px;
+  }
+  .twisty {
+    display: grid;
+    place-items: center;
+    border-radius: var(--r-xs);
+    color: var(--text-3);
+  }
+  .twisty:hover {
+    background: var(--fill-2);
+    color: var(--text);
+  }
+  .twisty :global(.icon) {
+    transition: transform var(--dur-fast) var(--ease);
+  }
+  .twisty.open :global(.icon) {
+    transform: rotate(90deg);
+  }
+  .open {
     display: inline-flex;
     align-items: center;
     gap: 4px;

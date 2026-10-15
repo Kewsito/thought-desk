@@ -276,7 +276,8 @@ export type PropertyType =
   | 'edited'
   | 'tags'
   | 'course'
-  | 'id';
+  | 'id'
+  | 'button';
 
 /** A choice of a select, multi-select or status property. */
 export interface SelectOption {
@@ -327,6 +328,51 @@ export interface PropertyConfig {
   fn?: RollupFn;
   /** ID: text before the number ("TASK-12"). */
   prefix?: string;
+  /** Relation to its own database: this one holds each row's parent (sub-items). */
+  parent?: boolean;
+  /** Button: what it says and what it does. */
+  label?: string;
+  actions?: DbAction[];
+}
+
+/** Something a button or an automation does. */
+export type DbAction =
+  /** Sets a property of the row. */
+  | { type: 'set'; prop: string; value: ActionValue }
+  /** Adds a row to a database (this one or another), maybe linked back to this row. */
+  | { type: 'add'; db: string; title?: string; link?: string | null; open?: boolean }
+  /** Opens the row as a page. */
+  | { type: 'open' }
+  /** Opens a web address. */
+  | { type: 'url'; url: string };
+
+/** The value a "set" action gives. */
+export type ActionValue =
+  | { mode: 'value'; value: CellValue }
+  | { mode: 'clear' }
+  /** A date: today, or some days from it. */
+  | { mode: 'today'; days?: number }
+  /** A date and time: right now. */
+  | { mode: 'now' }
+  /** A checkbox: flipped. */
+  | { mode: 'toggle' }
+  /** A number: raised (or lowered) by an amount. */
+  | { mode: 'add'; by: number };
+
+/** A rule: when a row is added or a value changes, do something. */
+export interface Automation {
+  id: string;
+  name: string;
+  type: 'added' | 'changed';
+  config: {
+    /** Off rules are kept but don't run. */
+    off?: boolean;
+    /** "changed": which property, and (optionally) the value it changed to. */
+    prop?: string;
+    to?: string | boolean | null;
+    actions: DbAction[];
+  };
+  sortKey: string;
 }
 
 export interface Property {
@@ -337,7 +383,7 @@ export interface Property {
   sortKey: string;
 }
 
-export type ViewType = 'table' | 'board' | 'gallery' | 'list' | 'calendar' | 'chart';
+export type ViewType = 'table' | 'board' | 'gallery' | 'list' | 'calendar' | 'chart' | 'timeline' | 'form';
 
 export type CalcFn =
   | 'none'
@@ -395,8 +441,25 @@ export interface ViewConfig {
   cardSize?: 'small' | 'medium' | 'large';
   /** Gallery: what fills a card's top ("page": the first image in it, or a files property). */
   cover?: string;
-  /** Calendar: which date property places rows. */
+  /** Calendar and timeline: which date property places rows. */
   dateProp?: string;
+  /** Timeline: a second date property that ends each bar (else the date's own end). */
+  endProp?: string | null;
+  /** Timeline: how much time one column is. */
+  scale?: 'day' | 'week' | 'month' | 'quarter';
+  /** Timeline: show the list of titles beside the bars. */
+  showTable?: boolean;
+  /** Sub-items: shown under their parent (default), or as plain rows. */
+  subItems?: 'nested' | 'flat';
+  /** The template new rows from this view start from ('' for an empty row). */
+  template?: string;
+  /** Form: its heading, a note under it, and the fields to fill in. */
+  form?: {
+    title?: string;
+    intro?: string;
+    fields: { prop: string; required?: boolean }[];
+    submit?: string;
+  };
   /** Chart: what to count. */
   chart?: {
     kind: 'bar' | 'donut' | 'line';
@@ -422,6 +485,7 @@ export interface DatabaseSchema {
   description: string;
   properties: Property[];
   views: DbView[];
+  automations: Automation[];
 }
 
 /** A date property's value: "YYYY-MM-DD", or "YYYY-MM-DDTHH:MM" with a time. */
@@ -441,6 +505,8 @@ export interface DbRow {
   cells: Record<string, CellValue>;
   /** The first image in the row's page (a gallery card's picture). */
   cover?: string | null;
+  /** A template new rows can start from, not a row of its own. */
+  template?: boolean;
 }
 
 export interface NewRow {
@@ -448,6 +514,9 @@ export interface NewRow {
   icon?: string;
   sortKey: string;
   cells: Record<string, CellValue>;
+  template?: boolean;
+  /** A template whose body and tags the row starts with. */
+  fromTemplate?: string;
 }
 
 export interface CreatedRow {

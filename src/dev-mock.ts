@@ -364,7 +364,7 @@ function mockCards(): any[] {
 
 interface MockDb {
   schemas: Record<string, DatabaseSchema & { nextNumber: number }>;
-  rows: Record<string, { sortKey: string; number: number; cells: Record<string, CellValue> }>;
+  rows: Record<string, { sortKey: string; number: number; cells: Record<string, CellValue>; template?: boolean }>;
 }
 const DB_KEY = 'thoughtdesk.devmock.databases.v1';
 const dbData: MockDb = (() => {
@@ -386,15 +386,24 @@ const mockRow = (id: string): DbRow => {
   } catch {
     /* an HTML page */
   }
-  return { id, dbId: page?.parentId ?? '', sortKey: r.sortKey, number: r.number, cells: clone(r.cells), cover };
+  return { id, dbId: page?.parentId ?? '', sortKey: r.sortKey, number: r.number, cells: clone(r.cells), cover, ...(r.template ? { template: true } : {}) };
 };
-function mockCreateRows(dbId: string, list: { title: string; icon?: string; sortKey: string; cells: Record<string, CellValue> }[]) {
+function mockCreateRows(
+  dbId: string,
+  list: { title: string; icon?: string; sortKey: string; cells: Record<string, CellValue>; template?: boolean; fromTemplate?: string }[],
+) {
   const schema = dbData.schemas[dbId];
   if (!schema) throw 'Database not found';
   return list.map((n) => {
+    const tpl = n.fromTemplate ? rows.find((x) => x.id === n.fromTemplate && x.parentId === dbId && dbData.rows[x.id]) : undefined;
+    if (n.fromTemplate && !tpl) throw 'That template no longer exists';
     const page = make(dbId, n.title, n.icon ?? '');
+    if (tpl) {
+      page.content = tpl.content;
+      page.tags = [...(tpl.tags ?? [])];
+    }
     rows.push(page);
-    dbData.rows[page.id] = { sortKey: n.sortKey, number: schema.nextNumber++, cells: clone(n.cells ?? {}) };
+    dbData.rows[page.id] = { sortKey: n.sortKey, number: n.template ? 0 : schema.nextNumber++, cells: clone(n.cells ?? {}), ...(n.template ? { template: true } : {}) };
     return { page: meta(page), row: mockRow(page.id) };
   });
 }
@@ -406,7 +415,8 @@ function mockCreateDatabase(parentId: string | null, title: string, icon: string
   const properties = clone(input.properties ?? []);
   if (!properties.some((p: any) => p.id === 'title')) properties.unshift({ id: 'title', name: 'Name', type: 'title', config: {}, sortKey: 'a0' });
   const views = clone(input.views?.length ? input.views : [{ id: 'table', name: 'Table', type: 'table', config: {}, sortKey: 'a0' }]);
-  dbData.schemas[page.id] = { id: page.id, description: input.description ?? '', properties, views, nextNumber: 1 };
+  const automations = clone(input.automations ?? []);
+  dbData.schemas[page.id] = { id: page.id, description: input.description ?? '', properties, views, automations, nextNumber: 1 };
   const created = mockCreateRows(page.id, input.rows ?? []);
   const { nextNumber: _n, ...database } = dbData.schemas[page.id];
   return { page: meta(page), database: clone(database), rows: created };
@@ -443,7 +453,7 @@ mockIPC((cmd, payload) => {
   try {
     switch (cmd) {
       case 'list_databases':
-        return Object.values(dbData.schemas).map(({ nextNumber: _n, ...d }) => clone(d));
+        return Object.values(dbData.schemas).map(({ nextNumber: _n, ...d }) => clone({ ...d, automations: d.automations ?? [] }));
       case 'list_rows':
         return Object.keys(dbData.rows).filter((id) => rows.some((r) => r.id === id)).map(mockRow);
       case 'create_database':
@@ -452,10 +462,12 @@ mockIPC((cmd, payload) => {
         dbData.schemas[a.id].description = a.description;
         return null;
       case 'save_property':
-      case 'save_view': {
+      case 'save_view':
+      case 'save_automation': {
         const s = dbData.schemas[a.dbId];
-        const list = (cmd === 'save_property' ? s.properties : s.views) as any[];
-        const item = clone(cmd === 'save_property' ? a.property : a.view);
+        s.automations ??= [];
+        const list = (cmd === 'save_property' ? s.properties : cmd === 'save_view' ? s.views : s.automations) as any[];
+        const item = clone(cmd === 'save_property' ? a.property : cmd === 'save_view' ? a.view : a.automation);
         const i = list.findIndex((x) => x.id === item.id);
         if (i >= 0) list[i] = item;
         else list.push(item);
@@ -463,9 +475,11 @@ mockIPC((cmd, payload) => {
         return null;
       }
       case 'delete_property':
-      case 'delete_view': {
+      case 'delete_view':
+      case 'delete_automation': {
         const s = dbData.schemas[a.dbId];
         if (cmd === 'delete_property') s.properties = s.properties.filter((x) => x.id !== a.id);
+        else if (cmd === 'delete_automation') s.automations = (s.automations ?? []).filter((x) => x.id !== a.id);
         else if (s.views.length > 1) s.views = s.views.filter((x) => x.id !== a.id);
         return null;
       }
@@ -527,7 +541,7 @@ mockIPC((cmd, payload) => {
         const row = dbData.rows[src.id];
         if (row) {
           const s = dbData.schemas[src.parentId ?? ''];
-          dbData.rows[copy.id] = { sortKey: `${row.sortKey}V`, number: s ? s.nextNumber++ : 0, cells: clone(row.cells) };
+          dbData.rows[copy.id] = { sortKey: `${row.sortKey}V`, number: s && !row.template ? s.nextNumber++ : 0, cells: clone(row.cells), ...(row.template ? { template: true } : {}) };
         }
         const schema = dbData.schemas[src.id];
         if (schema) {

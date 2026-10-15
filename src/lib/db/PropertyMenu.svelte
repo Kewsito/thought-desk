@@ -6,6 +6,7 @@
    */
   import { onMount, untrack } from 'svelte';
   import Icon from '../components/Icon.svelte';
+  import ActionsEditor from './ActionsEditor.svelte';
   import Popover from './Popover.svelte';
   import Switch from '../ui/Switch.svelte';
   import Segmented from '../ui/Segmented.svelte';
@@ -276,6 +277,14 @@
         </div>
         {#if twin}<p class="note">Linked rows also show this one in “{twin.name}”.</p>{/if}
       {/if}
+    {:else if prop.type === 'button'}
+      <div class="pop-sep"></div>
+      <div class="pop-row">
+        <span class="label">Says</span>
+        <input class="pop-input small" value={prop.config.label ?? ''} placeholder={prop.name} oninput={(e) => config({ label: (e.currentTarget as HTMLInputElement).value })} aria-label="Button text" />
+      </div>
+      <div class="pop-head">When clicked</div>
+      <ActionsEditor {dbId} button actions={prop.config.actions ?? []} onchange={(actions) => config({ actions })} />
     {:else if prop.type === 'id'}
       <div class="pop-sep"></div>
       <div class="pop-row">
@@ -293,7 +302,7 @@
       aria-label="Description"
     />
 
-    {#if view}
+    {#if view && prop.type !== 'button'}
       <div class="pop-sep"></div>
       <button class="pop-item" onclick={() => sort('asc')}><Icon name="arrow-up" size={15} /><span class="grow">Sort ascending</span></button>
       <button class="pop-item" onclick={() => sort('desc')}><Icon name="arrow-down" size={15} /><span class="grow">Sort descending</span></button>

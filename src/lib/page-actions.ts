@@ -144,6 +144,22 @@ export function pageMenuItems(id: string, opts: { words?: number; sidebar?: bool
     );
   }
   items.push({ label: 'Duplicate', icon: 'copy', action: () => void store.duplicate(id) });
+  // A database row can become a template; a template makes rows.
+  const row = databases.rows[id];
+  if (row && !row.template) items.push({ label: 'Save as Template', icon: 'template', action: () => void databases.newTemplate(row.dbId, row) });
+  if (row?.template) {
+    items.push({
+      label: 'New Row from Template',
+      icon: 'plus',
+      action: async () => {
+        const made = await databases.addRow(row.dbId, { template: row.id });
+        if (made) {
+          store.open(made.id);
+          ui.focusTitle = made.id;
+        }
+      },
+    });
+  }
   const deck = cards.deck(id);
   if (deck) {
     items.push({ label: `Study ${deck.count} Flashcard${deck.count === 1 ? '' : 's'}`, icon: 'cards', action: () => void cards.study([id], page.title || 'Untitled', { all: !(deck.due + deck.fresh) }) });

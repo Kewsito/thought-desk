@@ -37,8 +37,13 @@ Tested against a workspace of 7,500 pages (a 2 MB book among them), 2,000 files,
 - **Formatting bubble** on selection: bold, italic, underline, strike, code, highlight, links, and turn into.
 - **Pages:** nested pages, sub-page blocks (`/page`), and inline page links (`@`) that stay in sync when pages are renamed.
 - **Sidebar:** drag pages to reorder or nest, favorites, a Databases section, collapsible sections, resizable width (double-click the edge to reset).
-- **Databases:** rows you can see as a **table, board, gallery, list, calendar or chart**, each view with its own filters, sorts, groups and shown properties. Start empty or from nine templates (Tasks, Projects, Reading list, Habit tracker, Study log, Budget, Applications, People, Recipes), import a `.csv` (column types are guessed: numbers, dates, checkboxes, choices, links), or paste rows straight from a spreadsheet. Every row is also a page, with room for notes under its properties; the first picture in it becomes its gallery cover.
-- **Properties:** text, number (plain, commas, percent, five currencies; shown as a figure, a bar or a ring), select, multi-select, status (to do / in progress / done stages), date (ranges and times, typed as "Friday" or "tomorrow 3pm"), checkbox, URL, email, phone, **course**, **tags**, **files** from the library, auto ID, created and edited times, **relations** (two-way, to the same or another database) and **rollups** (sum, average, count, percent done…). Changing a property's type converts its values.
+- **Databases:** rows you can see as a **table, board, gallery, list, calendar, chart, timeline or form**, each view with its own filters, sorts, groups and shown properties. Start empty or from nine templates (Tasks, Projects, Reading list, Habit tracker, Study log, Budget, Applications, People, Recipes), import a `.csv` (column types are guessed: numbers, dates, checkboxes, choices, links), or paste rows straight from a spreadsheet. Every row is also a page, with room for notes under its properties; the first picture in it becomes its gallery cover.
+- **Properties:** text, number (plain, commas, percent, five currencies; shown as a figure, a bar or a ring), select, multi-select, status (to do / in progress / done stages), date (ranges and times, typed as "Friday" or "tomorrow 3pm"), checkbox, URL, email, phone, **course**, **tags**, **files** from the library, auto ID, created and edited times, **relations** (two-way, to the same or another database) **rollups** (sum, average, count, percent done…) and **buttons**. Changing a property's type converts its values.
+- **Timeline:** rows as bars from their start date to their end (one date with a range, or two date properties), on a scale of days, weeks, months or quarters. Drag a bar to move it, drag its ends to change how long it runs, and click an empty lane to give a row without a date one.
+- **Forms:** a form view is the quickest way to add a row: one question per property (choices as buttons, dates and links with their pickers), required questions, and a heading and note of your own. *Edit form* picks and orders the questions.
+- **Templates:** a template is a row to start from: its values, icon and page (a checklist, headings, a quote to fill in) are copied into each new row. Make one from the *New* button's menu or save any row as one (*Save as Template*); edit it like any row, and make it the default for a view or for every view.
+- **Sub-items:** turn them on in a table or list's settings and rows can sit under other rows, folded until opened. Each row's parent and sub-items are a two-way relation, so they also show on the row's page, in rollups and in formulas.
+- **Buttons and automations:** a button property does something in one click (set properties, add a row to any database and link it back, open the page or a link). Automations do the same on their own when a row is added or a property changes: *when Status becomes Done, set Finished to today*. They read as sentences, can be switched off, and their changes undo together with the edit that set them off.
 - **Formulas:** `{Price} * {Qty}` or `if({Done}, "✓", "")`, with 53 functions for logic, math, text, dates and lists. The editor autocompletes properties and functions, explains each one, and shows the result for a real row as you type; renaming a property updates the formulas that use it.
 - **Fast to work in:** a spreadsheet-like table (arrow keys, `Enter` or just start typing to edit, `Tab`, `Shift`+arrows to select, `Ctrl+C` / `Ctrl+V`, `Ctrl+D` fills down, `Delete` clears, `Ctrl+Enter` opens the row), column summaries (sum, average, count, percent checked…), drag cards between board columns, drag rows to reorder, filters for every type, with dates like "this week" or "within the next 7 days", and its own undo and redo.
 - **Databases fit in:** `/database` puts a new one inside a page and `/linked database` shows an existing one there, with its own view. Rows with a date show on the Calendar and can be dragged to another day, `Ctrl+K` finds rows by any value, course, tag and file properties use the app's own courses, tags and library, and databases share Trash, Favorites, Duplicate and CSV export with pages.
@@ -110,7 +115,7 @@ Everything lives in one SQLite database (`thoughtdesk.db`, WAL mode) plus a `fil
 
 Set `THOUGHTDESK_DATA_DIR` to use a different folder, e.g. a portable copy on a USB drive.
 
-**Ready for sync.** Databases are stored so that two copies can later be merged without a server deciding who wins. Each install has a device id; every edit to a cell, property, view or row's title, icon, place or deletion carries a hybrid logical clock stamp, and changed records are queued in an outbox. Merging keeps the newest stamp per cell, so two people editing different cells of the same row both keep their edits; deleted properties and views stay as tombstones so a deletion can't be undone by an older copy. Row order uses fractional keys, so moving a row never renumbers the others. The `sync_pending` / `sync_apply` / `sync_sent` commands are the hooks an online service will use (`src-tauri/src/sync.rs`, `databases.rs`). Page bodies and the rest of the workspace aren't stamped yet.
+**Ready for sync.** Databases are stored so that two copies can later be merged without a server deciding who wins. Each install has a device id; every edit to a cell, property, view, automation or row's title, icon, place or deletion carries a hybrid logical clock stamp, and changed records are queued in an outbox. Merging keeps the newest stamp per cell, so two people editing different cells of the same row both keep their edits; deleted properties and views stay as tombstones so a deletion can't be undone by an older copy. Row order uses fractional keys, so moving a row never renumbers the others. The `sync_pending` / `sync_apply` / `sync_sent` commands are the hooks an online service will use (`src-tauri/src/sync.rs`, `databases.rs`). Page bodies and the rest of the workspace aren't stamped yet.
 
 ## Layout
 
@@ -122,7 +127,7 @@ src/                     TypeScript + Svelte UI
   lib/library.svelte.ts  the file library
   lib/tags.svelte.ts     tags; lib/todos.svelte.ts to-dos rolled up from pages; lib/capture.ts Quick Capture
   lib/databases.svelte.ts databases: rows, values, saving, undo, import and export
-  lib/db/                database views (table, board, gallery, list, calendar, chart), pickers, formula
+  lib/db/                database views (table, board, gallery, list, calendar, chart, timeline, form), pickers, formula
                          language, query engine (filters, sorts, groups), templates, CSV, order keys
   lib/editor/            TipTap editor: slash menu, @-links, block handle, callouts, file blocks…
   lib/views/             Home, Assignments, Calendar (month and week), Files and tag pages
@@ -137,7 +142,7 @@ src-tauri/src/
   organize.rs            tags, backlinks, to-dos rolled up from pages (+ tests)
   commands.rs            Tauri commands
   cards.rs               flashcards: decks, reviews (+ tests)
-  databases.rs           database schemas, properties, views, rows, merging copies (+ tests)
+  databases.rs           database schemas, properties, views, automations, rows and templates, merging copies (+ tests)
   sync.rs                device id, hybrid logical clocks, outbox
   files.rs               `tdfile://` protocol (byte ranges), stray-file cleanup
   stress.rs              heavy-workspace benchmark (`cargo test --release stress -- --ignored`)
