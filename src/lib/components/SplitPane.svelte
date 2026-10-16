@@ -4,6 +4,7 @@
    * with its own header (swap sides, open it full, close). Empty, it offers
    * recent pages and a search to pick one.
    */
+  import { dragLater, endDrag } from './TreeItem.svelte';
   import { tick } from 'svelte';
   import Icon from './Icon.svelte';
   import PageIcon from './PageIcon.svelte';
@@ -77,7 +78,18 @@
 <section class="pane" aria-label="Side page">
   <header class="pane-head">
     {#if showing}
-      <button class="title" onclick={() => split.expand()} data-tip="Open in the main view">
+      <button
+        class="title"
+        draggable="true"
+        onclick={() => split.expand()}
+        ondragstart={(e) => {
+          const id = showing.id;
+          e.dataTransfer?.setData('text/plain', showing.title || 'Untitled');
+          dragLater(id, 'side');
+        }}
+        ondragend={endDrag}
+        data-tip="Drag to the left, or click, to open in the main view"
+      >
         <span class="lead">{#if showing.icon}<PageIcon icon={showing.icon} />{:else}<Icon name={showing.kind === 'database' ? 'database' : 'page'} size={14} />{/if}</span>
         <span class="name">{showing.title || 'Untitled'}</span>
       </button>

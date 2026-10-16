@@ -1,6 +1,30 @@
 <script lang="ts" module>
-  /** The page being dragged in the sidebar (shared by every row). */
-  export const drag = $state<{ id: string | null }>({ id: null });
+  /**
+   * The page being dragged (shared by every row): from the sidebar, or from
+   * the title bar or the side pane's header (`from`), which only split view
+   * takes; the tree ignores those.
+   */
+  export const drag = $state<{ id: string | null; from?: 'main' | 'side' }>({ id: null });
+
+  let pending = 0;
+  /**
+   * Starts a drag from something the drop targets cover (title bar, side
+   * pane header) a tick later: showing them in the same moment the drag
+   * starts makes Chromium cancel it. A drag that's already over is left alone.
+   */
+  export function dragLater(id: string, from: 'main' | 'side') {
+    const mine = ++pending;
+    setTimeout(() => {
+      if (mine === pending) Object.assign(drag, { id, from });
+    });
+  }
+
+  /** Ends any drag (also cancels one still waiting to start). */
+  export function endDrag() {
+    pending++;
+    drag.id = null;
+    drag.from = undefined;
+  }
 </script>
 
 <script lang="ts">
@@ -50,6 +74,7 @@
   function onDragStart(e: DragEvent) {
     if (favorite || !e.dataTransfer) return;
     drag.id = page.id;
+    drag.from = undefined;
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', page.title || 'Untitled');
   }
@@ -61,7 +86,7 @@
 
   function onDragOver(e: DragEvent) {
     const id = drag.id;
-    if (favorite || !id || store.isInside(page.id, id)) return;
+    if (favorite || !id || drag.from || store.isInside(page.id, id)) return;
     e.preventDefault();
     if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();

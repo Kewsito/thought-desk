@@ -55,7 +55,7 @@
 
   // Dropping below the tree moves a page to the end of the top level.
   function onRootDragOver(e: DragEvent) {
-    if (!drag.id) return;
+    if (!drag.id || drag.from) return;
     e.preventDefault();
     rootDrop = true;
   }
@@ -63,7 +63,7 @@
   function onRootDrop(e: DragEvent) {
     rootDrop = false;
     const id = drag.id;
-    if (!id) return;
+    if (!id || drag.from) return;
     e.preventDefault();
     const count = store.roots.filter((p) => p.id !== id).length;
     void store.move(id, null, count);
@@ -232,6 +232,7 @@
                   oncontextmenu={(e) => dbMenu(e, d.id)}
                   ondragstart={(e) => {
                     drag.id = d.id;
+                    drag.from = undefined;
                     e.dataTransfer?.setData('text/plain', d.title || 'Untitled database');
                   }}
                   ondragend={() => (drag.id = null)}

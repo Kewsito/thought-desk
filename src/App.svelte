@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SplitDrop from './lib/components/SplitDrop.svelte';
   import Logo from './lib/components/Logo.svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
@@ -374,6 +375,7 @@
         <SplitPane />
       </div>
     {/if}
+    <SplitDrop tiled={showSplit} narrow={panesWidth < 720} />
     </div>
   </main>
 </div>
@@ -509,6 +511,7 @@
     opacity: 0;
   }
   .panes {
+    position: relative;
     transition: padding var(--dur) var(--ease);
   }
   .panes.split {

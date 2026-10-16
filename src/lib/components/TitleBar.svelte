@@ -5,7 +5,7 @@
   import Icon from './Icon.svelte';
   import WindowControls from './WindowControls.svelte';
   import { changeLook } from '../look-transition';
-  import { drag } from './TreeItem.svelte';
+  import { drag, dragLater, endDrag } from './TreeItem.svelte';
   import { prefs } from '../prefs.svelte';
   import { store } from '../store.svelte';
   import { ui } from '../ui.svelte';
@@ -129,7 +129,18 @@
       {#if c === null}
         <span class="gap" data-tauri-drag-region>…</span>
       {:else}
-        <button class="crumb" class:current={i === crumbs.length - 1} onclick={() => store.open(c.id)}>
+        <button
+          class="crumb"
+          class:current={i === crumbs.length - 1}
+          onclick={() => store.open(c.id)}
+          draggable={i === crumbs.length - 1}
+          ondragstart={(e) => {
+            const id = c.id;
+            e.dataTransfer?.setData('text/plain', c.title || 'Untitled');
+            dragLater(id, 'main');
+          }}
+          ondragend={endDrag}
+        >
           {#if c.icon}<span class="emoji"><PageIcon icon={c.icon} /></span>{:else if c.kind === 'database'}<Icon name="database" size={13} />{/if}
           <span class="crumb-title">{c.title || (c.kind === 'database' ? 'Untitled database' : 'Untitled')}</span>
         </button>

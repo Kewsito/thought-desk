@@ -61,6 +61,32 @@ class Split {
     if (id) store.open(id);
   }
 
+  /**
+   * A page dropped on one side of the page area. `from` is where the drag
+   * started: the sidebar (undefined), the main page's title, or the side
+   * pane's header. A page never ends up on both sides.
+   */
+  drop(id: string, from: 'main' | 'side' | undefined, target: 'main' | 'side') {
+    const mainPage = store.view === 'page' ? store.currentId : null;
+    if (target === 'side') {
+      if (from === 'side') return;
+      // The main page moves over: trade places, or leave the main side for
+      // where you were before.
+      if (from === 'main' || id === mainPage) {
+        if (this.pageId && this.open) return this.swap();
+        this.show(id);
+        if (store.canGoBack) store.back();
+        else store.go('home');
+        return;
+      }
+      this.show(id);
+    } else {
+      if (from === 'main') return;
+      if (from === 'side' || (this.open && id === this.pageId)) return this.swap();
+      store.open(id);
+    }
+  }
+
   /** The two sides trade places. */
   swap() {
     const side = this.pageId;
