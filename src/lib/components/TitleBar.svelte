@@ -5,7 +5,7 @@
   import Icon from './Icon.svelte';
   import WindowControls from './WindowControls.svelte';
   import { changeLook } from '../look-transition';
-  import { drag, dragLater, endDrag } from './TreeItem.svelte';
+  import { drag, dragLater, endDrag, pageDragImage } from './TreeItem.svelte';
   import { prefs } from '../prefs.svelte';
   import { store } from '../store.svelte';
   import { ui } from '../ui.svelte';
@@ -137,6 +137,7 @@
           ondragstart={(e) => {
             const id = c.id;
             e.dataTransfer?.setData('text/plain', c.title || 'Untitled');
+            pageDragImage(e, c.title, c.icon);
             dragLater(id, 'main');
           }}
           ondragend={endDrag}

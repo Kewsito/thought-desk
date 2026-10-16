@@ -1506,6 +1506,34 @@ input[type='time']::-webkit-calendar-picker-indicator {
   padding: 10px;
 }
 
+/* The pill that follows the pointer while a page is dragged (pageDragImage). */
+.drag-chip {
+  position: fixed;
+  top: -200px;
+  left: -400px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 260px;
+  height: 32px;
+  padding: 0 14px 0 10px;
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  font: var(--fw-500) 13px/1 var(--font-ui);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 0 0 1px var(--hairline);
+}
+.drag-chip-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  font-size: 15px;
+  color: var(--text-2);
+}
+
 /* A page's line icon (PageIcon), sized like the emoji it stands in for. */
 .page-glyph {
   display: inline-block;

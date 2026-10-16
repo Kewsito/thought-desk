@@ -1,171 +1,182 @@
 <script lang="ts">
   /**
-   * Drop targets over the page area while a page is dragged (from the
-   * sidebar, the title bar or the side pane's header): the left opens it
-   * here, the right beside, in split view. They also keep the drop out of
-   * the editor, which would paste the page's name as text.
+   * Dropping a dragged page (from the sidebar, the title bar or the side
+   * pane's header) into split view. Nothing shows until the pointer is over
+   * the page area; then a ghost outlines where the page will land (the main
+   * side, or the side pane) with a small label, and glides between them as
+   * you move. The layer also keeps drops out of the editor, which would
+   * paste the page's name as text.
    */
   import Icon from './Icon.svelte';
-  import PageIcon from './PageIcon.svelte';
   import { drag, endDrag } from './TreeItem.svelte';
   import { split } from '../split.svelte';
   import { store } from '../store.svelte';
 
   let { tiled, narrow }: { tiled: boolean; narrow: boolean } = $props();
-  let over = $state<'main' | 'side' | null>(null);
+
+  type Target = 'main' | 'side';
+  let layer = $state<HTMLDivElement>();
+  let target = $state<Target | null>(null);
+  let ghost = $state({ left: 0, top: 0, width: 0, height: 0 });
 
   const page = $derived(drag.id ? store.byId.get(drag.id) : undefined);
-  const mainLabel = $derived(drag.from === 'side' ? 'Move here' : 'Open here');
-  const sideLabel = $derived(drag.from === 'main' || (drag.id && drag.id === store.currentId && store.view === 'page') ? 'Move to the side' : 'Open beside');
+  const label = $derived(
+    target === 'main'
+      ? drag.from === 'side'
+        ? 'Move here'
+        : 'Open here'
+      : drag.from === 'main' || (drag.id === store.currentId && store.view === 'page')
+        ? 'Move to the side'
+        : 'Open beside',
+  );
 
-  function onover(e: DragEvent, target: 'main' | 'side') {
-    e.preventDefault();
-    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
-    over = target;
+  /** Where the pointer is, which side that means, and the outline of where the page would go. */
+  function locate(e: DragEvent) {
+    const panes = layer?.parentElement;
+    if (!panes) return null;
+    const box = panes.getBoundingClientRect();
+    const x = e.clientX - box.left;
+    const inset = 10;
+    let want: Target;
+    let rect: DOMRect | { left: number; top: number; width: number; height: number };
+    if (tiled) {
+      const sideEl = panes.querySelector<HTMLElement>(':scope > .side');
+      const mainEl = panes.querySelector<HTMLElement>(':scope > .scroller');
+      const sideBox = sideEl?.getBoundingClientRect();
+      want = sideBox && e.clientX >= sideBox.left - 5 ? 'side' : 'main';
+      const r = (want === 'side' ? sideBox : mainEl?.getBoundingClientRect()) ?? box;
+      rect = { left: r.left - box.left, top: r.top - box.top, width: r.width, height: r.height };
+    } else {
+      want = !narrow && x > box.width / 2 ? 'side' : 'main';
+      const w = box.width - inset * 2;
+      // The page alone fills the area; beside it takes the split's share.
+      const sideW = Math.round(w * split.ratio);
+      rect =
+        want === 'side'
+          ? { left: box.width - inset - sideW, top: inset, width: sideW, height: box.height - inset * 2 }
+          : { left: inset, top: inset, width: w, height: box.height - inset * 2 };
+    }
+    // Nothing to do dropping a page back where it came from.
+    if ((want === 'main' && drag.from === 'main') || (want === 'side' && drag.from === 'side')) return null;
+    return { want, rect };
   }
 
-  function ondrop(e: DragEvent, target: 'main' | 'side') {
+  function ondragover(e: DragEvent) {
     e.preventDefault();
+    const hit = locate(e);
+    if (e.dataTransfer) e.dataTransfer.dropEffect = hit ? 'move' : 'none';
+    target = hit?.want ?? null;
+    if (hit) ghost = { left: hit.rect.left, top: hit.rect.top, width: hit.rect.width, height: hit.rect.height };
+  }
+
+  function ondrop(e: DragEvent) {
+    e.preventDefault();
+    const hit = locate(e);
     const { id, from } = drag;
-    over = null;
+    target = null;
     endDrag();
-    if (id) split.drop(id, from, target);
+    if (id && hit) split.drop(id, from, hit.want);
   }
 </script>
 
-<!-- However a drag ends (dropped elsewhere, Esc), the targets go. -->
+<!-- However a drag ends (dropped elsewhere, Esc), the layer goes. -->
 <svelte:window ondragend={() => drag.id && endDrag()} />
 
 {#if page}
-  <div class="drop" class:tiled>
-    {#if drag.from !== 'main'}
-      <div
-        class="zone"
-        class:over={over === 'main'}
-        role="region"
-        aria-label={mainLabel}
-        ondragover={(e) => onover(e, 'main')}
-        ondragleave={() => over === 'main' && (over = null)}
-        ondrop={(e) => ondrop(e, 'main')}
-      >
-        <div class="label">
-          <span class="ico"><Icon name="page" size={18} /></span>
-          <strong>{mainLabel}</strong>
-          <span class="what">{#if page.icon}<PageIcon icon={page.icon} />{/if} {page.title || 'Untitled'}</span>
-        </div>
+  <div
+    class="layer"
+    bind:this={layer}
+    role="region"
+    aria-label="Drop to open {page.title || 'Untitled'}"
+    {ondragover}
+    ondragleave={(e) => !layer?.contains(e.relatedTarget as Node) && (target = null)}
+    {ondrop}
+  >
+    <div
+      class="ghost"
+      class:shown={!!target}
+      style:left="{ghost.left}px"
+      style:top="{ghost.top}px"
+      style:width="{ghost.width}px"
+      style:height="{ghost.height}px"
+    >
+      <div class="pill">
+        <Icon name={target === 'side' ? 'split' : 'page'} size={14} />
+        <span class="verb">{label}</span>
+        <span class="name">{page.title || 'Untitled'}</span>
       </div>
-    {:else}
-      <div class="zone idle"></div>
-    {/if}
-    {#if !narrow}
-      {#if drag.from !== 'side'}
-        <div
-          class="zone side"
-          class:over={over === 'side'}
-          style:width={tiled ? `${split.ratio * 100}%` : '50%'}
-          role="region"
-          aria-label={sideLabel}
-          ondragover={(e) => onover(e, 'side')}
-          ondragleave={() => over === 'side' && (over = null)}
-          ondrop={(e) => ondrop(e, 'side')}
-        >
-          <div class="label">
-            <span class="ico"><Icon name="split" size={18} /></span>
-            <strong>{sideLabel}</strong>
-            <span class="what">{#if page.icon}<PageIcon icon={page.icon} />{/if} {page.title || 'Untitled'}</span>
-          </div>
-        </div>
-      {:else}
-        <div class="zone side idle" style:width={tiled ? `${split.ratio * 100}%` : '50%'}></div>
-      {/if}
-    {/if}
+    </div>
   </div>
 {/if}
 
 <style>
-  .drop {
+  .layer {
     position: absolute;
     inset: 0;
     z-index: 20;
+  }
+  /* Where the page will go: a soft tinted outline, never a slab. */
+  .ghost {
+    position: absolute;
     display: flex;
-    gap: 10px;
-    padding: 10px;
-    animation: appear 140ms var(--ease) both;
-  }
-  .drop.tiled {
-    padding: 2px 10px 10px;
-  }
-  @keyframes appear {
-    from {
-      opacity: 0;
-    }
-  }
-  .zone {
-    flex: 1;
-    min-width: 0;
-    display: grid;
-    place-items: center;
+    justify-content: center;
+    align-items: flex-start;
+    padding-top: 16px;
     border-radius: var(--r-lg);
-    background: color-mix(in srgb, var(--bg) 55%, transparent);
-    -webkit-backdrop-filter: blur(2px);
-    backdrop-filter: blur(2px);
-    box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--text) 14%, transparent);
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
+    box-shadow:
+      inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 38%, transparent),
+      0 0 0 4px color-mix(in srgb, var(--accent) 7%, transparent);
+    -webkit-backdrop-filter: saturate(1.1) blur(1.5px);
+    backdrop-filter: saturate(1.1) blur(1.5px);
+    opacity: 0;
+    transform: scale(0.985);
+    pointer-events: none;
     transition:
-      background-color var(--dur-fast) var(--ease),
-      box-shadow var(--dur-fast) var(--ease);
+      left 200ms var(--ease-out),
+      top 200ms var(--ease-out),
+      width 200ms var(--ease-out),
+      height 200ms var(--ease-out),
+      opacity 140ms var(--ease),
+      transform 200ms var(--ease-out);
   }
-  .zone.side {
-    flex: none;
+  .ghost.shown {
+    opacity: 1;
+    transform: none;
   }
-  .zone.idle {
-    background: transparent;
-    box-shadow: none;
-    backdrop-filter: none;
-    pointer-events: none;
-  }
-  .zone.over {
-    background: color-mix(in srgb, var(--accent) 10%, var(--bg));
-    box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
-  }
-  /* The label never takes the pointer, so moving over it doesn't flicker. */
-  .label {
-    display: flex;
-    flex-direction: column;
+  .pill {
+    display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 18px 22px;
-    border-radius: var(--r-lg);
+    gap: 7px;
+    max-width: calc(100% - 32px);
+    height: 30px;
+    padding: 0 13px 0 10px;
+    border-radius: 999px;
     background: var(--bg-elevated);
-    box-shadow: var(--shadow-pop);
-    pointer-events: none;
-    transition: transform var(--dur-fast) var(--ease);
-  }
-  .zone.over .label {
-    transform: scale(1.04);
-  }
-  .ico {
-    display: grid;
-    place-items: center;
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    background: var(--fill-2);
+    box-shadow:
+      0 0 0 0.5px var(--hairline),
+      0 4px 14px -4px rgb(0 0 0 / 0.18);
+    font-size: var(--fs-ui);
     color: var(--text-2);
-  }
-  .zone.over .ico {
-    background: var(--accent);
-    color: var(--on-accent);
-  }
-  strong {
-    font-size: var(--fs-body-ui);
-    font-weight: var(--fw-600, 600);
-  }
-  .what {
-    max-width: 220px;
-    overflow: hidden;
     white-space: nowrap;
+  }
+  .verb {
+    font-weight: var(--fw-600, 600);
+    color: var(--text);
+  }
+  .name {
+    min-width: 0;
+    overflow: hidden;
     text-overflow: ellipsis;
-    font-size: var(--fs-footnote);
     color: var(--text-3);
+  }
+  .name::before {
+    content: '·';
+    margin-right: 7px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ghost {
+      transition: opacity 80ms linear;
+    }
   }
 </style>

@@ -1,4 +1,5 @@
 <script lang="ts" module>
+  import { renderIcon } from '../page-icon';
   /**
    * The page being dragged (shared by every row): from the sidebar, or from
    * the title bar or the side pane's header (`from`), which only split view
@@ -17,6 +18,29 @@
     setTimeout(() => {
       if (mine === pending) Object.assign(drag, { id, from });
     });
+  }
+
+  const PAGE_GLYPH = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5Z"/><path d="M14 2v6h6"/></svg>';
+
+  /**
+   * What follows the pointer while a page is dragged: a small pill with its
+   * icon and name, instead of a snapshot of whatever row it came from.
+   */
+  export function pageDragImage(e: DragEvent, title: string, icon?: string | null) {
+    if (!e.dataTransfer) return;
+    const chip = document.createElement('div');
+    chip.className = 'drag-chip';
+    const ico = document.createElement('span');
+    ico.className = 'drag-chip-icon';
+    if (icon) renderIcon(ico, icon);
+    else ico.innerHTML = PAGE_GLYPH;
+    const name = document.createElement('span');
+    name.textContent = title || 'Untitled';
+    chip.append(ico, name);
+    document.body.appendChild(chip);
+    e.dataTransfer.setDragImage(chip, 16, 16);
+    // The browser has its picture once this event is over.
+    setTimeout(() => chip.remove());
   }
 
   /** Ends any drag (also cancels one still waiting to start). */
@@ -77,6 +101,7 @@
     drag.from = undefined;
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', page.title || 'Untitled');
+    pageDragImage(e, page.title, page.icon);
   }
 
   function onDragEnd() {

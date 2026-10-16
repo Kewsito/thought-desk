@@ -4,7 +4,7 @@
    * with its own header (swap sides, open it full, close). Empty, it offers
    * recent pages and a search to pick one.
    */
-  import { dragLater, endDrag } from './TreeItem.svelte';
+  import { dragLater, endDrag, pageDragImage } from './TreeItem.svelte';
   import { tick } from 'svelte';
   import Icon from './Icon.svelte';
   import PageIcon from './PageIcon.svelte';
@@ -85,6 +85,7 @@
         ondragstart={(e) => {
           const id = showing.id;
           e.dataTransfer?.setData('text/plain', showing.title || 'Untitled');
+          pageDragImage(e, showing.title, showing.icon);
           dragLater(id, 'side');
         }}
         ondragend={endDrag}

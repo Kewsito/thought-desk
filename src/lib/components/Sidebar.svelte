@@ -2,7 +2,7 @@
   import Logo from './Logo.svelte';
   import PageIcon from './PageIcon.svelte';
   import Icon from './Icon.svelte';
-  import TreeItem, { drag } from './TreeItem.svelte';
+  import TreeItem, { drag, pageDragImage } from './TreeItem.svelte';
   import { prefs } from '../prefs.svelte';
   import { store, type AppView } from '../store.svelte';
   import { tags } from '../tags.svelte';
@@ -234,6 +234,7 @@
                     drag.id = d.id;
                     drag.from = undefined;
                     e.dataTransfer?.setData('text/plain', d.title || 'Untitled database');
+                    pageDragImage(e, d.title || 'Untitled database', d.icon);
                   }}
                   ondragend={() => (drag.id = null)}
                 >
