@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { paneSize } from './lib/pane-size';
   import SplitDrop from './lib/components/SplitDrop.svelte';
   import Logo from './lib/components/Logo.svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -124,7 +125,6 @@
 
   // Split view: hidden while the window is too narrow for two pages.
   let panesWidth = $state(0);
-  let mainWidth = $state(0);
   let resizing = $state(false);
   /** The side being worked in, marked so it's clear where typing goes. */
   let activePane = $state<'main' | 'side'>('main');
@@ -320,7 +320,7 @@
     <div class="panes" class:split={showSplit || previewing} style:padding-right={makeRoom ? `${makeRoom}px` : null} bind:clientWidth={panesWidth}>
     <!-- Clicking or focusing a side marks it as the one in use (not an action). -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="scroller" class:active={showSplit && activePane === 'main'} class:targeted={split.preview === 'main'} onfocusin={() => (activePane = 'main')} onpointerdown={() => (activePane = 'main')} data-nav={store.navDirection} bind:this={scroller} bind:clientWidth={mainWidth} style:--pane-w={mainWidth ? `${mainWidth}px` : null} onscroll={() => (scrolled = (scroller?.scrollTop ?? 0) > 2)}>
+    <div class="scroller" class:active={showSplit && activePane === 'main'} class:targeted={split.preview === 'main'} onfocusin={() => (activePane = 'main')} onpointerdown={() => (activePane = 'main')} data-nav={store.navDirection} bind:this={scroller} use:paneSize onscroll={() => (scrolled = (scroller?.scrollTop ?? 0) > 2)}>
       {#if store.view === 'home'}
         {#if planner.loaded && library.loaded}<HomeView />{/if}
       {:else if store.view === 'tag' && store.tag}

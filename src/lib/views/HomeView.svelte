@@ -383,9 +383,8 @@
     font-variant-numeric: tabular-nums;
   }
 
-  @media (max-width: 980px) {
-    .columns {
-      grid-template-columns: minmax(0, 1fr);
-    }
+  /* One column when the pane is narrow (pane-size.ts). */
+  :global([data-below-720]) .columns {
+    grid-template-columns: minmax(0, 1fr);
   }
 </style>

@@ -448,9 +448,7 @@
     font-size: var(--fs-callout);
     font-weight: var(--fw-600);
   }
-  @media (max-width: 900px) {
-    .f-date {
-      display: none;
-    }
+  :global([data-below-640]) .f-date {
+    display: none;
   }
 </style>

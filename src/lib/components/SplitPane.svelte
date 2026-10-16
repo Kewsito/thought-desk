@@ -4,6 +4,7 @@
    * with its own header (swap sides, open it full, close). Empty, it offers
    * recent pages and a search to pick one.
    */
+  import { paneSize } from '../pane-size';
   import { dragLater, endDrag, pageDragImage } from './TreeItem.svelte';
   import { tick } from 'svelte';
   import Icon from './Icon.svelte';
@@ -21,7 +22,6 @@
   let page = $state<Page | null>(null);
   let scroller = $state<HTMLDivElement>();
   let query = $state('');
-  let width = $state(0);
   let searchEl = $state<HTMLInputElement>();
 
   const meta = $derived(split.pageId ? store.byId.get(split.pageId) : undefined);
@@ -106,7 +106,7 @@
     </div>
   </header>
 
-  <div class="pane-scroller" bind:this={scroller} bind:clientWidth={width} style:--pane-w={width ? `${width}px` : null}>
+  <div class="pane-scroller" bind:this={scroller} use:paneSize>
     {#if showing?.kind === 'database'}
       {#if databases.loaded}
         {#key showing.id}<DatabaseView id={showing.id} />{/key}

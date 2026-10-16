@@ -258,8 +258,8 @@
     min-height: 600px;
     padding-top: 36px;
     padding-bottom: 28px;
-    padding-left: clamp(24px, 4vw, 48px);
-    padding-right: clamp(24px, 4vw, 48px);
+    padding-left: clamp(20px, calc(var(--pane-w, 100vw) * 0.04), 48px);
+    padding-right: clamp(20px, calc(var(--pane-w, 100vw) * 0.04), 48px);
   }
   .year {
     font-weight: var(--fw-400);
@@ -378,22 +378,22 @@
     color: var(--text-3);
   }
 
-  @media (max-width: 1080px) {
-    .cal:has(.body:not(.week)) {
-      height: auto;
-    }
-    .body:not(.week) {
-      flex-direction: column;
-    }
-    .body:not(.week) .grid-wrap {
-      flex: none;
-      height: 620px;
-    }
-    .panel {
-      width: auto;
-      overflow: visible;
-      margin: 0;
-      padding: 0 0 24px;
-    }
+  /* The day panel goes under the month when the pane is narrow (pane-size.ts). */
+  :global([data-below-820]) .cal:has(.body:not(.week)) {
+    height: auto;
   }
+  :global([data-below-820]) .body:not(.week) {
+    flex-direction: column;
+  }
+  :global([data-below-820]) .body:not(.week) .grid-wrap {
+    flex: none;
+    height: 620px;
+  }
+  :global([data-below-820]) .panel {
+    width: auto;
+    overflow: visible;
+    margin: 0;
+    padding: 0 0 24px;
+  }
+
 </style>
