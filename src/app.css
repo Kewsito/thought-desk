@@ -172,6 +172,11 @@
   color-scheme: light;
 }
 
+/* A page's margins follow the pane it's in (split view), not the window. */
+[style*='--pane-w'] {
+  --page-pad: clamp(28px, calc(var(--pane-w) * 0.09), 112px);
+}
+
 :root[data-theme='dark'] {
   --fw-400: 400;
   --fw-500: 470;

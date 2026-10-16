@@ -34,7 +34,8 @@ const Shortcuts = Extension.create({
         // Only selected text gets a link; otherwise Ctrl+K is search.
         const sel = editor.state.selection;
         if (sel.empty || !(sel instanceof TextSelection)) return false;
-        window.dispatchEvent(new CustomEvent('td:edit-link'));
+        // Only this editor's bubble menu answers (with two pages open side by side).
+        window.dispatchEvent(new CustomEvent('td:edit-link', { detail: { editor } }));
         return true;
       },
       'Mod-d': ({ editor }) => {

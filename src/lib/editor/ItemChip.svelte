@@ -3,6 +3,7 @@
    * A link to a page, assignment, event or file inside a page. Pages show as
    * an underlined title; assignments carry a live check and due date.
    */
+  import { split } from '../split.svelte';
   import PageIcon from '../components/PageIcon.svelte';
   import Icon from '../components/Icon.svelte';
   import StatusCheck from '../ui/StatusCheck.svelte';
@@ -39,7 +40,11 @@
     e.preventDefault();
     e.stopPropagation();
     if (missing) return;
-    if (kind === 'page') store.open(id);
+    if (kind === 'page') {
+      // Alt+click opens the page beside this one.
+      if ((e as MouseEvent).altKey) split.show(id);
+      else store.open(id);
+    }
     else if (kind === 'assignment') planner.openAssignment(id);
     else if (kind === 'event') planner.openEvent(id, date);
     else library.preview(id);

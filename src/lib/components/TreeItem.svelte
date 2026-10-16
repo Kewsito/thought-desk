@@ -4,6 +4,7 @@
 </script>
 
 <script lang="ts">
+  import { split } from '../split.svelte';
   import PageIcon from './PageIcon.svelte';
   import Icon from './Icon.svelte';
   import TreeItem from './TreeItem.svelte';
@@ -112,8 +113,8 @@
   aria-expanded={kids.length ? expanded : undefined}
   tabindex="0"
   draggable={!favorite}
-  onclick={() => store.open(page.id)}
-  onkeydown={(e) => e.key === 'Enter' && store.open(page.id)}
+  onclick={(e) => (e.altKey ? split.show(page.id) : store.open(page.id))}
+  onkeydown={(e) => e.key === 'Enter' && (e.altKey ? split.show(page.id) : store.open(page.id))}
   oncontextmenu={menu}
   ondragstart={onDragStart}
   ondragend={onDragEnd}

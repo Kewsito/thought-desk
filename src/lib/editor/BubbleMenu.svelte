@@ -68,7 +68,8 @@
       });
     };
     editor.on('transaction', bump);
-    const onEditLink = () => {
+    const onEditLink = (e: Event) => {
+      if ((e as CustomEvent<{ editor?: Editor }>).detail?.editor !== editor) return;
       if (!editor.state.selection.empty) void startLink();
     };
     window.addEventListener('td:edit-link', onEditLink);

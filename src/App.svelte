@@ -23,6 +23,8 @@
   import SettingsModal from './lib/components/SettingsModal.svelte';
   import ShortcutsHelp from './lib/components/ShortcutsHelp.svelte';
   import Welcome from './lib/components/Welcome.svelte';
+  import SplitPane from './lib/components/SplitPane.svelte';
+  import { split } from './lib/split.svelte';
   import { changeLook } from './lib/look-transition';
   import TrashModal from './lib/components/TrashModal.svelte';
   import Menu from './lib/components/Menu.svelte';
@@ -99,6 +101,7 @@
     theme: () => changeLook(() => prefs.toggleTheme(), 'keyboard'),
     settings: () => (ui.settingsOpen = true),
     help: () => (ui.shortcutsHelp = !ui.shortcutsHelp),
+    split: () => split.toggle(),
     back: () => store.back(),
     forward: () => store.forward(),
     goHome: () => store.go('home'),
@@ -117,6 +120,36 @@
     if (scroller) scroller.scrollTop = 0;
     scrolled = false;
   });
+
+  // Split view: hidden while the window is too narrow for two pages.
+  let panesWidth = $state(0);
+  let mainWidth = $state(0);
+  let resizing = $state(false);
+  const showSplit = $derived(split.open && panesWidth >= 720);
+
+  function startResize(e: PointerEvent) {
+    const divider = e.currentTarget as HTMLElement;
+    const box = divider.parentElement!.getBoundingClientRect();
+    divider.setPointerCapture(e.pointerId);
+    resizing = true;
+    const move = (ev: PointerEvent) => (split.ratio = (box.right - ev.clientX) / box.width);
+    const up = () => {
+      resizing = false;
+      divider.removeEventListener('pointermove', move);
+      divider.removeEventListener('pointerup', up);
+    };
+    divider.addEventListener('pointermove', move);
+    divider.addEventListener('pointerup', up);
+  }
+
+  /** The side pane slides in from the right edge. */
+  function splitIn(node: HTMLElement) {
+    const w = node.getBoundingClientRect().width;
+    return { duration: matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 260, css: (t: number) => `opacity:${t}; margin-right:${-(1 - t) * w * 0.35}px` };
+  }
+  function splitOut(_node: Element) {
+    return { duration: matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 160, css: (t: number) => `opacity:${t}` };
+  }
 
   /** Saves everything that's waiting to be written. */
   const flushAll = () => Promise.all([store.flush(), planner.flush(), databases.flush()]);
@@ -277,7 +310,8 @@
   {/if}
   <main class="main">
     <TitleBar {words} {scrolled} />
-    <div class="scroller" data-nav={store.navDirection} bind:this={scroller} onscroll={() => (scrolled = (scroller?.scrollTop ?? 0) > 2)}>
+    <div class="panes" bind:clientWidth={panesWidth}>
+    <div class="scroller" data-nav={store.navDirection} bind:this={scroller} bind:clientWidth={mainWidth} style:--pane-w={mainWidth ? `${mainWidth}px` : null} onscroll={() => (scrolled = (scroller?.scrollTop ?? 0) > 2)}>
       {#if store.view === 'home'}
         {#if planner.loaded && library.loaded}<HomeView />{/if}
       {:else if store.view === 'tag' && store.tag}
@@ -312,6 +346,29 @@
           </button>
         </div>
       {/if}
+    </div>
+    {#if showSplit}
+      <!-- A focusable separator is a resize control (arrow keys move it). -->
+      <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+      <div
+        class="divider"
+        class:dragging={resizing}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize split view"
+        aria-valuenow={Math.round((1 - split.ratio) * 100)}
+        tabindex="0"
+        onpointerdown={startResize}
+        ondblclick={() => (split.ratio = 0.5)}
+        onkeydown={(e) => {
+          if (e.key === 'ArrowLeft') split.ratio += 0.02;
+          else if (e.key === 'ArrowRight') split.ratio -= 0.02;
+        }}
+      ></div>
+      <div class="side" style:width="{split.ratio * 100}%" in:splitIn out:splitOut>
+        <SplitPane />
+      </div>
+    {/if}
     </div>
   </main>
 </div>
@@ -419,11 +476,54 @@
     flex-direction: column;
     background: var(--bg);
   }
+  .panes {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+  }
   .scroller {
     flex: 1;
+    min-width: 0;
     overflow-y: auto;
     overflow-x: hidden;
     scrollbar-gutter: stable;
+  }
+  /* The line between the two sides; its grab area is wider than it looks. */
+  .divider {
+    position: relative;
+    flex: none;
+    width: 1px;
+    background: var(--separator);
+    cursor: col-resize;
+    outline: none;
+    z-index: 2;
+  }
+  .divider::before {
+    content: '';
+    position: absolute;
+    inset: 0 -5px;
+  }
+  .divider::after {
+    content: '';
+    position: absolute;
+    inset: 0 -1px;
+    background: var(--accent);
+    opacity: 0;
+    transition: opacity var(--dur-fast) var(--ease);
+  }
+  .divider:hover::after,
+  .divider:focus-visible::after,
+  .divider.dragging::after {
+    opacity: 1;
+  }
+  .side {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .side > :global(.pane) {
+    flex: 1;
   }
   .empty {
     height: 100%;

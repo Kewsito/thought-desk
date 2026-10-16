@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { split } from '../split.svelte';
   import PageIcon from './PageIcon.svelte';
   import { onMount } from 'svelte';
   import Icon from './Icon.svelte';
@@ -163,6 +164,9 @@
     <span class="divider"></span>
   {/if}
   <div class="app-tools">
+    <button class="icon-btn" class:on={split.open} onclick={() => split.toggle()} data-tip={split.open ? 'Close split view' : 'Split view'} data-tip-key={shortcuts.label('split')} aria-label="Split view" aria-pressed={split.open}>
+      <Icon name="split" size={15} />
+    </button>
     <button class="icon-btn" onclick={cycleTheme} data-tip="Appearance: {themeLabel}" data-tip-key={shortcuts.label('theme')} aria-label="Appearance: {themeLabel}">
       <Icon name={themeIcon} size={15} />
     </button>

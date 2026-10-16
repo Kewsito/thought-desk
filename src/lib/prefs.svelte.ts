@@ -63,6 +63,10 @@ interface Stored {
   name: string;
   /** The welcome screen has been gone through (or this install predates it). */
   welcomed: boolean;
+  /** Split view: whether the side pane is open, what it shows, and its share of the width. */
+  splitOpen: boolean;
+  splitPageId: string | null;
+  splitRatio: number;
   remindAssignments: RemindAssignments;
   remindEvents: RemindEvents;
   /** The user's own shortcuts; null turns one off. Missing: the default. */
@@ -112,6 +116,9 @@ const defaults: Stored = {
   setupHidden: false,
   name: '',
   welcomed: false,
+  splitOpen: false,
+  splitPageId: null,
+  splitRatio: 0.5,
   remindAssignments: 'evening',
   remindEvents: 10,
   shortcuts: {},
@@ -166,6 +173,9 @@ class Prefs {
   setupHidden = $state(this.#initial.setupHidden);
   name = $state(this.#initial.name);
   welcomed = $state(this.#initial.welcomed);
+  splitOpen = $state(this.#initial.splitOpen);
+  splitPageId = $state<string | null>(this.#initial.splitPageId);
+  splitRatio = $state(this.#initial.splitRatio);
   remindAssignments = $state<RemindAssignments>(this.#initial.remindAssignments);
   remindEvents = $state<RemindEvents>(this.#initial.remindEvents);
   shortcuts = $state<Partial<Record<ShortcutId, string | null>>>(this.#initial.shortcuts);
@@ -206,6 +216,9 @@ class Prefs {
       setupHidden: this.setupHidden,
       name: this.name,
       welcomed: this.welcomed,
+      splitOpen: this.splitOpen,
+      splitPageId: this.splitPageId,
+      splitRatio: this.splitRatio,
       remindAssignments: this.remindAssignments,
       remindEvents: this.remindEvents,
       shortcuts: $state.snapshot(this.shortcuts),

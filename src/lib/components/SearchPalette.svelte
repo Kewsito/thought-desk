@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { split } from '../split.svelte';
   import PageIcon from './PageIcon.svelte';
   import { colorVar } from '../colors';
   import { importCalendar } from '../ics-import.svelte';
@@ -36,6 +37,8 @@
     meta?: string;
     metaClass?: string;
     run: () => void;
+      /** Alt+Enter: open beside the current page instead. */
+    side?: () => void;
   }
 
   let input: HTMLInputElement;
@@ -139,6 +142,7 @@
         snippet: hit.snippet || undefined,
         meta: relativeTime(hit.updatedAt),
         run: () => store.open(hit.id),
+        side: () => split.show(hit.id),
       }),
     );
     const assignmentRow = (a: (typeof planner.live)[number]): Row => {
@@ -213,6 +217,7 @@
             icon: store.byId.get(row.id)?.icon ? undefined : 'page',
             path: `${store.byId.get(row.dbId)?.title || 'Untitled database'} · ${prop.name}: ${text}`,
             run: () => store.open(row.id),
+            side: () => split.show(row.id),
           }),
         ),
     );
@@ -280,11 +285,12 @@
     return out;
   });
 
-  function choose(i: number) {
+  function choose(i: number, beside = false) {
     const row = rows[i];
     if (!row) return;
     close();
-    row.run();
+    if (beside && row.side) row.side();
+    else row.run();
   }
 
   function onKey(e: KeyboardEvent) {
@@ -297,7 +303,7 @@
       selected = total ? (selected - 1 + total) % total : 0;
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      choose(selected);
+      choose(selected, e.altKey);
     }
   }
 
