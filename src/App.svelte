@@ -495,7 +495,7 @@
   }
   /* Split view, after tiling window managers: each side is a rounded card
      on the sidebar's colour, the gap between them is the divider, and the
-     side in use has an accent border. */
+     side in use has a firmer edge. */
   .main {
     transition: background-color var(--dur) var(--ease);
   }
@@ -518,16 +518,15 @@
   .side {
     border-radius: var(--r-lg);
     background: var(--bg);
-    box-shadow:
-      0 0 0 1px var(--separator-strong),
-      0 1px 2px rgb(0 0 0 / 0.04);
+    box-shadow: 0 0 0 1px var(--hairline);
     transition: box-shadow var(--dur) var(--ease);
   }
+  /* The side in use: a slightly firmer edge and a soft lift, not a bright line. */
   .panes.split .scroller.active,
   .side.active {
     box-shadow:
-      0 0 0 1.5px color-mix(in srgb, var(--accent) 65%, var(--separator-strong)),
-      0 10px 30px -18px rgb(0 0 0 / 0.35);
+      0 0 0 1px color-mix(in srgb, var(--text) 16%, transparent),
+      0 8px 24px -16px rgb(0 0 0 / 0.28);
   }
   .side {
     position: relative;
@@ -555,7 +554,7 @@
     width: 4px;
     height: 36px;
     border-radius: 2px;
-    background: var(--separator-strong);
+    background: var(--hairline);
     transform: translate(-50%, -50%);
     transition:
       background-color var(--dur-fast) var(--ease),
