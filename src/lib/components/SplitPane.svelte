@@ -146,8 +146,7 @@
     height: 44px;
     flex: none;
     padding: 0 8px 0 10px;
-    background: var(--bg-sidebar);
-    box-shadow: inset 0 -1px 0 var(--separator-strong);
+    border-bottom: 1px solid var(--separator);
   }
   .title {
     display: flex;
