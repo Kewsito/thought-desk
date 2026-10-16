@@ -35,7 +35,7 @@
   } = $props();
 
   const multiple = $derived(prop.type === 'multiSelect');
-  const picked = $derived(Array.isArray(value) ? value : value ? [value] : []);
+  const picked = $derived(Array.isArray(value) ? [...new Set(value)] : value ? [value] : []);
   const all = $derived(optionsOf(prop));
   let query = $state(untrack(() => startQuery));
   let active = $state(0);

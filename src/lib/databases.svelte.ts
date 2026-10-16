@@ -78,7 +78,9 @@ export interface CellSet {
 
 const isDateValue = (v: unknown): v is DateValue =>
   !!v && typeof v === 'object' && !Array.isArray(v) && typeof (v as DateValue).start === 'string';
-const asList = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
+/** A list cell's ids, each once: stored lists can repeat one (an import, a
+ *  sync merge), and every list is drawn keyed by id. */
+const asList = (v: unknown): string[] => (Array.isArray(v) ? [...new Set(v.filter((x): x is string => typeof x === 'string'))] : []);
 const pad = (n: number) => String(n).padStart(2, '0');
 const stamp = (ms: number) => {
   const d = new Date(ms);
