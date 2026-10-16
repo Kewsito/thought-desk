@@ -125,6 +125,8 @@
   let panesWidth = $state(0);
   let mainWidth = $state(0);
   let resizing = $state(false);
+  /** The side being worked in, marked so it's clear where typing goes. */
+  let activePane = $state<'main' | 'side'>('main');
   const showSplit = $derived(split.open && panesWidth >= 720);
 
   function startResize(e: PointerEvent) {
@@ -311,7 +313,9 @@
   <main class="main">
     <TitleBar {words} {scrolled} />
     <div class="panes" bind:clientWidth={panesWidth}>
-    <div class="scroller" data-nav={store.navDirection} bind:this={scroller} bind:clientWidth={mainWidth} style:--pane-w={mainWidth ? `${mainWidth}px` : null} onscroll={() => (scrolled = (scroller?.scrollTop ?? 0) > 2)}>
+    <!-- Clicking or focusing a side marks it as the one in use (not an action). -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="scroller" class:active={showSplit && activePane === 'main'} onfocusin={() => (activePane = 'main')} onpointerdown={() => (activePane = 'main')} data-nav={store.navDirection} bind:this={scroller} bind:clientWidth={mainWidth} style:--pane-w={mainWidth ? `${mainWidth}px` : null} onscroll={() => (scrolled = (scroller?.scrollTop ?? 0) > 2)}>
       {#if store.view === 'home'}
         {#if planner.loaded && library.loaded}<HomeView />{/if}
       {:else if store.view === 'tag' && store.tag}
@@ -364,8 +368,9 @@
           if (e.key === 'ArrowLeft') split.ratio += 0.02;
           else if (e.key === 'ArrowRight') split.ratio -= 0.02;
         }}
-      ></div>
-      <div class="side" style:width="{split.ratio * 100}%" in:splitIn out:splitOut>
+      ><span class="grip"></span></div>
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="side" class:active={activePane === 'side'} onfocusin={() => (activePane = 'side')} onpointerdown={() => (activePane = 'side')} style:width="{split.ratio * 100}%" in:splitIn out:splitOut>
         <SplitPane />
       </div>
     {/if}
@@ -488,20 +493,21 @@
     overflow-x: hidden;
     scrollbar-gutter: stable;
   }
-  /* The line between the two sides; its grab area is wider than it looks. */
+  /* The line between the two sides, with a handle to grab; the grab area
+     is wider than it looks. */
   .divider {
     position: relative;
     flex: none;
     width: 1px;
-    background: var(--separator);
+    background: var(--separator-strong);
     cursor: col-resize;
     outline: none;
-    z-index: 2;
+    z-index: 3;
   }
   .divider::before {
     content: '';
     position: absolute;
-    inset: 0 -5px;
+    inset: 0 -6px;
   }
   .divider::after {
     content: '';
@@ -511,16 +517,57 @@
     opacity: 0;
     transition: opacity var(--dur-fast) var(--ease);
   }
+  .grip {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 6px;
+    height: 44px;
+    border-radius: 3px;
+    background: var(--bg);
+    box-shadow:
+      inset 0 0 0 1.5px var(--separator-strong),
+      0 1px 3px rgb(0 0 0 / 0.08);
+    transform: translate(-50%, -50%);
+    transition:
+      background-color var(--dur-fast) var(--ease),
+      box-shadow var(--dur-fast) var(--ease),
+      height var(--dur-fast) var(--ease);
+    pointer-events: none;
+  }
   .divider:hover::after,
   .divider:focus-visible::after,
   .divider.dragging::after {
     opacity: 1;
   }
+  .divider:hover .grip,
+  .divider:focus-visible .grip,
+  .divider.dragging .grip {
+    height: 56px;
+    background: var(--accent);
+    box-shadow: none;
+  }
+  /* The side sits a little above the main page, like a sheet laid beside it. */
   .side {
+    position: relative;
+    z-index: 2;
     flex: none;
     display: flex;
     flex-direction: column;
     min-width: 0;
+    box-shadow: -14px 0 28px -22px rgb(0 0 0 / 0.35);
+  }
+  :global(:root[data-theme='dark']) .side {
+    box-shadow: -14px 0 28px -18px rgb(0 0 0 / 0.9);
+  }
+  /* Where typing goes: a line across the top of the side in use. */
+  .scroller.active {
+    box-shadow: inset 0 2px 0 color-mix(in srgb, var(--accent) 70%, transparent);
+  }
+  .side.active > :global(.pane .pane-head) {
+    box-shadow:
+      inset 0 2px 0 color-mix(in srgb, var(--accent) 70%, transparent),
+      inset 0 -1px 0 var(--separator-strong);
   }
   .side > :global(.pane) {
     flex: 1;

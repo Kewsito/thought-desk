@@ -143,10 +143,11 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    height: 38px;
+    height: 44px;
     flex: none;
     padding: 0 8px 0 10px;
-    border-bottom: 1px solid var(--separator);
+    background: var(--bg-sidebar);
+    box-shadow: inset 0 -1px 0 var(--separator-strong);
   }
   .title {
     display: flex;
@@ -156,8 +157,8 @@
     height: 28px;
     padding: 0 8px;
     border-radius: var(--r-sm);
-    font-size: var(--fs-ui);
-    font-weight: var(--fw-500);
+    font-size: var(--fs-body-ui);
+    font-weight: var(--fw-600, 600);
     color: var(--text);
   }
   button.title:hover {
@@ -170,8 +171,14 @@
     display: grid;
     place-items: center;
     flex: none;
-    font-size: 15px;
+    font-size: 16px;
     color: var(--text-2);
+  }
+  .actions .icon-btn {
+    color: var(--text-2);
+  }
+  .actions .icon-btn:hover {
+    color: var(--text);
   }
   .name {
     overflow: hidden;
