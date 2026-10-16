@@ -129,6 +129,10 @@
   /** The side being worked in, marked so it's clear where typing goes. */
   let activePane = $state<'main' | 'side'>('main');
   const showSplit = $derived(split.open && panesWidth >= 720);
+  // While a page is dragged over the page area, the layout shows what a drop
+  // would do: the page slides aside to open a slot on the right.
+  const previewing = $derived(!showSplit && !!split.preview);
+  const makeRoom = $derived(!showSplit && split.preview === 'side' ? Math.round((panesWidth - 20) * split.ratio) + 20 : 0);
 
   function startResize(e: PointerEvent) {
     const divider = e.currentTarget as HTMLElement;
@@ -311,12 +315,12 @@
       <Sidebar />
     </div>
   {/if}
-  <main class="main" class:split={showSplit}>
+  <main class="main" class:split={showSplit || previewing}>
     <TitleBar {words} {scrolled} />
-    <div class="panes" class:split={showSplit} bind:clientWidth={panesWidth}>
+    <div class="panes" class:split={showSplit || previewing} style:padding-right={makeRoom ? `${makeRoom}px` : null} bind:clientWidth={panesWidth}>
     <!-- Clicking or focusing a side marks it as the one in use (not an action). -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="scroller" class:active={showSplit && activePane === 'main'} onfocusin={() => (activePane = 'main')} onpointerdown={() => (activePane = 'main')} data-nav={store.navDirection} bind:this={scroller} bind:clientWidth={mainWidth} style:--pane-w={mainWidth ? `${mainWidth}px` : null} onscroll={() => (scrolled = (scroller?.scrollTop ?? 0) > 2)}>
+    <div class="scroller" class:active={showSplit && activePane === 'main'} class:targeted={split.preview === 'main'} onfocusin={() => (activePane = 'main')} onpointerdown={() => (activePane = 'main')} data-nav={store.navDirection} bind:this={scroller} bind:clientWidth={mainWidth} style:--pane-w={mainWidth ? `${mainWidth}px` : null} onscroll={() => (scrolled = (scroller?.scrollTop ?? 0) > 2)}>
       {#if store.view === 'home'}
         {#if planner.loaded && library.loaded}<HomeView />{/if}
       {:else if store.view === 'tag' && store.tag}
@@ -371,7 +375,7 @@
         }}
       ><span class="grip"></span></div>
       <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div class="side" class:active={activePane === 'side'} onfocusin={() => (activePane = 'side')} onpointerdown={() => (activePane = 'side')} style:width="{split.ratio * 100}%" in:splitIn out:splitOut>
+      <div class="side" class:active={activePane === 'side'} class:targeted={split.preview === 'side'} onfocusin={() => (activePane = 'side')} onpointerdown={() => (activePane = 'side')} style:width="{split.ratio * 100}%" in:splitIn out:splitOut>
         <SplitPane />
       </div>
     {/if}
@@ -512,7 +516,7 @@
   }
   .panes {
     position: relative;
-    transition: padding var(--dur) var(--ease);
+    transition: padding 320ms cubic-bezier(0.22, 0.8, 0.24, 1);
   }
   .panes.split {
     padding: 2px 10px 10px;
@@ -522,7 +526,15 @@
     border-radius: var(--r-lg);
     background: var(--bg);
     box-shadow: 0 0 0 1px var(--hairline);
-    transition: box-shadow var(--dur) var(--ease);
+    transition:
+      box-shadow var(--dur) var(--ease),
+      transform 260ms cubic-bezier(0.22, 0.8, 0.24, 1),
+      border-radius var(--dur) var(--ease);
+  }
+  /* The card a drop would replace eases back a little. */
+  .panes.split .scroller.targeted,
+  .side.targeted {
+    transform: scale(0.985);
   }
   /* The side in use: a slightly firmer edge and a soft lift, not a bright line. */
   .panes.split .scroller.active,

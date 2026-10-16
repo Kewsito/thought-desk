@@ -12,6 +12,9 @@ export const MIN_RATIO = 0.25;
 export const MAX_RATIO = 0.75;
 
 class Split {
+  /** Where a page being dragged would land, while it's over the page area (the layout makes room). */
+  preview = $state<'main' | 'side' | null>(null);
+
   get open() {
     return prefs.splitOpen;
   }

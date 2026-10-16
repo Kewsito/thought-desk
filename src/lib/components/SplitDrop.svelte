@@ -2,9 +2,9 @@
   /**
    * Dropping a dragged page (from the sidebar, the title bar or the side
    * pane's header) into split view. Nothing shows until the pointer is over
-   * the page area; then a ghost outlines where the page will land (the main
-   * side, or the side pane) with a small label, and glides between them as
-   * you move. The layer also keeps drops out of the editor, which would
+   * the page area; then the layout makes room (split.preview: the page
+   * slides aside for a new side, or the card to be replaced settles back)
+   * and an outline with a small label marks where the page will land. The layer also keeps drops out of the editor, which would
    * paste the page's name as text.
    */
   import Icon from './Icon.svelte';
@@ -66,6 +66,7 @@
     const hit = locate(e);
     if (e.dataTransfer) e.dataTransfer.dropEffect = hit ? 'move' : 'none';
     target = hit?.want ?? null;
+    split.preview = target;
     if (hit) ghost = { left: hit.rect.left, top: hit.rect.top, width: hit.rect.width, height: hit.rect.height };
   }
 
@@ -74,13 +75,14 @@
     const hit = locate(e);
     const { id, from } = drag;
     target = null;
+    split.preview = null;
     endDrag();
     if (id && hit) split.drop(id, from, hit.want);
   }
 </script>
 
 <!-- However a drag ends (dropped elsewhere, Esc), the layer goes. -->
-<svelte:window ondragend={() => drag.id && endDrag()} />
+<svelte:window ondragend={() => ((split.preview = null), drag.id && endDrag())} />
 
 {#if page}
   <div
@@ -89,7 +91,11 @@
     role="region"
     aria-label="Drop to open {page.title || 'Untitled'}"
     {ondragover}
-    ondragleave={(e) => !layer?.contains(e.relatedTarget as Node) && (target = null)}
+    ondragleave={(e) => {
+      if (layer?.contains(e.relatedTarget as Node)) return;
+      target = null;
+      split.preview = null;
+    }}
     {ondrop}
   >
     <div
@@ -127,8 +133,6 @@
     box-shadow:
       inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 38%, transparent),
       0 0 0 4px color-mix(in srgb, var(--accent) 7%, transparent);
-    -webkit-backdrop-filter: saturate(1.1) blur(1.5px);
-    backdrop-filter: saturate(1.1) blur(1.5px);
     opacity: 0;
     transform: scale(0.985);
     pointer-events: none;
