@@ -168,10 +168,16 @@ src-tauri/src/
   memory.rs              WebView2 suspend/trim while minimized, idle, or after Settings
 ```
 
+## Contributing
+
+Fixes, measurements and ideas are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to set up, test and send a pull request. Contributors sign a short [Contributor License Agreement](CLA.md) once, on their first pull request.
+
 ## License
 
 Copyright (C) 2026 Kusule
 
 Thought Desk is free software: you can redistribute it and/or modify it under the terms of the [GNU Affero General Public License](LICENSE) as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. If you distribute a modified version, or let people use one over a network, you must make its source code available under the same license.
+
+The license covers the code, not the Thought Desk name or logo: forks and redistributed versions need their own name and logo.
 
 The interface uses [Inter](https://rsms.me/inter/) by Rasmus Andersson, bundled under the SIL Open Font License 1.1.
