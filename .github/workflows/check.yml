@@ -1,0 +1,41 @@
+# Type-checks the interface and runs the storage tests on every pull request
+# and every push to main.
+name: Check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      - name: Type-check the interface
+        run: npm run check
+
+      # The storage tests build the app, which embeds the built interface.
+      - name: Build the interface
+        run: npm run build
+
+      - name: Storage tests
+        run: cargo test
+        working-directory: src-tauri

@@ -2,6 +2,10 @@
 
 A fast, local-first notes workspace in the spirit of Notion: nested pages, a block editor, full-text search, databases, plus assignments, a calendar and a file library that all link together. It has a custom title bar, a vertical sidebar and a black-and-white look with optional accent colors. Built with **Rust + Tauri 2 + TypeScript** (Svelte 5 components).
 
+## Download
+
+**Windows 10 and 11:** get the `_x64-setup.exe` installer (about 3 MB) from the [latest release](https://github.com/kusule1351-hue/thought-desk/releases/latest). The installer isn't code-signed yet, so Windows may show "Windows protected your PC": click **More info**, then **Run anyway**. A Microsoft Store version and Linux builds are coming soon.
+
 ## Why it's light
 
 | | Thought Desk | Typical Electron notes app |
@@ -170,7 +174,7 @@ src-tauri/src/
 
 ## Contributing
 
-Fixes, measurements and ideas are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to set up, test and send a pull request. Contributors sign a short [Contributor License Agreement](CLA.md) once, on their first pull request.
+Fixes, measurements and ideas are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to set up, test and send a pull request. Contributors sign a short [Contributor License Agreement](CLA.md) once, on their first pull request. Questions, ideas or just want to chat? Join the [Discord](https://discord.gg/JEaUHwz5bP).
 
 ## License
 

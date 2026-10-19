@@ -2,7 +2,7 @@
 
 Thanks for helping. Bug reports, performance measurements, fixes, testing in
 other languages and ideas are all welcome. You can also chat with us on
-[Discord](https://discord.gg/3QBS6wxGq).
+[Discord](https://discord.gg/JEaUHwz5bP).
 
 ## Before you start
 
