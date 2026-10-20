@@ -80,7 +80,10 @@ class Tags {
     if (!item) return;
     const clean = [...new Set(tags.map(cleanTag).filter(Boolean))];
     // Pages are never changed in place (see store.pages).
-    const put = (list: string[]) => (table === 'pages' ? store.editOne(id, { tags: list }) : (item.tags = list));
+    const put = (list: string[]) => {
+      if (table === 'pages') store.editOne(id, { tags: list });
+      else item.tags = list;
+    };
     put(clean);
     try {
       const saved = await api.setItemTags(table, id, clean);
