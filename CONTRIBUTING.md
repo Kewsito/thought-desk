@@ -30,8 +30,15 @@ Run the checks:
 
 ```bash
 npm run check                  # type-check the interface
+npm run e2e                    # interface tests
 cd src-tauri && cargo test     # storage tests
 ```
+
+The interface tests (`tests/e2e/`) open the app in Chromium against the fake
+backend and use it like a person would: typing, clicking, dragging. The first
+time, get the browser with `npx playwright install chromium`. To watch one
+run step by step, use `npm run e2e -- --ui`. If you change how something
+looks or behaves, add or update a test there.
 
 If your change is about speed, include before and after numbers, and say how
 you measured them (your machine, and which workspace). The heavy workspaces

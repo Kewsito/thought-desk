@@ -1,11 +1,10 @@
-# Type-checks the interface and runs the storage tests on every pull request
-# and every push to main.
+# Type-checks the interface, runs the storage tests on Windows and the
+# interface tests in Chromium, on every pull request and every push.
 name: Check
 
 on:
   pull_request:
   push:
-    branches: [main]
 
 permissions:
   contents: read
@@ -39,3 +38,32 @@ jobs:
       - name: Storage tests
         run: cargo test
         working-directory: src-tauri
+
+  # Drives the interface in Chromium against the fake backend (tests/e2e).
+  interface:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Get Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Interface tests
+        run: npm run e2e
+
+      # What failed, with a trace of every step: download it from the run's
+      # summary and open it with `npx playwright show-report`.
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: interface-test-report
+          path: playwright-report
+          retention-days: 14

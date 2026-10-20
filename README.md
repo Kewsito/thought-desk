@@ -123,6 +123,7 @@ npm install
 npm run app        # desktop app with hot reload (tauri dev)
 npm run dev        # UI only, in a browser, with an in-memory fake backend
 npm run check      # type-check the frontend
+npm run e2e        # interface tests: drive the UI in Chromium (tests/e2e)
 npm run bundle     # release build + Windows installer
 ```
 
@@ -158,6 +159,7 @@ src/                     TypeScript + Svelte UI
   lib/components/        sidebar, title bar, search, settings, trash, menus
   lib/ui/                shared controls: segmented control, switch, swatches, rows…
   dev-mock.ts            fake backend for `npm run dev` (dev only, not bundled)
+tests/e2e/               interface tests (Playwright), run against `npm run dev`
 src-tauri/src/
   db.rs                  SQLite schema and migrations, page tree, trash, FTS search (+ tests)
   planner.rs             courses, assignments, events (+ tests)
