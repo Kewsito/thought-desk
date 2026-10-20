@@ -72,8 +72,7 @@ test('a new install guides you in', async ({ page }) => {
         }),
       )
       .toBe(true);
-    // Let the sheet finish leaving: an Esc pressed while it fades out is lost.
-    await expect(sheet).toHaveCount(0);
+    // Right away, while the shortcuts sheet is still fading out.
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog', { name: 'Settings' })).toHaveCount(0);
   });
@@ -84,8 +83,7 @@ test('a new install guides you in', async ({ page }) => {
     await wait();
     await page.keyboard.press('Enter');
     await expect(sheet).toHaveCount(1);
-    // Again, Esc waits until search has finished closing.
-    await expect(page.getByRole('dialog', { name: 'Search' })).toHaveCount(0);
+    // While search is still fading out.
     await page.keyboard.press('Escape');
     await expect(sheet).toHaveCount(0);
   });

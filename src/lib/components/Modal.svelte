@@ -11,8 +11,12 @@
     children,
   }: { onclose: () => void; width?: number; top?: string; label: string; glass?: boolean; children: Snippet } = $props();
 
+  // A sheet stays on screen while it fades out; by then the keys and clicks
+  // belong to whatever is opening next.
+  let leaving = $state(false);
+
   function onKey(e: KeyboardEvent) {
-    if (e.key === 'Escape') {
+    if (e.key === 'Escape' && !leaving) {
       e.preventDefault();
       e.stopPropagation();
       onclose();
@@ -26,6 +30,8 @@
 <div
   class="backdrop"
   class:light={glass}
+  class:leaving
+  onoutrostart={() => (leaving = true)}
   onmousedown={(e) => e.target === e.currentTarget && onclose()}
   out:fadeOut|global={{ duration: 200 }}
 >
@@ -74,6 +80,9 @@
     transform-origin: 50% 30%;
   }
   /* Spotlight-style: frosted panel over a lighter scrim. */
+  .backdrop.leaving {
+    pointer-events: none;
+  }
   .backdrop.light {
     background: color-mix(in srgb, var(--scrim) 55%, transparent);
   }
