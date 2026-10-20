@@ -96,10 +96,8 @@ test('the sidebar slides closed and open, and still resizes', async ({ page }) =
   });
 });
 
-// Known bug: the resize handle is meant to reach 4px past the sidebar's edge,
-// but the page covers that half, so only the inner 4px can be grabbed.
+// The resize handle reaches 4px past the sidebar's edge; the page must not cover that half.
 test('the whole resize handle can be grabbed', async ({ page }) => {
-  test.fail();
   await open(page);
   const edge = (await page.locator('.resizer').boundingBox())!;
   const hit = await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.classList.contains('resizer'), [edge.x + edge.width - 2, edge.y + 300]);

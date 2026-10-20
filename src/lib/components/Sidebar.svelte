@@ -325,6 +325,8 @@
 <style>
   .sidebar {
     position: relative;
+    /* Above the page, so the resize handle's outer half can be grabbed. */
+    z-index: 1;
     flex: none;
     display: flex;
     flex-direction: column;
