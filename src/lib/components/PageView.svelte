@@ -240,7 +240,7 @@
   .title {
     margin: 0 0 10px;
     font-family: var(--font-page);
-    font-size: 40px;
+    font-size: var(--title-fs);
     font-weight: var(--fw-700);
     line-height: 1.15;
     letter-spacing: -0.03em;
@@ -254,11 +254,8 @@
     letter-spacing: -0.015em;
   }
   :global(:root[data-font="mono"]) .title {
-    font-size: 34px;
+    font-size: calc(var(--title-fs) * 0.85);
     letter-spacing: -0.02em;
-  }
-  :global(:root.small-text) .title {
-    font-size: 34px;
   }
   .title:empty::before {
     content: attr(data-placeholder);

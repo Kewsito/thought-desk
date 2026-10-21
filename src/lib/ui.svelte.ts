@@ -213,6 +213,7 @@ class UI {
     this.toasts.push({ id, message, actionLabel: action?.label, action: action?.run });
     if (this.toasts.length > 3) this.toasts.shift();
     setTimeout(() => this.dismissToast(id), ms);
+    return id;
   }
 
   dismissToast(id: number) {

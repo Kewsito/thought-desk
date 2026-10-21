@@ -12,10 +12,11 @@
   import { api } from '../api';
   import { ACCENTS, PALETTE, PALETTES, colorVar, nextColor, type Accent } from '../colors';
   import { planner } from '../planner.svelte';
-  import { prefs, type Font, type RemindAssignments, type RemindEvents, type Theme, type WeekStart } from '../prefs.svelte';
+  import { prefs, type Font, type TextSize, type RemindAssignments, type RemindEvents, type Theme, type WeekStart } from '../prefs.svelte';
   import { importCalendar } from '../ics-import.svelte';
   import { changeLook } from '../look-transition';
   import { ui } from '../ui.svelte';
+  import { MAX_ZOOM, MIN_ZOOM, zoomIn, zoomLabel, zoomOut, zoomReset } from '../zoom.svelte';
   import { formatBytes } from '../time';
   import type { DataInfo } from '../types';
 
@@ -41,6 +42,12 @@
     { value: 'sans', label: 'Default' },
     { value: 'serif', label: 'Serif' },
     { value: 'mono', label: 'Mono' },
+  ];
+  const textSizes: { value: TextSize; label: string }[] = [
+    { value: 'small', label: 'Small' },
+    { value: 'default', label: 'Default' },
+    { value: 'large', label: 'Large' },
+    { value: 'xlarge', label: 'Larger' },
   ];
   const weekStarts: { value: WeekStart; label: string }[] = [
     { value: 0, label: 'Sunday' },
@@ -309,10 +316,21 @@
       </div>
       <div class="group-row">
         <div class="row-label">
-          Small text
-          <small>Fit more on the page</small>
+          Zoom
+          <small>Everything bigger or smaller, also with Ctrl and the scroll wheel</small>
         </div>
-        <Switch on={prefs.smallText} label="Small text" onchange={() => (prefs.smallText = !prefs.smallText)} />
+        <div class="stepper" role="group" aria-label="Zoom">
+          <button onclick={zoomOut} disabled={prefs.zoom <= MIN_ZOOM} aria-label="Zoom out" data-tip="Zoom out" data-tip-key={shortcuts.label('zoomOut')}><Icon name="minus" size={14} stroke={2} /></button>
+          <button class="level" onclick={zoomReset} disabled={prefs.zoom === 1} aria-label="Zoom {zoomLabel(prefs.zoom)}, reset to 100%" data-tip="Actual size" data-tip-key={shortcuts.label('zoomReset')}>{zoomLabel(prefs.zoom)}</button>
+          <button onclick={zoomIn} disabled={prefs.zoom >= MAX_ZOOM} aria-label="Zoom in" data-tip="Zoom in" data-tip-key={shortcuts.label('zoomIn')}><Icon name="plus" size={14} stroke={2} /></button>
+        </div>
+      </div>
+      <div class="group-row">
+        <div class="row-label">
+          Text size
+          <small>How big writing is on pages</small>
+        </div>
+        <Segmented options={textSizes} value={prefs.textSize} onchange={(v) => (prefs.textSize = v)} label="Text size" />
       </div>
     </div>
 
@@ -632,6 +650,44 @@
   }
 
   /* Font picker */
+  /* Zoom: minus, the level (click for 100%), plus, on one track like a segmented control. */
+  .stepper {
+    display: flex;
+    flex: none;
+    padding: 2px;
+    border-radius: var(--r-sm);
+    background: var(--fill-2);
+  }
+  .stepper button {
+    display: inline-grid;
+    place-items: center;
+    width: 32px;
+    height: var(--h-sm);
+    border-radius: var(--r-xs);
+    color: var(--text-2);
+    transition:
+      background-color var(--dur-fast) var(--ease),
+      color var(--dur-fast) var(--ease);
+  }
+  .stepper button:hover:not(:disabled) {
+    background: var(--knob);
+    color: var(--text);
+    box-shadow:
+      0 0 0 0.5px var(--hairline),
+      var(--shadow-sm);
+  }
+  .stepper button:disabled {
+    color: var(--text-4);
+  }
+  .stepper .level {
+    width: 56px;
+    font-size: var(--fs-ui);
+    font-weight: var(--fw-500);
+    font-variant-numeric: tabular-nums;
+  }
+  .stepper .level:disabled {
+    color: var(--text);
+  }
   .fonts {
     display: flex;
     gap: 8px;

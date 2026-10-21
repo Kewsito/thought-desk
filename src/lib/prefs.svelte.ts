@@ -21,6 +21,8 @@ export interface CustomAccent {
 
 export type Theme = 'system' | 'light' | 'dark';
 export type Font = 'sans' | 'serif' | 'mono';
+/** How big page text is drawn (app.css: --page-fs). */
+export type TextSize = 'small' | 'default' | 'large' | 'xlarge';
 /** 0 = Sunday, 1 = Monday. */
 export type WeekStart = 0 | 1;
 export type CalendarMode = 'month' | 'week';
@@ -36,7 +38,7 @@ interface Stored {
   palette: Palette;
   accent: Accent;
   font: Font;
-  smallText: boolean;
+  textSize: TextSize;
   spellcheck: boolean;
   sidebarOpen: boolean;
   sidebarWidth: number;
@@ -75,6 +77,8 @@ interface Stored {
   customAccent: CustomAccent;
   /** The view last shown for each database. */
   dbViews: Record<string, string>;
+  /** How big the whole app is drawn (1 = 100%), see zoom.svelte.ts. */
+  zoom: number;
   /** Databases opened lately, newest first: their rows are read soon after start-up. */
   recentDbs: string[];
 }
@@ -99,7 +103,7 @@ const defaults: Stored = {
   palette: 'default',
   accent: 'graphite',
   font: 'sans',
-  smallText: false,
+  textSize: 'default',
   spellcheck: true,
   sidebarOpen: true,
   sidebarWidth: 260,
@@ -128,6 +132,7 @@ const defaults: Stored = {
   customAccent: { hue: 265, chroma: 0.2, lightness: 0.58 },
   dbViews: {},
   recentDbs: [],
+  zoom: 1,
 };
 
 function read(): Stored {
@@ -141,6 +146,11 @@ function read(): Stored {
       if (!ACCENTS.some((a) => a.key === stored.accent) && stored.accent !== 'custom') stored.accent = 'graphite';
       if (!PALETTES.some((p) => p.key === stored.palette) && stored.palette !== 'custom') stored.palette = 'default';
       if (!Array.isArray(stored.recentDbs)) stored.recentDbs = [];
+      // "Small text" was a switch before there were sizes.
+      if (!('textSize' in parsed)) stored.textSize = parsed.smallText ? 'small' : 'default';
+      if (!['small', 'default', 'large', 'xlarge'].includes(stored.textSize)) stored.textSize = 'default';
+      delete (stored as { smallText?: boolean }).smallText;
+      if (typeof stored.zoom !== 'number' || !(stored.zoom >= 0.5 && stored.zoom <= 3)) stored.zoom = 1;
       return stored;
     }
   } catch {
@@ -157,13 +167,14 @@ class Prefs {
   palette = $state<Palette>(this.#initial.palette);
   accent = $state<Accent>(this.#initial.accent);
   font = $state<Font>(this.#initial.font);
-  smallText = $state(this.#initial.smallText);
+  textSize = $state<TextSize>(this.#initial.textSize);
   spellcheck = $state(this.#initial.spellcheck);
   sidebarOpen = $state(this.#initial.sidebarOpen);
   sidebarWidth = $state(this.#initial.sidebarWidth);
   expanded = $state<Record<string, boolean>>(this.#initial.expanded);
   dbViews = $state<Record<string, string>>(this.#initial.dbViews);
   recentDbs = $state<string[]>(this.#initial.recentDbs);
+  zoom = $state(this.#initial.zoom);
   sections = $state<Record<string, boolean>>(this.#initial.sections);
   lastPageId = $state<string | null>(this.#initial.lastPageId);
   lastView = $state(this.#initial.lastView);
@@ -202,7 +213,7 @@ class Prefs {
       palette: this.palette,
       accent: this.accent,
       font: this.font,
-      smallText: this.smallText,
+      textSize: this.textSize,
       spellcheck: this.spellcheck,
       sidebarOpen: this.sidebarOpen,
       sidebarWidth: this.sidebarWidth,
@@ -231,6 +242,7 @@ class Prefs {
       customAccent: $state.snapshot(this.customAccent),
       dbViews: $state.snapshot(this.dbViews),
       recentDbs: $state.snapshot(this.recentDbs),
+      zoom: this.zoom,
     };
   }
 }
@@ -249,7 +261,7 @@ $effect.root(() => {
     root.dataset.accent = prefs.accent;
     root.dataset.palette = prefs.palette;
     root.dataset.font = prefs.font;
-    root.classList.toggle('small-text', prefs.smallText);
+    root.dataset.textSize = prefs.textSize;
     root.style.colorScheme = prefs.resolvedTheme;
   });
   // A theme made on the colour wheel: its hue and tint feed app.css.

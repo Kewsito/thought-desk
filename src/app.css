@@ -1032,9 +1032,27 @@ input[type='time']::-webkit-calendar-picker-indicator {
   padding: 0 48px 0 96px;
 }
 
+/* Text size (Settings): the page text and title; headings, code and lists
+   are sized from it. */
+:root {
+  --page-fs: 16px;
+  --title-fs: 40px;
+}
+:root[data-text-size='small'] {
+  --page-fs: 15px;
+  --title-fs: 34px;
+}
+:root[data-text-size='large'] {
+  --page-fs: 18px;
+  --title-fs: 46px;
+}
+:root[data-text-size='xlarge'] {
+  --page-fs: 20px;
+  --title-fs: 52px;
+}
 .prose {
   font-family: var(--font-page);
-  font-size: 16px;
+  font-size: var(--page-fs);
   font-weight: 400;
   line-height: 1.625;
   letter-spacing: -0.006em;
@@ -1065,15 +1083,12 @@ html.printing .prose > :is(ul, ol) > li {
   }
 }
 :root[data-font='serif'] .prose {
-  font-size: 17px;
+  font-size: calc(var(--page-fs) + 1px);
   letter-spacing: 0;
 }
 :root[data-font='mono'] .prose {
-  font-size: 15px;
+  font-size: calc(var(--page-fs) - 1px);
   letter-spacing: 0;
-}
-:root.small-text .prose {
-  font-size: 15px;
 }
 
 /* Vertical rhythm: every block gets the same 2px breathing room; headings
@@ -1171,7 +1186,7 @@ html.printing .prose > :is(ul, ol) > li {
   border-radius: var(--r-md);
   corner-shape: var(--corner);
   font-family: var(--font-mono);
-  font-size: 14px;
+  font-size: 0.875em;
   line-height: 1.6;
   letter-spacing: 0;
   overflow-x: auto;

@@ -105,6 +105,7 @@ Databases were tested the same way: a 50,000-row tracker linked to a 5,000-row o
 | `Ctrl+Shift+\` | Split view |
 | `Alt+←` / `Alt+→`, mouse back/forward | Navigate history |
 | `Ctrl+Shift+L` | Toggle dark mode |
+| `Ctrl+=` / `Ctrl+-` / `Ctrl+0`, `Ctrl`+scroll | Zoom in / out / back to 100% (also in Settings → Appearance) |
 | `Ctrl+,` | Settings |
 | `Ctrl+/` | Every shortcut on one sheet |
 | `Ctrl+Shift+E` | Inline math (or turn the selection into math) |
