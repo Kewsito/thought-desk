@@ -144,6 +144,8 @@ fn main() {
             commands::reset_reviews,
             commands::list_databases,
             commands::list_rows,
+            commands::row_counts,
+            commands::list_rows_head,
             commands::create_database,
             commands::update_database,
             commands::save_property,

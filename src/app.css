@@ -1046,6 +1046,24 @@ input[type='time']::-webkit-calendar-picker-indicator {
   text-wrap: pretty;
   font-feature-settings: 'calt' 1, 'case' 0;
 }
+/* Blocks out of sight skip layout and painting until they scroll near, so
+   a page of thousands of blocks (or one long list) opens in a fraction of
+   the time. Each keeps the size it last had, so scrolling stays steady. */
+.prose > *,
+.prose > :is(ul, ol) > li {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 1.6em;
+}
+html.printing .prose > *,
+html.printing .prose > :is(ul, ol) > li {
+  content-visibility: visible;
+}
+@media print {
+  .prose > *,
+  .prose > :is(ul, ol) > li {
+    content-visibility: visible;
+  }
+}
 :root[data-font='serif'] .prose {
   font-size: 17px;
   letter-spacing: 0;

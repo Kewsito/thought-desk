@@ -16,6 +16,13 @@
 
   let { page, onstats }: { page: Page; onstats?: (words: number) => void } = $props();
 
+  // A database row opened on its own (from search or a link) brings its
+  // database's rows, for its properties.
+  $effect(() => {
+    const db = databases.dbOf(page.id);
+    if (db && !databases.ready(db)) void databases.ensure([db]);
+  });
+
   // Live metadata (title/icon/width) comes from the store, content from `page`.
   const meta = $derived(store.byId.get(page.id));
   let titleEl: HTMLHeadingElement;

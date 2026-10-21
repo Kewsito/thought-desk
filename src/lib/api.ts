@@ -109,7 +109,12 @@ export const api = {
   setCaptureShortcut: (enabled: boolean, accelerator: string) => invoke<void>('set_capture_shortcut', { enabled, accelerator }),
 
   listDatabases: () => invoke<DatabaseSchema[]>('list_databases'),
-  listRows: () => invoke<DbRow[]>('list_rows'),
+  /** The rows of these databases (all of them when left out). */
+  listRows: (dbIds?: string[]) => invoke<DbRow[]>('list_rows', { dbIds }),
+  /** A database's first rows in its own order (a first screen while the rest are read). */
+  listRowsHead: (dbId: string, limit: number) => invoke<DbRow[]>('list_rows_head', { dbId, limit }),
+  /** Live rows per database, without reading them. */
+  rowCounts: () => invoke<Record<string, number>>('row_counts'),
   createDatabase: (
     parentId: string | null,
     title: string,

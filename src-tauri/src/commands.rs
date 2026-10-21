@@ -427,8 +427,18 @@ pub fn list_databases(db: State<Db>) -> Result<Vec<Database>> {
 }
 
 #[tauri::command(async)]
-pub fn list_rows(db: State<Db>) -> Result<Vec<ListedRow>> {
-    db.list_rows_raw()
+pub fn list_rows(db: State<Db>, db_ids: Option<Vec<String>>) -> Result<Vec<ListedRow>> {
+    db.list_rows_raw(db_ids.as_deref())
+}
+
+#[tauri::command(async)]
+pub fn list_rows_head(db: State<Db>, db_id: String, limit: usize) -> Result<Vec<ListedRow>> {
+    db.list_rows_head(&db_id, limit)
+}
+
+#[tauri::command(async)]
+pub fn row_counts(db: State<Db>) -> Result<std::collections::HashMap<String, usize>> {
+    db.row_counts()
 }
 
 #[tauri::command(async)]

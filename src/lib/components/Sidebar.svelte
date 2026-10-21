@@ -223,12 +223,13 @@
         {#if !prefs.sections.databases}
           <div class="tag-list">
             {#each databases.list as d (d.id)}
-              {@const n = databases.rowsOf(d.id).length}
+              {@const n = databases.rowCount(d.id)}
               <div class="nav-row db-row" class:active={openDb === d.id} class:menu-open={dbMenuFor === d.id}>
                 <button
                   class="nav-main"
                   draggable="true"
                   onclick={() => store.open(d.id)}
+                  onpointerenter={() => void databases.ensure([d.id])}
                   oncontextmenu={(e) => dbMenu(e, d.id)}
                   ondragstart={(e) => {
                     drag.id = d.id;

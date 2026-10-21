@@ -467,8 +467,26 @@ mockIPC((cmd, payload) => {
       case 'list_rows':
         {
           const pages = new Map(rows.map((r) => [r.id, r]));
-          return Object.keys(dbData.rows).flatMap((id) => (pages.has(id) ? [mockRow(id, pages.get(id))] : []));
+          const only: Set<string> | null = a.dbIds ? new Set(a.dbIds) : null;
+          return Object.keys(dbData.rows).flatMap((id) => {
+            const page = pages.get(id);
+            return page && (!only || only.has(page.parentId ?? '')) ? [mockRow(id, page)] : [];
+          });
         }
+      case 'list_rows_head': {
+        const live = rows.filter((r) => r.parentId === a.dbId && !r.deletedAt && dbData.rows[r.id] && !dbData.rows[r.id].template);
+        const key = (r: Row) => dbData.rows[r.id].sortKey;
+        live.sort((x, y) => (key(x) < key(y) ? -1 : key(x) > key(y) ? 1 : x.id < y.id ? -1 : 1));
+        return live.slice(0, a.limit).map((r) => mockRow(r.id, r));
+      }
+      case 'row_counts': {
+        const counts: Record<string, number> = {};
+        for (const r of rows) {
+          const row = dbData.rows[r.id];
+          if (row && !row.template && !r.deletedAt && r.parentId) counts[r.parentId] = (counts[r.parentId] ?? 0) + 1;
+        }
+        return counts;
+      }
       case 'create_database':
         return mockCreateDatabase(a.parentId ?? null, a.title ?? '', a.icon ?? '', a.input ?? {});
       case 'update_database':

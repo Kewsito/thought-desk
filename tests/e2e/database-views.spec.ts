@@ -14,6 +14,28 @@ test('the example database opens in each of its views', async ({ page }) => {
   await expect(page.locator('.td[data-r="0"][data-c="0"]')).toContainText('The Left Hand of Darkness');
 });
 
+// A database's rows are read when it's first shown, not at start-up.
+test('a row opened from search, before its database, shows its properties', async ({ page }) => {
+  await open(page);
+  await test.step('the sidebar counts rows without the database being opened', async () => {
+    await expect(page.locator('.db-row:has-text("Reading list") .count')).toHaveText(/^[1-9]/);
+  });
+  await test.step('search opens the row, and its values come with it', async () => {
+    await page.keyboard.press('Control+k');
+    await page.keyboard.type('Left Hand of Darkness');
+    await page.waitForTimeout(400);
+    await page.keyboard.press('Enter');
+    await expect(page.locator('h1.title')).toHaveText('The Left Hand of Darkness');
+    await expect(page.locator('.props[aria-label=Properties]')).toBeVisible();
+    await expect(page.locator('.props .db-link')).toContainText('Reading list');
+  });
+  await test.step('and its database then opens with every row', async () => {
+    await page.click('.props .db-link');
+    await page.click('.tab:has-text("Table")');
+    await expect(page.locator('.td[data-r="0"][data-c="0"]')).toContainText('The Left Hand of Darkness');
+  });
+});
+
 test('duplicating a database copies its rows and views', async ({ page }) => {
   await open(page);
   const rows = page.locator('.db-row');
@@ -117,4 +139,30 @@ test("a gallery card takes its cover from the first picture in the row's page", 
   await page.click('.db-row:has-text("Reading list") .nav-main');
   await page.click('.tab:has-text("Shelf")');
   await expect(covers).toHaveCount(before + 1);
+});
+
+// After a while in the background the app lets go of rows it isn't showing.
+test('rows let go in the background come back when the database is shown', async ({ page }) => {
+  await open(page);
+  await page.click('.sidebar >> text=Reading list');
+  await page.click('.tab:has-text("Table")');
+  await expect(page.locator('.td[data-r="0"][data-c="0"]')).toContainText('The Left Hand of Darkness');
+  await page.click('.sidebar >> text=Getting started');
+  await expect(page.locator('h1.title')).toHaveText('Getting started');
+
+  await test.step('rows of a database off screen are let go', async () => {
+    const left = await page.evaluate(async () => {
+      const dbs = (window as unknown as { databases: { release(): Promise<void>; rows: Record<string, unknown> } }).databases;
+      await dbs.release();
+      return Object.keys(dbs.rows).length;
+    });
+    expect(left).toBe(0);
+    await expect(page.locator('.db-row:has-text("Reading list") .count')).toHaveText(/^[1-9]/);
+  });
+
+  await test.step('and come back when it opens again', async () => {
+    await page.click('.sidebar >> text=Reading list');
+    await page.click('.tab:has-text("Table")');
+    await expect(page.locator('.td[data-r="0"][data-c="0"]')).toContainText('The Left Hand of Darkness');
+  });
 });

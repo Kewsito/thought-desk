@@ -75,6 +75,8 @@ interface Stored {
   customAccent: CustomAccent;
   /** The view last shown for each database. */
   dbViews: Record<string, string>;
+  /** Databases opened lately, newest first: their rows are read soon after start-up. */
+  recentDbs: string[];
 }
 
 /** Monday in most of the world, Sunday where the locale says so. */
@@ -125,6 +127,7 @@ const defaults: Stored = {
   customTheme: { hue: 250, tint: 0.5 },
   customAccent: { hue: 265, chroma: 0.2, lightness: 0.58 },
   dbViews: {},
+  recentDbs: [],
 };
 
 function read(): Stored {
@@ -137,6 +140,7 @@ function read(): Stored {
       if (!('welcomed' in parsed)) stored.welcomed = true;
       if (!ACCENTS.some((a) => a.key === stored.accent) && stored.accent !== 'custom') stored.accent = 'graphite';
       if (!PALETTES.some((p) => p.key === stored.palette) && stored.palette !== 'custom') stored.palette = 'default';
+      if (!Array.isArray(stored.recentDbs)) stored.recentDbs = [];
       return stored;
     }
   } catch {
@@ -159,6 +163,7 @@ class Prefs {
   sidebarWidth = $state(this.#initial.sidebarWidth);
   expanded = $state<Record<string, boolean>>(this.#initial.expanded);
   dbViews = $state<Record<string, string>>(this.#initial.dbViews);
+  recentDbs = $state<string[]>(this.#initial.recentDbs);
   sections = $state<Record<string, boolean>>(this.#initial.sections);
   lastPageId = $state<string | null>(this.#initial.lastPageId);
   lastView = $state(this.#initial.lastView);
@@ -225,6 +230,7 @@ class Prefs {
       customTheme: $state.snapshot(this.customTheme),
       customAccent: $state.snapshot(this.customAccent),
       dbViews: $state.snapshot(this.dbViews),
+      recentDbs: $state.snapshot(this.recentDbs),
     };
   }
 }

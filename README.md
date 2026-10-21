@@ -30,12 +30,14 @@ Tested against a workspace of 7,500 pages (a 2 MB book among them), 2,000 files,
 - **Links, to-dos and flashcards are indexed on save.** Backlinks, file usage, Home and the flashcard counts are lookups, not a parse of every page (file usage went from 92 s to 7 ms).
 - **Storage work never runs on the UI thread,** so a slow query can't freeze the window.
 - **Long lists render as you scroll**: Home, Assignments, Files, Flashcards, tags, Trash and big sidebar folders.
+- **Long pages draw only what's on screen.** Blocks (and items of long lists) out of sight skip layout until they scroll near, so a 2 MB page opens in about 0.3 s and 2,000 to-dos in about 0.1 s.
 - **Big media streams in chunks.** Audio, video and PDFs are served as byte ranges instead of being read into memory whole.
 - **The database gives space back** when you delete things for good.
 
 Databases were tested the same way: a 50,000-row tracker linked to a 5,000-row one, 40 smaller databases, notes on thousands of rows and 100,000 edits:
 
-- **Saving a value takes about 0.2 ms**, and loading every row at start-up about 0.2 s. Rows keep their gallery picture with them, so listing them never reads their pages.
+- **Rows are read when a database is first shown,** not at start-up, so databases you aren't using cost nothing: with 58,000 rows the app starts at about 185 MB instead of 260 MB. The databases you opened lately are read in the background once start-up settles, and hovering one in the sidebar starts reading it, so even the 49,000-row table opens in 0.02–0.13 s.
+- **Saving a value takes about 0.2 ms.** Rows keep their gallery picture with them, so listing them never reads their pages.
 - **A row's place in its database is its own order key,** so deleting or restoring one row never renumbers the other 50,000 (it took over a minute; now it's instant).
 - **Big tables stay quick in the window:** rows aren't wrapped one value at a time, sort values are worked out once per row, search remembers each row's text between keystrokes, and rows out of sight skip layout. Sorting 50,000 rows takes about 0.3 s, editing a cell 0.1 s.
 - **New rows appear at the top of the view** instead of drawing every row down to the end, and board columns show their first 50 cards with more on request.

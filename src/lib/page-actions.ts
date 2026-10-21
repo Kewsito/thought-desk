@@ -117,7 +117,7 @@ function databaseMenuItems(id: string, sidebar: boolean): MenuItem[] {
     { separator: true },
     { label: 'Move to Trash', icon: 'trash', danger: true, action: () => void store.trashPage(id) },
     { separator: true },
-    { header: `${databases.rowsOf(id).length.toLocaleString()} rows · created ${new Date(page.createdAt).toLocaleDateString()}` },
+    { header: `${databases.rowCount(id).toLocaleString()} rows · created ${new Date(page.createdAt).toLocaleDateString()}` },
   ];
 }
 
