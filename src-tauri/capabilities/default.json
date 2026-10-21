@@ -18,6 +18,8 @@
     "core:window:allow-set-background-color",
     "core:webview:allow-set-webview-background-color",
     "core:webview:allow-set-webview-zoom",
-    "opener:allow-open-url"
+    "opener:allow-open-url",
+    "updater:default",
+    "process:allow-restart"
   ]
 }

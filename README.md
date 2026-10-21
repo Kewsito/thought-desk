@@ -4,7 +4,7 @@ A fast, local-first notes workspace in the spirit of Notion: nested pages, a blo
 
 ## Download
 
-**Windows 10 and 11:** get the `_x64-setup.exe` installer (about 3 MB) from the [latest release](https://github.com/kusule1351-hue/thought-desk/releases/latest). The installer isn't code-signed yet, so Windows may show "Windows protected your PC": click **More info**, then **Run anyway**. A Microsoft Store version and Linux builds are coming soon.
+**Windows 10 and 11:** get the `_x64-setup.exe` installer (about 3 MB) from the [latest release](https://github.com/kusule1351-hue/thought-desk/releases/latest). The installer isn't code-signed yet, so Windows may show "Windows protected your PC": click **More info**, then **Run anyway**. From 0.5.1 on, the app updates itself: it checks for a new version when it starts, and installs it with one click. A Microsoft Store version and Linux builds are coming soon.
 
 ## Why it's light
 
@@ -30,7 +30,7 @@ Tested against a workspace of 7,500 pages (a 2 MB book among them), 2,000 files,
 - **Links, to-dos and flashcards are indexed on save.** Backlinks, file usage, Home and the flashcard counts are lookups, not a parse of every page (file usage went from 92 s to 7 ms).
 - **Storage work never runs on the UI thread,** so a slow query can't freeze the window.
 - **Long lists render as you scroll**: Home, Assignments, Files, Flashcards, tags, Trash and big sidebar folders.
-- **Long pages draw only what's on screen.** Blocks (and items of long lists) out of sight skip layout until they scroll near, so a 2 MB page opens in about 0.3 s and 2,000 to-dos in about 0.1 s.
+- **Long pages draw only what's on screen.** Blocks (and items of long lists) out of sight skip layout until they scroll near, so pages with thousands of blocks or a long checklist open 2–3× faster.
 - **Big media streams in chunks.** Audio, video and PDFs are served as byte ranges instead of being read into memory whole.
 - **The database gives space back** when you delete things for good.
 

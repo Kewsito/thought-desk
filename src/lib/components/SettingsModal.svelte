@@ -16,6 +16,7 @@
   import { importCalendar } from '../ics-import.svelte';
   import { changeLook } from '../look-transition';
   import { ui } from '../ui.svelte';
+  import { updates } from '../updates.svelte';
   import { MAX_ZOOM, MIN_ZOOM, zoomIn, zoomLabel, zoomOut, zoomReset } from '../zoom.svelte';
   import { formatBytes } from '../time';
   import type { DataInfo } from '../types';
@@ -443,6 +444,13 @@
 
     <p class="about">
       Thought Desk {info?.version ?? ''} ·
+      {#if updates.progress !== null}
+        Updating{updates.progress ? ` ${Math.round(updates.progress * 100)}%` : ''}… ·
+      {:else if updates.available}
+        <button class="link" onclick={() => void updates.install()}>Install {updates.available.version}</button> ·
+      {:else}
+        <button class="link" disabled={updates.checking} onclick={() => void updates.check(false)}>{updates.checking ? 'Checking…' : 'Check for updates'}</button> ·
+      {/if}
       <button
         class="link"
         onclick={() => {

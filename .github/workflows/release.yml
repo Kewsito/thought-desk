@@ -33,7 +33,14 @@ jobs:
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Signs the update, so installed apps only take real releases.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
+          # Also makes the signed update and latest.json, which installed apps check.
+          args: --config src-tauri/tauri.release.conf.json
+          includeUpdaterJson: true
+          updaterJsonPreferNsis: true
           tagName: ${{ github.ref_name }}
           releaseName: Thought Desk ${{ github.ref_name }}
           releaseBody: |
