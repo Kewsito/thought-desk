@@ -63,7 +63,9 @@
   $effect(() => {
     if (embedded) return;
     const db = id;
-    untrack(() => (prefs.recentDbs = [db, ...prefs.recentDbs.filter((x) => x !== db)].slice(0, 3)));
+    untrack(() => {
+      prefs.recentDbs = [db, ...prefs.recentDbs.filter((x) => x !== db)].slice(0, 3);
+    });
   });
 
   function show(v: DbView | string) {

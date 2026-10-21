@@ -15,6 +15,7 @@ import { Mention, PageLink } from './page-link';
 import { SlashCommand } from './slash';
 import { MentionSuggest } from './mention';
 import { BlockHandle, type BlockHandleOptions } from './block-handle';
+import { FloatSafe } from './float-safe';
 import { ImageDrop } from './images';
 import { FileBlock } from './file-block';
 import { DatabaseNode } from './database-block.svelte';
@@ -171,5 +172,6 @@ export function buildExtensions(handle: BlockHandleOptions): AnyExtension[] {
     LinkOpener,
     Shortcuts,
     BlockHandle.configure(handle),
+    FloatSafe,
   ];
 }

@@ -166,3 +166,36 @@ test('rows let go in the background come back when the database is shown', async
     await expect(page.locator('.td[data-r="0"][data-c="0"]')).toContainText('The Left Hand of Darkness');
   });
 });
+
+// Menus of a database inside a page float over the page, whole.
+test('a database in a page opens its menus in full', async ({ page }) => {
+  await open(page);
+  await page.click('[role=tree][aria-label=Pages] .row >> text=Projects');
+  await page.click('.ProseMirror');
+  await page.keyboard.press('Control+End');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('/database');
+  await page.waitForTimeout(300);
+  await page.keyboard.press('Enter');
+  await page.click('.tile:has-text("Tasks")');
+  await expect(page.locator('.database-block .dbv')).toHaveCount(1);
+
+  await page.click('.database-block .tab:has-text("All tasks")');
+  await page.locator('.database-block button[aria-label="Add a property"]').click();
+  const menu = page.locator('.popover[aria-label="Add a property"]');
+  await expect(menu).toBeVisible();
+  // Every type in the list can be reached: scrolled into view, it's the
+  // thing under the pointer (not cut off by the page block around it).
+  for (const type of ['Text', 'Relation', 'Last edited']) {
+    const item = menu.getByRole('button', { name: type, exact: true });
+    await item.scrollIntoViewIfNeeded();
+    const b = (await item.boundingBox())!;
+    const hit = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest('.popover')?.getAttribute('aria-label') ?? null, { x: b.x + b.width / 2, y: b.y + b.height / 2 });
+    expect(hit, `${type} is visible`).toBe('Add a property');
+  }
+  // And the menu sits inside the window.
+  const m = (await menu.boundingBox())!;
+  const vh = page.viewportSize()!.height;
+  expect(m.y).toBeGreaterThanOrEqual(0);
+  expect(m.y + m.height).toBeLessThanOrEqual(vh);
+});
