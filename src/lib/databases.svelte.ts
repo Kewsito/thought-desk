@@ -42,7 +42,7 @@ import {
   typeInfo,
   type ValueKind,
 } from './db/schema';
-import { parse as parseCsv, stringify } from './db/csv';
+import { guardCell, parse as parseRawCsv, stringify, unguardCell } from './db/csv';
 import { TEMPLATES, type Template } from './db/templates';
 import type { JNode } from './markdown';
 import type {
@@ -2100,7 +2100,7 @@ class Databases {
     const hidden = new Set(view.config.hidden ?? []);
     const props = this.props(dbId).filter((p) => p.type === 'title' || !hidden.has(p.id));
     const { rows } = this.query(dbId, view);
-    const table = [props.map((p) => p.name), ...rows.map((r) => props.map((p) => this.text(r, p)))];
+    const table = [props.map((p) => p.name), ...rows.map((r) => props.map((p) => guardCell(this.#csvText(r, p))))];
     const title = store.byId.get(dbId)?.title || 'Untitled';
     try {
       const path = await api.exportDocument(view.name === 'Table' ? title : `${title} - ${view.name}`, 'csv', new TextEncoder().encode('﻿' + stringify(table)));
@@ -2108,6 +2108,22 @@ class Databases {
     } catch (e) {
       ui.error(e);
     }
+  }
+
+  /** A value for a spreadsheet: as shown, except dates, which are written
+   *  in full (2026-11-03 14:30) so the year survives and spreadsheets read them. */
+  #csvText(row: DbRow, p: Property): string {
+    if (p.type === 'date') {
+      const v = this.get(row, p) as DateValue | null;
+      if (!v) return '';
+      const one = (s: string) => s.replace('T', ' ');
+      return v.end ? `${one(v.start)} → ${one(v.end)}` : one(v.start);
+    }
+    if (p.type === 'created' || p.type === 'edited') {
+      const page = store.byId.get(row.id);
+      return page ? stamp(p.type === 'created' ? page.createdAt : page.updatedAt).replace('T', ' ') : '';
+    }
+    return this.text(row, p);
   }
 
   // -------------------------------------------------------- the calendar
@@ -2139,6 +2155,9 @@ class Databases {
 const HEAD_FROM = 10_000;
 /** Rows in that first screen. */
 const HEAD = 100;
+
+/** A spreadsheet's cells, with exported formulas' guards taken off (see guardCell). */
+const parseCsv = (text: string) => parseRawCsv(text).map((row) => row.map(unguardCell));
 
 /** Most rows storage takes in one call (see MAX_BATCH in databases.rs). */
 const BATCH = 20_000;

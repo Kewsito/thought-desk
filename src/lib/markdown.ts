@@ -18,12 +18,25 @@ export interface JNode {
 /** Title of a linked page, assignment, event or file. */
 type TitleOf = (id: string, kind?: 'page' | 'assignment' | 'event' | 'file') => string;
 
+/** The longest run of `ch` in `s`. */
+function longestRun(s: string, ch: string): number {
+  let best = 0;
+  let run = 0;
+  for (const c of s) {
+    run = c === ch ? run + 1 : 0;
+    if (run > best) best = run;
+  }
+  return best;
+}
 const escapeText = (s: string) => s.replace(/([\\`*_[\]])/g, '\\$1');
 
 function wrapMarks(text: string, marks: Mark[] = []): string {
   if (marks.some((m) => m.type === 'code')) {
-    const ticks = text.includes('`') ? '``' : '`';
-    text = `${ticks}${text}${ticks}`;
+    // Fenced by one backtick more than the longest run inside, with a space
+    // when it starts or ends with one (so ``` reads as ```` ``` ````).
+    const ticks = '`'.repeat(longestRun(text, '`') + 1);
+    const pad = text.startsWith('`') || text.endsWith('`') ? ' ' : '';
+    text = `${ticks}${pad}${text}${pad}${ticks}`;
   } else {
     text = escapeText(text);
   }
@@ -112,7 +125,7 @@ function block(n: JNode, titleOf: TitleOf): string {
       return prefixLines(`${iconText(n.attrs?.icon) || '💡'} ${blocks(n.content, titleOf)}`, '> ', '> ');
     case 'codeBlock': {
       const code = (n.content ?? []).map((t) => t.text ?? '').join('');
-      const fence = code.includes('```') ? '````' : '```';
+      const fence = '`'.repeat(Math.max(3, longestRun(code, '`') + 1));
       return `${fence}${n.attrs?.language ?? ''}\n${code}\n${fence}`;
     }
     case 'horizontalRule':

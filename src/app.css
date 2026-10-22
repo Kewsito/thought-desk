@@ -1827,8 +1827,10 @@ html.printing .prose > :is(ul, ol) > li {
     overflow: visible !important;
     background: #fff !important;
   }
+  /* The page alone: the main pane of split view, without the side pane. */
   html.printing .app,
   html.printing .main,
+  html.printing .panes,
   html.printing .scroller {
     display: block !important;
     height: auto !important;
@@ -1836,7 +1838,8 @@ html.printing .prose > :is(ul, ol) > li {
     background: none !important;
   }
   html.printing .app > :not(.main),
-  html.printing .main > :not(.scroller),
+  html.printing .main > :not(.panes),
+  html.printing .panes > :not(.scroller),
   html.printing .toasts,
   html.printing .tip,
   html.printing .popover,
