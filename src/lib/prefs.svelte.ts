@@ -44,6 +44,8 @@ interface Stored {
   sidebarWidth: number;
   expanded: Record<string, boolean>;
   sections: Record<string, boolean>;
+  /** Sidebar items turned off (see SIDEBAR_ITEMS): true = hidden. */
+  sidebarHidden: Record<string, boolean>;
   lastPageId: string | null;
   /** Last place the user was ("page", "assignments", "calendar", "files"). */
   lastView: string;
@@ -108,6 +110,7 @@ const defaults: Stored = {
   sidebarOpen: true,
   sidebarWidth: 260,
   expanded: {},
+  sidebarHidden: {},
   sections: {},
   lastPageId: null,
   lastView: 'home',
@@ -146,6 +149,7 @@ function read(): Stored {
       if (!ACCENTS.some((a) => a.key === stored.accent) && stored.accent !== 'custom') stored.accent = 'graphite';
       if (!PALETTES.some((p) => p.key === stored.palette) && stored.palette !== 'custom') stored.palette = 'default';
       if (!Array.isArray(stored.recentDbs)) stored.recentDbs = [];
+      if (!stored.sidebarHidden || typeof stored.sidebarHidden !== 'object') stored.sidebarHidden = {};
       // "Small text" was a switch before there were sizes.
       if (!('textSize' in parsed)) stored.textSize = parsed.smallText ? 'small' : 'default';
       if (!['small', 'default', 'large', 'xlarge'].includes(stored.textSize)) stored.textSize = 'default';
@@ -176,6 +180,7 @@ class Prefs {
   recentDbs = $state<string[]>(this.#initial.recentDbs);
   zoom = $state(this.#initial.zoom);
   sections = $state<Record<string, boolean>>(this.#initial.sections);
+  sidebarHidden = $state<Record<string, boolean>>(this.#initial.sidebarHidden);
   lastPageId = $state<string | null>(this.#initial.lastPageId);
   lastView = $state(this.#initial.lastView);
   weekStart = $state<WeekStart>(this.#initial.weekStart);
@@ -219,6 +224,7 @@ class Prefs {
       sidebarWidth: this.sidebarWidth,
       expanded: $state.snapshot(this.expanded),
       sections: $state.snapshot(this.sections),
+      sidebarHidden: $state.snapshot(this.sidebarHidden),
       lastPageId: this.lastPageId,
       lastView: this.lastView,
       weekStart: this.weekStart,

@@ -827,7 +827,11 @@ mockIPC((cmd, payload) => {
       }
       case 'data_info':
         return {
-          dataDir: 'C:\\(browser preview)',
+          dataDir: (window as any).__dataDir ?? 'C:\\(browser preview)',
+          defaultDir: 'C:\\(browser preview)',
+          chosenDir: !!(window as any).__dataDir,
+          envDir: false,
+          missingDir: (window as any).__missingDir ?? null,
           dbBytes: JSON.stringify(rows).length + JSON.stringify(planner).length,
           fileBytes: planner.files.reduce((n, f) => n + f.size, 0),
           fileCount: planner.files.filter((f) => !f.deletedAt).length,
@@ -836,6 +840,15 @@ mockIPC((cmd, payload) => {
           eventCount: planner.events.filter((x) => !x.deletedAt).length,
           version: 'dev',
         };
+      case 'plugin:dialog|open':
+        // Tests set the folder a person would pick.
+        return (window as any).__pickFolder ?? null;
+      case 'data_folder_check':
+        return { hasNotes: !!(window as any).__folderHasNotes, modified: null };
+      case 'data_folder_move':
+      case 'data_folder_reset':
+        (window as any).__folderMoves = [...((window as any).__folderMoves ?? []), { cmd, ...a }];
+        return null;
       case 'page_contents':
         return (a.ids ?? []).flatMap((id: string) => rows.filter((r) => r.id === id).map((r) => ({ id, content: r.content })));
       case 'export_begin':

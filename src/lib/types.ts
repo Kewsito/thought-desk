@@ -49,6 +49,14 @@ export interface SearchHit {
 
 export interface DataInfo {
   dataDir: string;
+  /** Thought Desk's own folder, where notes are kept unless another is chosen. */
+  defaultDir: string;
+  /** The notes are in a folder the user chose. */
+  chosenDir: boolean;
+  /** THOUGHTDESK_DATA_DIR set the folder, so Settings can't change it. */
+  envDir: boolean;
+  /** A chosen folder that wasn't there at start-up. */
+  missingDir: string | null;
   dbBytes: number;
   /** Bytes of everything in the files folder. */
   fileBytes: number;

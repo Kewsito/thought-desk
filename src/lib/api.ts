@@ -56,6 +56,12 @@ export const api = {
   exportMarkdown: (title: string, markdown: string) =>
     invoke<string>('export_markdown', { title, markdown }),
   dataInfo: () => invoke<DataInfo>('data_info'),
+  /** What a folder holds before keeping notes there. */
+  dataFolderCheck: (dir: string) => invoke<{ hasNotes: boolean; modified: number | null }>('data_folder_check', { dir }),
+  /** Keeps notes in `dir` from the next start: a copy of these, or the notes it has. */
+  dataFolderMove: (dir: string, openExisting: boolean) => invoke<void>('data_folder_move', { dir, openExisting }),
+  /** Keeps notes in Thought Desk's own folder again from the next start. */
+  dataFolderReset: () => invoke<void>('data_folder_reset'),
 
   /** Adds a file to the library (bytes are copied into the data folder). */
   async saveFile(file: Blob, name: string): Promise<FileMeta> {

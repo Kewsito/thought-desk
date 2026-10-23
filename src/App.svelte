@@ -5,6 +5,7 @@
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
   import { onMount } from 'svelte';
+  import { warnIfFolderMissing } from './lib/data-folder';
   import { api } from './lib/api';
   import { cssToRgb } from './lib/color-math';
   import { sidebarSlide } from './lib/motion';
@@ -204,6 +205,7 @@
         // Pages decide where to start, so the planner and files load alongside.
         await Promise.all([planner.load(), library.load(), tags.load(), databases.load(), store.load()]);
         void cards.load();
+        void warnIfFolderMissing();
       } catch (e) {
         ui.error(e);
       }

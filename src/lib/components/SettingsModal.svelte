@@ -15,6 +15,8 @@
   import { prefs, type Font, type TextSize, type RemindAssignments, type RemindEvents, type Theme, type WeekStart } from '../prefs.svelte';
   import { importCalendar } from '../ics-import.svelte';
   import { exportWorkspace } from '../export-workspace';
+  import { chooseDataFolder, useDefaultDataFolder } from '../data-folder';
+  import { SIDEBAR_ITEMS, setShownInSidebar, shownInSidebar } from '../sidebar-items';
   import { changeLook } from '../look-transition';
   import { ui } from '../ui.svelte';
   import { updates } from '../updates.svelte';
@@ -336,6 +338,17 @@
       </div>
     </div>
 
+    <h3 class="group-title">Sidebar</h3>
+    <div class="group">
+      {#each SIDEBAR_ITEMS as item (item.key)}
+        <div class="group-row">
+          <div class="row-label">{item.label}</div>
+          <Switch on={shownInSidebar(item.key)} label="Show {item.label} in the sidebar" onchange={() => setShownInSidebar(item.key, !shownInSidebar(item.key))} />
+        </div>
+      {/each}
+    </div>
+    <p class="group-note">Hidden ones are still a shortcut or a search away. Right-click an item in the sidebar to hide it from there.</p>
+
     <h3 class="group-title">Writing</h3>
     <div class="group">
       <div class="group-row">
@@ -434,7 +447,27 @@
             <small class="path" data-tip={info.dataDir}>{info.dataDir}</small>
           </div>
           <button class="btn small raised" onclick={copyPath}>Copy Path</button>
+          {#if !info.envDir}
+            <button class="btn small raised" onclick={() => void chooseDataFolder()}>Change…</button>
+          {/if}
         </div>
+        {#if info.missingDir}
+          <div class="group-row">
+            <div class="row-label path-label">
+              Chosen folder not found
+              <small class="path" data-tip={info.missingDir}>{info.missingDir} wasn't there when Thought Desk started, so these are the notes in its own folder. Connect the drive and restart, or keep using this folder.</small>
+            </div>
+            <button class="btn small raised" onclick={() => void useDefaultDataFolder(true)}>Use This Folder</button>
+          </div>
+        {:else if info.chosenDir && !info.envDir}
+          <div class="group-row">
+            <div class="row-label path-label">
+              Thought Desk's own folder
+              <small class="path" data-tip={info.defaultDir}>{info.defaultDir}</small>
+            </div>
+            <button class="btn small raised" onclick={() => void useDefaultDataFolder()}>Use Default</button>
+          </div>
+        {/if}
         <div class="group-row">
           <div class="row-label">
             Export All Notes
@@ -446,7 +479,7 @@
         <div class="group-row"><div class="row-label"><small>Loading…</small></div></div>
       {/if}
     </div>
-    <p class="group-note">Everything is stored on this computer: one SQLite file plus a files folder. Back up the folder above to keep your work safe.</p>
+    <p class="group-note">Everything is stored in one SQLite file plus a files folder, in the folder above. Back it up to keep your work safe, or keep it in a folder that's backed up already (Change…).</p>
 
     <ShortcutsEditor />
 

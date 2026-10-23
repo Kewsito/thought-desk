@@ -10,6 +10,7 @@ use crate::databases::{Change, CreatedDatabase, CreatedRow, Database, DatabaseIn
 use crate::db::{Db, Error, Page, PageContent, PageMeta, PagePatch, Result, SearchHit, Table};
 use crate::export::{Export, ExportEntry};
 use crate::library::{FileMeta, FilePatch, FileUsage};
+use crate::location::{FolderState, Location};
 use crate::organize::{Tag, Todo};
 use crate::planner::{Assignment, AssignmentPatch, Course, CoursePatch, Event, EventPatch, OccurrencePage};
 use crate::reminders::{Reminder, Reminders};
@@ -546,6 +547,14 @@ pub fn sync_apply(db: State<Db>, changes: Vec<Change>) -> Result<()> {
 #[serde(rename_all = "camelCase")]
 pub struct DataInfo {
     data_dir: String,
+    /// The app's own folder, where notes are kept unless another is chosen.
+    default_dir: String,
+    /// The notes are in a folder the user chose.
+    chosen_dir: bool,
+    /// THOUGHTDESK_DATA_DIR set the folder, so it can't be changed here.
+    env_dir: bool,
+    /// A chosen folder that wasn't there at start-up.
+    missing_dir: Option<String>,
     db_bytes: u64,
     file_bytes: u64,
     /// Live files in the library.
@@ -557,7 +566,7 @@ pub struct DataInfo {
 }
 
 #[tauri::command(async)]
-pub fn data_info(app: AppHandle, db: State<Db>) -> Result<DataInfo> {
+pub fn data_info(app: AppHandle, db: State<Db>, place: State<Location>) -> Result<DataInfo> {
     let size = |name: &str| {
         std::fs::metadata(db.data_dir.join(name))
             .map(|m| m.len())
@@ -574,6 +583,10 @@ pub fn data_info(app: AppHandle, db: State<Db>) -> Result<DataInfo> {
     }
     Ok(DataInfo {
         data_dir: db.data_dir.to_string_lossy().into_owned(),
+        default_dir: place.default_dir.to_string_lossy().into_owned(),
+        chosen_dir: place.chosen,
+        env_dir: place.from_env,
+        missing_dir: place.missing.as_ref().map(|d| d.to_string_lossy().into_owned()),
         db_bytes,
         file_bytes,
         file_count: db.live_count(Table::Files)?,
@@ -582,6 +595,47 @@ pub fn data_info(app: AppHandle, db: State<Db>) -> Result<DataInfo> {
         event_count: db.live_count(Table::Events)?,
         version: app.package_info().version.to_string(),
     })
+}
+
+/// What a folder holds, before keeping notes there.
+#[tauri::command(async)]
+pub fn data_folder_check(db: State<Db>, dir: String) -> Result<FolderState> {
+    let dir = PathBuf::from(dir);
+    if crate::location::same_folder(&dir, &db.data_dir) {
+        return Err(Error("Your notes are already in that folder".into()));
+    }
+    Ok(crate::location::inspect(&dir))
+}
+
+/// Keeps notes in `dir` from the next start: a copy of these notes, or
+/// (`open_existing`) the notes the folder already has. The app restarts after.
+#[tauri::command(async)]
+pub fn data_folder_move(db: State<Db>, place: State<Location>, dir: String, open_existing: bool) -> Result<()> {
+    if place.from_env {
+        return Err(Error("THOUGHTDESK_DATA_DIR sets where notes are kept".into()));
+    }
+    let dir = PathBuf::from(dir);
+    if open_existing {
+        if !crate::location::inspect(&dir).has_notes {
+            return Err(Error("That folder has no notes to open".into()));
+        }
+    } else {
+        db.copy_to(&dir, false)?;
+    }
+    crate::location::remember(&place.default_dir, Some(&dir))
+}
+
+/// Keeps notes in the app's own folder again, from the next start: a copy
+/// of these notes (older ones there are set aside, not deleted).
+#[tauri::command(async)]
+pub fn data_folder_reset(db: State<Db>, place: State<Location>) -> Result<()> {
+    if place.from_env {
+        return Err(Error("THOUGHTDESK_DATA_DIR sets where notes are kept".into()));
+    }
+    if !crate::location::same_folder(&place.default_dir, &db.data_dir) {
+        db.copy_to(&place.default_dir, true)?;
+    }
+    crate::location::remember(&place.default_dir, None)
 }
 
 #[cfg(test)]

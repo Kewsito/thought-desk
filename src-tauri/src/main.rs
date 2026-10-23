@@ -8,6 +8,7 @@ mod db;
 mod export;
 mod files;
 mod library;
+mod location;
 mod memory;
 mod organize;
 mod pdf;
@@ -48,6 +49,7 @@ fn main() {
 
     builder
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
@@ -81,12 +83,14 @@ fn main() {
         )
         .register_asynchronous_uri_scheme_protocol("tdfile", files::protocol)
         .setup(|app| {
-            let dir = match custom_data_dir() {
-                Some(dir) => dir,
-                None => app.path().app_data_dir()?,
+            let default_dir = app.path().app_data_dir()?;
+            let place = match custom_data_dir() {
+                Some(dir) => location::Location { dir, default_dir, from_env: true, chosen: false, missing: None },
+                None => location::resolve(&default_dir),
             };
-            let db = db::Db::open(&dir).map_err(|e| e.0)?;
+            let db = db::Db::open(&place.dir).map_err(|e| e.0)?;
             app.manage(db);
+            app.manage(place);
 
             reminders::start(app.handle().clone());
 
@@ -172,6 +176,9 @@ fn main() {
             commands::export_write,
             commands::export_reveal,
             commands::data_info,
+            commands::data_folder_check,
+            commands::data_folder_move,
+            commands::data_folder_reset,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Thought Desk");

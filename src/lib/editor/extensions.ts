@@ -6,7 +6,6 @@ import { CharacterCount, Placeholder } from '@tiptap/extensions';
 import { Details, DetailsContent, DetailsSummary } from '@tiptap/extension-details';
 import { TableKit } from '@tiptap/extension-table';
 import Image from '@tiptap/extension-image';
-import Highlight from '@tiptap/extension-highlight';
 import Typography from '@tiptap/extension-typography';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
@@ -22,6 +21,7 @@ import { DatabaseNode } from './database-block.svelte';
 import { Flashcard, FlashcardBack, FlashcardFront } from './flashcard';
 import { InlineMath, MathBlock } from './math';
 import { MathPaste } from './math-paste';
+import { ColorHighlight, TextColor } from './text-color';
 import { ui } from '../ui.svelte';
 
 /** Editor-wide shortcuts that don't belong to a single node type. */
@@ -134,7 +134,8 @@ export function buildExtensions(handle: BlockHandleOptions): AnyExtension[] {
       HTMLAttributes: { loading: 'lazy', decoding: 'async' },
       resize: { enabled: true, directions: ['left', 'right'], minWidth: 80, minHeight: 40, alwaysPreserveAspectRatio: true },
     }),
-    Highlight,
+    ColorHighlight,
+    TextColor,
     Typography,
     CharacterCount,
     Placeholder.configure({

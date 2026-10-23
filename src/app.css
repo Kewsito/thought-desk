@@ -1170,6 +1170,38 @@ html.printing .prose > :is(ul, ol) > li {
   box-decoration-break: clone;
 }
 
+/* Coloured text and highlights (editor/text-color.ts): a palette colour,
+   darkened for text on light pages, lightened on dark ones, and a tint of it
+   behind highlighted text. */
+:root {
+  --ink-toward: black;
+  --ink-amount: 70%;
+  --tint-amount: 22%;
+}
+:root[data-theme='dark'] {
+  --ink-toward: white;
+  --ink-amount: 78%;
+  --tint-amount: 30%;
+}
+[data-text-color='red'], mark[data-color='red'], .swatch-ink[data-ink='red'] { --ink: var(--c-red); }
+[data-text-color='orange'], mark[data-color='orange'], .swatch-ink[data-ink='orange'] { --ink: var(--c-orange); }
+[data-text-color='yellow'], mark[data-color='yellow'], .swatch-ink[data-ink='yellow'] { --ink: var(--c-yellow); }
+[data-text-color='green'], mark[data-color='green'], .swatch-ink[data-ink='green'] { --ink: var(--c-green); }
+[data-text-color='teal'], mark[data-color='teal'], .swatch-ink[data-ink='teal'] { --ink: var(--c-teal); }
+[data-text-color='blue'], mark[data-color='blue'], .swatch-ink[data-ink='blue'] { --ink: var(--c-blue); }
+[data-text-color='indigo'], mark[data-color='indigo'], .swatch-ink[data-ink='indigo'] { --ink: var(--c-indigo); }
+[data-text-color='purple'], mark[data-color='purple'], .swatch-ink[data-ink='purple'] { --ink: var(--c-purple); }
+[data-text-color='pink'], mark[data-color='pink'], .swatch-ink[data-ink='pink'] { --ink: var(--c-pink); }
+[data-text-color='gray'], mark[data-color='gray'], .swatch-ink[data-ink='gray'] { --ink: var(--c-gray); }
+.prose [data-text-color],
+.swatch-ink.text {
+  color: color-mix(in oklab, var(--ink) var(--ink-amount), var(--ink-toward));
+}
+.prose mark[data-color],
+.swatch-ink.tint {
+  background: color-mix(in srgb, var(--ink) var(--tint-amount), var(--bg));
+}
+
 .prose code {
   font-family: var(--font-mono);
   font-size: 0.85em;
