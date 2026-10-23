@@ -105,3 +105,33 @@ test('export names: safe on Windows, links relative to the page', async ({ page 
   expect(out.names).toEqual(['a b c', 'CON (page)', 'trailing', 'Untitled', 'Untitled']);
   expect(out.link).toBe('../../attachments/cell%20diagram.png');
 });
+
+test('Markdown keeps money as text and formulas as math, and pastes back the same', async ({ page }) => {
+  await open(page);
+  const out = await page.evaluate(async () => {
+    const md = await import('/src/lib/markdown.ts' as string);
+    const paste = await import('/src/lib/math/paste.ts' as string);
+    const t = (text: string) => ({ type: 'text', text });
+    const im = (latex: string) => ({ type: 'inlineMath', attrs: { latex } });
+    const doc = {
+      type: 'doc',
+      content: [
+        { type: 'paragraph', content: [t('Costs $5 and $10, area '), im('\\pi r^2'), t(', padded '), im(' x + 1 '), t(', empty '), im('  ')] },
+        { type: 'mathBlock', attrs: { latex: '\n\\begin{aligned}\na &= b \\\\\nc &= d\n\\end{aligned}\n' } },
+      ],
+    };
+    const text = md.toMarkdown(doc, 'Math', () => '');
+    // What pasting the export (minus its title) brings back.
+    const back = paste.textToBlocks(text.split('\n').slice(2).join('\n'));
+    const flat = (nodes: any[]): any[] => nodes.flatMap((n) => [n, ...flat(n.content ?? [])]);
+    return {
+      text,
+      maths: flat(back).filter((n) => n.type === 'inlineMath' || n.type === 'mathBlock').map((n) => n.attrs.latex),
+      words: flat(back).filter((n) => n.type === 'text').map((n) => n.text).join(''),
+    };
+  });
+  expect(out.text).toContain('Costs \\$5 and \\$10, area $\\pi r^2$, padded $x + 1$, empty \n');
+  expect(out.text).toContain('$$\n\\begin{aligned}\na &= b \\\\\nc &= d\n\\end{aligned}\n$$');
+  expect(out.maths).toEqual(['\\pi r^2', 'x + 1', '\\begin{aligned}\na &= b \\\\\nc &= d\n\\end{aligned}']);
+  expect(out.words).toContain('Costs $5 and $10, area ');
+});

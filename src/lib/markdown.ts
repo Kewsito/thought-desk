@@ -52,7 +52,11 @@ function longestRun(s: string, ch: string): number {
   }
   return best;
 }
-const escapeText = (s: string) => s.replace(/([\\`*_[\]])/g, '\\$1');
+// `$` too: Markdown apps read "$5 and $10" as a formula.
+const escapeText = (s: string) => s.replace(/([\\`*_[\]$])/g, '\\$1');
+
+/** `$…$` only counts as math with no space just inside the dollars. */
+const inlineMath = (latex: string) => (latex.trim() ? `$${latex.trim()}$` : '');
 
 function wrapMarks(text: string, marks: Mark[] = []): string {
   if (marks.some((m) => m.type === 'code')) {
@@ -104,7 +108,7 @@ function inline(nodes: JNode[] | undefined, cx: Cx): string {
         return kind === 'page' ? `[[${cx.titleOf(n.attrs?.id)}]]` : `**${escapeText(cx.titleOf(n.attrs?.id, kind))}**`;
       }
       if (n.type === 'image') return `![${n.attrs?.alt ?? ''}](${imageSrc(n, cx)})`;
-      if (n.type === 'inlineMath') return `$${n.attrs?.latex ?? ''}$`;
+      if (n.type === 'inlineMath') return inlineMath(n.attrs?.latex ?? '');
       return inline(n.content, cx);
     })
     .join('');
@@ -160,8 +164,10 @@ function block(n: JNode, cx: Cx): string {
       const [front, back] = n.content ?? [];
       return `${inline(front?.content, cx)} :: ${inline(back?.content, cx)}`;
     }
-    case 'mathBlock':
-      return `$$\n${n.attrs?.latex ?? ''}\n$$`;
+    case 'mathBlock': {
+      const latex = (n.attrs?.latex ?? '').trim();
+      return latex ? `$$\n${latex}\n$$` : '';
+    }
     case 'image':
       return `![${n.attrs?.alt ?? ''}](${imageSrc(n, cx)})`;
     case 'pageLink':
