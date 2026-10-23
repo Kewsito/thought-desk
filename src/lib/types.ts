@@ -15,6 +15,15 @@ export interface PageMeta {
   kind: string;
 }
 
+/** A file the workspace export writes: its text, or a library file to copy. */
+export interface ExportEntry {
+  /** Relative to the export folder, `/`-separated ("Biology/Lecture.md"). */
+  path: string;
+  text?: string;
+  /** Stored name of a library file. */
+  stored?: string;
+}
+
 export interface Page extends PageMeta {
   /** Editor JSON (or HTML for seeded pages that were never edited). */
   content: string;

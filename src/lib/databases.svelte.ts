@@ -2100,14 +2100,32 @@ class Databases {
     const hidden = new Set(view.config.hidden ?? []);
     const props = this.props(dbId).filter((p) => p.type === 'title' || !hidden.has(p.id));
     const { rows } = this.query(dbId, view);
-    const table = [props.map((p) => p.name), ...rows.map((r) => props.map((p) => guardCell(this.#csvText(r, p))))];
     const title = store.byId.get(dbId)?.title || 'Untitled';
     try {
-      const path = await api.exportDocument(view.name === 'Table' ? title : `${title} - ${view.name}`, 'csv', new TextEncoder().encode('﻿' + stringify(table)));
+      const path = await api.exportDocument(view.name === 'Table' ? title : `${title} - ${view.name}`, 'csv', new TextEncoder().encode(this.#csv(props, rows)));
       ui.toast(`Saved ${path.split(/[\\/]/).pop()} to Downloads`);
     } catch (e) {
       ui.error(e);
     }
+  }
+
+  /** Every row and property of a database as CSV, for the workspace export. */
+  csv(dbId: string): string {
+    return this.#csv(this.props(dbId).filter((p) => p.type !== 'button'), this.rowsOf(dbId));
+  }
+
+  /** A row's values by property name, as written in a CSV (empty ones left
+   *  out), for the workspace export. */
+  fields(row: DbRow): [string, string][] {
+    return this.props(row.dbId)
+      .filter((p) => p.type !== 'title' && p.type !== 'button')
+      .map((p): [string, string] => [p.name, this.#csvText(row, p)])
+      .filter(([, v]) => v !== '');
+  }
+
+  /** CSV text (with a byte order mark, so Excel reads it as UTF-8). */
+  #csv(props: Property[], rows: DbRow[]): string {
+    return '﻿' + stringify([props.map((p) => p.name), ...rows.map((r) => props.map((p) => guardCell(this.#csvText(r, p))))]);
   }
 
   /** A value for a spreadsheet: as shown, except dates, which are written

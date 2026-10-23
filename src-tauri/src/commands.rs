@@ -7,7 +7,8 @@
 
 use crate::cards::{Card, Deck, Review};
 use crate::databases::{Change, CreatedDatabase, CreatedRow, Database, DatabaseInput, ListedRow, NewRow, RowChange, SchemaItem};
-use crate::db::{Db, Error, Page, PageMeta, PagePatch, Result, SearchHit, Table};
+use crate::db::{Db, Error, Page, PageContent, PageMeta, PagePatch, Result, SearchHit, Table};
+use crate::export::{Export, ExportEntry};
 use crate::library::{FileMeta, FilePatch, FileUsage};
 use crate::organize::{Tag, Todo};
 use crate::planner::{Assignment, AssignmentPatch, Course, CoursePatch, Event, EventPatch, OccurrencePage};
@@ -388,6 +389,33 @@ pub fn export_pdf(app: AppHandle, title: String) -> Result<String> {
     let path = unique_path(&app.path().download_dir()?, &safe_file_name(&title), "pdf");
     crate::pdf::print_to_pdf(&window, &path)?;
     Ok(path.to_string_lossy().into_owned())
+}
+
+/// The bodies of many pages at once, for exporting the workspace.
+#[tauri::command(async)]
+pub fn page_contents(db: State<Db>, ids: Vec<String>) -> Result<Vec<PageContent>> {
+    db.page_contents(&ids)
+}
+
+/// Starts exporting the workspace: makes a new folder in Downloads (named
+/// `name`, made unique) for `export_write` to fill, and returns its path.
+#[tauri::command(async)]
+pub fn export_begin(app: AppHandle, export: State<Export>, name: String) -> Result<String> {
+    let dir = unique_path(&app.path().download_dir()?, &safe_file_name(&name), "");
+    export.begin(&dir)?;
+    Ok(dir.to_string_lossy().into_owned())
+}
+
+/// Writes files into the folder `export_begin` made.
+#[tauri::command(async)]
+pub fn export_write(db: State<Db>, export: State<Export>, entries: Vec<ExportEntry>) -> Result<()> {
+    export.write(&db.files_dir, &entries)
+}
+
+/// Shows the last export's folder in Explorer.
+#[tauri::command(async)]
+pub fn export_reveal(app: AppHandle, export: State<Export>) -> Result<()> {
+    app.opener().reveal_item_in_dir(export.dir()?).map_err(|e| Error(e.to_string()))
 }
 
 // ---------------------------------------------------------------- flashcards

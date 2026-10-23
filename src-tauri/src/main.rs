@@ -5,6 +5,7 @@ mod cards;
 mod commands;
 mod databases;
 mod db;
+mod export;
 mod files;
 mod library;
 mod memory;
@@ -51,6 +52,7 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .manage(reminders::Reminders::default())
+        .manage(export::Export::default())
         .plugin(
             // Quick Capture from anywhere: bring the window up and ask the UI
             // to open the capture box. Registered on demand (Settings).
@@ -165,6 +167,10 @@ fn main() {
             commands::restore_item,
             commands::delete_item,
             commands::export_markdown,
+            commands::page_contents,
+            commands::export_begin,
+            commands::export_write,
+            commands::export_reveal,
             commands::data_info,
         ])
         .run(tauri::generate_context!())

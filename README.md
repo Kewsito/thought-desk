@@ -82,6 +82,7 @@ Databases were tested the same way: a 50,000-row tracker linked to a 5,000-row o
 - **Flashcards:** type `/flashcard` in any page for a card with a front and a back (Enter moves to the back, then on to the next card, so a whole deck can be typed in one go). Every page with cards is a deck; the Flashcards view (`Ctrl+5`) groups decks by course and shows what's due, new and mastered. Study sessions use spaced repetition (Again / Hard / Good / Easy, keys `1`–`4`, `Space` to flip), so each card comes back just before you'd forget it. *Study* buttons sit on the deck's page, its course and Home's summary.
 - **Grades:** give an assignment a score (points earned / possible) and a category. Each course shows its current grade and letter, weighted by category ("Exams 60%, Labs 40%") or by total points when there are no weights; weights are edited right on the course page.
 - **Export as PDF or Word:** *Export as PDF* opens the print dialog with just the page, in light colors (choose *Save as PDF*). *Export as Word* writes a real `.docx` to Downloads, with Word heading styles, lists, to-dos, tables, images, code and flashcards, ready to hand in. Markdown export is still there too.
+- **Export all notes:** Settings → Storage → *Export…* (or *Export All Notes as Markdown* in `Ctrl+K`) writes every page as a Markdown file into a new folder in Downloads, in folders like the sidebar (a page with sub-pages becomes a folder holding its own file). Tags, icon and dates go in front matter, links between pages become `[[wiki links]]` that resolve inside the folder (so it opens as an Obsidian vault), the pictures and files pages use are copied into `attachments/` and linked, and each database is a CSV of every row and property, with rows that have notes as pages of their own. Trash is left out. It's a copy to read anywhere, not a backup the app can restore.
 - **Reminders:** system notifications the evening before (or the morning of) a due date, an hour before anything with a due time, and 5–30 minutes before timed events. They're scheduled on the Rust side, so they fire even while the window is minimized.
 - **Files:** one library for everything you add: imports, drops, attachments and images in pages. Grid or list, filters by type and an *Unused* filter, previews for images, PDFs, audio, video and text, *Open in default app*, *Show in folder*, *Save a copy*, and where each file is used.
 - **One workspace:** `@` links a page to pages, assignments, events or files (assignment chips show a live check and due date); `/assignment`, `/event` and `/file` create or insert them from a page; a notes page links back to its assignment; due assignments show in the calendar; files dropped anywhere land in the library.
@@ -154,6 +155,7 @@ src/                     TypeScript + Svelte UI
   lib/library.svelte.ts  the file library
   lib/tags.svelte.ts     tags; lib/todos.svelte.ts to-dos rolled up from pages; lib/capture.ts Quick Capture
   lib/databases.svelte.ts databases: rows, values, saving, undo, import and export
+  lib/export-workspace.ts every note as Markdown in folders, databases as CSV, attachments copied
   lib/db/                database views (table, board, gallery, list, calendar, chart, timeline, form), pickers, formula
                          language, query engine (filters, sorts, groups), templates, CSV, order keys
   lib/editor/            TipTap editor: slash menu, @-links, block handle, callouts, file blocks…
@@ -172,6 +174,7 @@ src-tauri/src/
   cards.rs               flashcards: decks, reviews (+ tests)
   databases.rs           database schemas, properties, views, automations, rows and templates, merging copies (+ tests)
   sync.rs                device id, hybrid logical clocks, outbox
+  export.rs              writing the whole-workspace export into its folder (+ tests)
   files.rs               `tdfile://` protocol (byte ranges), stray-file cleanup
   stress.rs              heavy-workspace benchmark (`cargo test --release stress -- --ignored`)
   memory.rs              WebView2 suspend/trim while minimized, idle, or after Settings

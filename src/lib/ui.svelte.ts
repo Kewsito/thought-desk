@@ -216,6 +216,12 @@ class UI {
     return id;
   }
 
+  /** Changes what a toast that's still showing says (progress). */
+  retoast(id: number, message: string) {
+    const t = this.toasts.find((t) => t.id === id);
+    if (t) t.message = message;
+  }
+
   dismissToast(id: number) {
     const i = this.toasts.findIndex((t) => t.id === id);
     if (i >= 0) this.toasts.splice(i, 1);

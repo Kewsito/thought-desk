@@ -12,6 +12,7 @@ import type {
   Deck,
   DataInfo,
   EventPatch,
+  ExportEntry,
   FileMeta,
   FileUsage,
   Tag,
@@ -45,6 +46,13 @@ export const api = {
   deletePage: (id: string) => invoke<void>('delete_page', { id }),
   emptyTrash: () => invoke<void>('empty_trash'),
   search: (query: string, limit = 30) => invoke<SearchHit[]>('search', { query, limit }),
+  /** Bodies of many pages at once (gone ones left out), for the workspace export. */
+  pageContents: (ids: string[]) => invoke<{ id: string; content: string }[]>('page_contents', { ids }),
+  /** Makes a new folder in Downloads for the workspace export; returns its path. */
+  exportBegin: (name: string) => invoke<string>('export_begin', { name }),
+  /** Writes texts, or copies library files, into the export folder. */
+  exportWrite: (entries: ExportEntry[]) => invoke<void>('export_write', { entries }),
+  exportReveal: () => invoke<void>('export_reveal'),
   exportMarkdown: (title: string, markdown: string) =>
     invoke<string>('export_markdown', { title, markdown }),
   dataInfo: () => invoke<DataInfo>('data_info'),
@@ -142,8 +150,13 @@ export function fileUrl(name: string): string {
   return convertFileSrc(name, 'tdfile');
 }
 
+/** The stored name a library file URL points to, or null for any other address. */
+export function storedName(src: string): string | null {
+  return /^(?:https?:\/\/tdfile\.localhost\/|tdfile:\/\/localhost\/)([A-Za-z0-9.]+)$/.exec(src)?.[1] ?? null;
+}
+
 /** Rewrites stored file URLs for the current platform's URL scheme. */
 export function normalizeFileUrl(src: string): string {
-  const m = /^(?:https?:\/\/tdfile\.localhost\/|tdfile:\/\/localhost\/)([A-Za-z0-9.]+)$/.exec(src);
-  return m ? fileUrl(m[1]) : src;
+  const name = storedName(src);
+  return name ? fileUrl(name) : src;
 }

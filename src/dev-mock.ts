@@ -836,6 +836,17 @@ mockIPC((cmd, payload) => {
           eventCount: planner.events.filter((x) => !x.deletedAt).length,
           version: 'dev',
         };
+      case 'page_contents':
+        return (a.ids ?? []).flatMap((id: string) => rows.filter((r) => r.id === id).map((r) => ({ id, content: r.content })));
+      case 'export_begin':
+        // What a workspace export wrote, by path: a text, or the file it copied.
+        (window as any).__workspaceExport = {};
+        return `C:\\Downloads\\${a.name}`;
+      case 'export_write':
+        for (const e of a.entries ?? []) (window as any).__workspaceExport[e.path] = e.text ?? { copied: e.stored };
+        return null;
+      case 'export_reveal':
+        return null;
       case 'export_markdown':
         console.info(a.markdown);
         return `C:\\Downloads\\${a.title}.md`;

@@ -14,6 +14,7 @@
   import { planner } from '../planner.svelte';
   import { prefs, type Font, type TextSize, type RemindAssignments, type RemindEvents, type Theme, type WeekStart } from '../prefs.svelte';
   import { importCalendar } from '../ics-import.svelte';
+  import { exportWorkspace } from '../export-workspace';
   import { changeLook } from '../look-transition';
   import { ui } from '../ui.svelte';
   import { updates } from '../updates.svelte';
@@ -433,6 +434,13 @@
             <small class="path" data-tip={info.dataDir}>{info.dataDir}</small>
           </div>
           <button class="btn small raised" onclick={copyPath}>Copy Path</button>
+        </div>
+        <div class="group-row">
+          <div class="row-label">
+            Export All Notes
+            <small>Every page as a Markdown file, in folders like the sidebar, with databases as CSV and the files they use.</small>
+          </div>
+          <button class="btn small raised" onclick={() => void exportWorkspace()}>Export…</button>
         </div>
       {:else}
         <div class="group-row"><div class="row-label"><small>Loading…</small></div></div>

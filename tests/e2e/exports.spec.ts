@@ -37,3 +37,71 @@ test('CSV guards formulas, and Markdown fences code with backticks in it', async
   expect(out.back).toBe('=SUM(A1)');
   expect(out.md).toContain('Fence with ```` ``` ````');
 });
+
+test('Export All Notes writes folders like the sidebar, links that resolve, attachments and CSV', async ({ page }) => {
+  await open(page);
+  const out = await page.evaluate(async () => {
+    const { store } = await import('/src/lib/store.svelte.ts' as string);
+    const { databases } = await import('/src/lib/databases.svelte.ts' as string);
+    const { library } = await import('/src/lib/library.svelte.ts' as string);
+    const { api } = await import('/src/lib/api.ts' as string);
+    const { exportWorkspace } = await import('/src/lib/export-workspace.ts' as string);
+    const byTitle = (t: string) => [...store.byId.values()].find((p: any) => p.title === t && !p.deletedAt) as any;
+    const [picture, doc] = library.files;
+    // A second "Cell vocabulary" at the top, pointing at the one in Biology.
+    await store.create(null, {
+      title: 'Cell vocabulary',
+      open: false,
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'See ' }, { type: 'mention', attrs: { id: store.children(byTitle('Biology').id).find((p: any) => p.title === 'Cell vocabulary').id, kind: 'page' } }] },
+        { type: 'image', attrs: { src: `tdfile://localhost/${picture.stored}`, alt: 'diagram' } },
+        { type: 'fileBlock', attrs: { id: doc.id } },
+      ],
+    });
+    const list = databases.list.find((d: any) => d.title === 'Reading list');
+    await databases.ensure([list.id]);
+    const row = databases.rowsOf(list.id)[0];
+    await api.updatePage(row.id, { content: JSON.stringify({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Loved it' }] }] }) });
+    await exportWorkspace();
+    return { files: (window as any).__workspaceExport as Record<string, any>, row: databases.title(row), picture: picture.name, doc: doc.name };
+  });
+  const paths = Object.keys(out.files);
+  expect(paths).toContain('Biology/Biology.md');
+  expect(paths).toContain('Biology/Cell vocabulary.md');
+  expect(paths).toContain('Cell vocabulary.md');
+  expect(paths).toContain('Databases/Reading list.csv');
+  expect(paths).toContain(`Databases/Reading list/${out.row}.md`);
+  expect(paths.filter((p) => p.startsWith('Databases/Reading list/')), 'only rows with notes get a page').toHaveLength(1);
+
+  const top: string = out.files['Cell vocabulary.md'];
+  expect(top.startsWith('---\n'), 'front matter').toBe(true);
+  expect(top).toMatch(/\ncreated: \d{4}-\d\d-\d\dT\d\d:\d\d\n/);
+  expect(top, 'two pages share the name, so the link uses the path').toContain('[[Biology/Cell vocabulary|Cell vocabulary]]');
+  expect(top).toMatch(/!\[diagram\]\(attachments\/[^)]+\)/);
+  expect(top).toContain(`📎 [${out.doc}](attachments/`);
+  expect(out.files['Biology/Cell vocabulary.md']).toContain('# Cell vocabulary');
+
+  const copies = paths.filter((p) => p.startsWith('attachments/'));
+  expect(copies).toHaveLength(2);
+  for (const p of copies) expect(out.files[p]).toHaveProperty('copied');
+  const nested = top.match(/!\[diagram\]\((attachments\/[^)]+)\)/)![1];
+  expect(copies.map((p) => p.split('/').map(encodeURIComponent).join('/'))).toContain(nested);
+
+  const csv: string = out.files['Databases/Reading list.csv'];
+  expect(csv.charCodeAt(0), 'byte order mark for Excel').toBe(0xfeff);
+  expect(csv).toContain(out.row);
+  expect(out.files[`Databases/Reading list/${out.row}.md`]).toContain('Loved it');
+});
+
+test('export names: safe on Windows, links relative to the page', async ({ page }) => {
+  await open(page);
+  const out = await page.evaluate(async () => {
+    const m = await import('/src/lib/export-workspace.ts' as string);
+    return {
+      names: ['a/b: c?', 'CON', 'trailing. ', '', '   '].map(m.fileName),
+      link: m.linkFrom('Biology/Week 1/Notes.md', 'attachments/cell diagram.png'),
+    };
+  });
+  expect(out.names).toEqual(['a b c', 'CON (page)', 'trailing', 'Untitled', 'Untitled']);
+  expect(out.link).toBe('../../attachments/cell%20diagram.png');
+});
