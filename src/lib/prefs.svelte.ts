@@ -293,12 +293,27 @@ $effect.root(() => {
   $effect(() => {
     const data = prefs.snapshot();
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
-      try {
-        localStorage.setItem(KEY, JSON.stringify(data));
-      } catch {
-        /* storage full or unavailable: preferences just won't persist */
-      }
-    }, 250);
+    saveTimer = setTimeout(() => save(data), 250);
   });
+});
+
+function save(data: ReturnType<Prefs['snapshot']>) {
+  clearTimeout(saveTimer);
+  saveTimer = undefined;
+  try {
+    localStorage.setItem(KEY, JSON.stringify(data));
+  } catch {
+    /* storage full or unavailable: preferences just won't persist */
+  }
+}
+
+/** Writes a change still waiting out the debounce, so closing, minimizing or
+ *  reloading right after changing a setting doesn't lose it. */
+function saveNow() {
+  if (saveTimer !== undefined) save(prefs.snapshot());
+}
+window.addEventListener('td:flush', saveNow);
+window.addEventListener('pagehide', saveNow);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') saveNow();
 });

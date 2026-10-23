@@ -75,15 +75,15 @@ test('text size changes the writing on pages, and is remembered', async ({ page 
   await open(page);
   await page.click('.sidebar >> text=Getting started');
   await expect(page.locator('h1.title')).toHaveText('Getting started');
-  expect(await pageText(page)).toBe('16px');
+  await expect.poll(() => pageText(page)).toBe('16px');
   const sidebar = await sidebarSize(page);
 
   await test.step('Larger makes page text and the title bigger, not the sidebar', async () => {
     await page.keyboard.press('Control+Comma');
     await page.locator('[role=radiogroup][aria-label="Text size"] button', { hasText: 'Larger' }).click();
     await page.keyboard.press('Escape');
-    expect(await pageText(page)).toBe('20px');
-    expect(await titleSize(page)).toBe('52px');
+    await expect.poll(() => pageText(page)).toBe('20px');
+    await expect.poll(() => titleSize(page)).toBe('52px');
     expect(await sidebarSize(page)).toBe(sidebar);
   });
 
@@ -101,7 +101,7 @@ test('text size changes the writing on pages, and is remembered', async ({ page 
     await page.reload();
     await page.locator('.sidebar').waitFor();
     await expect(page.locator('h1.title')).toHaveText('Getting started');
-    expect(await pageText(page)).toBe('20px');
+    await expect.poll(() => pageText(page)).toBe('20px');
   });
 });
 
@@ -115,7 +115,17 @@ test('"Small text" from before becomes the Small size', async ({ page }) => {
   await open(page);
   await page.click('.sidebar >> text=Getting started');
   await expect(page.locator('h1.title')).toHaveText('Getting started');
-  expect(await pageText(page)).toBe('15px');
+  await expect.poll(() => pageText(page)).toBe('15px');
   await page.keyboard.press('Control+Comma');
   await expect(page.locator('[role=radiogroup][aria-label="Text size"] button[aria-checked=true]')).toHaveText('Small');
+});
+
+test('a setting changed just before a reload is kept', async ({ page }) => {
+  await open(page);
+  await page.keyboard.press('Control+Comma');
+  await page.locator('[role=radiogroup][aria-label="Text size"] button', { hasText: 'Larger' }).click();
+  // Straight away, inside the wait before settings are written.
+  await page.reload();
+  await page.locator('.sidebar').waitFor();
+  expect(await page.evaluate(() => document.documentElement.dataset.textSize)).toBe('xlarge');
 });
