@@ -1,6 +1,12 @@
 # Builds the Windows installer when a version tag is pushed (git tag v0.1.0
 # && git push origin v0.1.0) and attaches it to a draft GitHub release, to
 # check and publish by hand.
+#
+# This job holds the key that signs updates, which every installed copy
+# trusts. So it waits for approval (the "release" environment's required
+# reviewer), and every action is pinned to a commit: a tag can be moved to
+# other code, a commit can't. Update a pin by looking up the new release's
+# commit, and say which release it is in the comment.
 name: Release
 
 on:
@@ -14,23 +20,26 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
+    environment: release
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
           cache: npm
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: src-tauri
 
       - run: npm ci
 
-      - uses: tauri-apps/tauri-action@v0
+      - uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Signs the update, so installed apps only take real releases.
