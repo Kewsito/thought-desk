@@ -21,6 +21,7 @@
     "core:webview:allow-set-webview-background-color",
     "core:webview:allow-set-webview-zoom",
     "opener:allow-open-url",
+    "opener:allow-default-urls",
     "updater:default",
     "process:allow-restart",
     "dialog:allow-open"
