@@ -1,20 +1,27 @@
 /**
- * Who may join a room: someone signed in to Thought Desk (a Supabase token,
- * checked against the project's public keys) who is one of the two people in
- * that session while it's active. The relay asks Supabase with the person's
- * own token, so the database's row-level security makes the decision.
+ * Who may join a room: someone signed in to Thought Desk (a Clerk session
+ * token, checked against the Clerk instance's public keys) who is one of the
+ * two people in that session while it's active. The relay asks Supabase with
+ * the person's own token, so the database's row-level security makes the
+ * decision.
  *
  * The token comes as the WebSocket's second subprotocol ("thoughtdesk,
  * <token>"), never in the address, so it stays out of URLs and their logs.
+ * Clerk's tokens last a minute, so the app sends fresh ones over the open
+ * connection, and the room checks those too (index.ts).
  */
 
-import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose';
+import { createRemoteJWKSet, decodeJwt, jwtVerify, type JWTVerifyGetKey } from 'jose';
 
 export interface AuthEnv {
   /** The Supabase project, e.g. https://nbzojbfkkpeisitbkwpg.supabase.co */
   SUPABASE_URL: string;
   /** Its publishable key (public by design). */
   SUPABASE_KEY: string;
+  /** The Clerk instances people sign in with, by issuer, comma-separated (e.g. https://clerk.thoughtdesk.org). */
+  CLERK_ISSUERS: string;
+  /** Where the app runs, comma-separated (e.g. http://tauri.localhost): a token made on any other page is refused. */
+  APP_ORIGINS: string;
   /** "test" lets the interface tests in with fake tokens, on localhost only. */
   AUTH_MODE?: string;
 }
@@ -23,7 +30,8 @@ export type Verdict = { ok: true; userId: string } | { ok: false; status: 401 | 
 
 /** What auth needs from outside, so tests can stand in for it. */
 export interface AuthDeps {
-  keys: JWTVerifyGetKey;
+  /** The public keys of the Clerk instance with this issuer. */
+  keys: (issuer: string) => JWTVerifyGetKey;
   fetch: typeof fetch;
 }
 
@@ -38,11 +46,30 @@ export function tokenFrom(protocols: string | null): string {
 
 const keySets = new Map<string, JWTVerifyGetKey>();
 
-/** The project's public keys, fetched once per worker and cached by jose. */
-export function projectKeys(env: AuthEnv): JWTVerifyGetKey {
-  let keys = keySets.get(env.SUPABASE_URL);
-  if (!keys) keySets.set(env.SUPABASE_URL, (keys = createRemoteJWKSet(new URL(`${env.SUPABASE_URL}/auth/v1/.well-known/jwks.json`))));
+/** A Clerk instance's public keys, fetched once per worker and cached by jose. */
+export function clerkKeys(issuer: string): JWTVerifyGetKey {
+  let keys = keySets.get(issuer);
+  if (!keys) keySets.set(issuer, (keys = createRemoteJWKSet(new URL(`${issuer}/.well-known/jwks.json`))));
   return keys;
+}
+
+const listOf = (s: string | undefined) => (s ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+
+/** Who a Clerk session token is for, if Clerk signed it, it's current, it's
+ *  from one of our instances (asked for its keys only then), it was made in
+ *  the app (azp, when there is one) and its session is fully signed in. */
+export async function personOf(token: string, env: AuthEnv, keys: AuthDeps['keys'] = clerkKeys): Promise<string | null> {
+  try {
+    const issuer = decodeJwt(token).iss;
+    if (!issuer || !listOf(env.CLERK_ISSUERS).includes(issuer)) return null;
+    const { payload } = await jwtVerify(token, keys(issuer), { issuer, algorithms: ['RS256'], clockTolerance: 5 });
+    if (typeof payload.sub !== 'string' || !payload.sub) return null;
+    if (payload.azp !== undefined && !listOf(env.APP_ORIGINS).includes(String(payload.azp))) return null;
+    if (payload.sts === 'pending') return null;
+    return payload.sub;
+  } catch {
+    return null;
+  }
 }
 
 const LOOPBACK = new Set(['127.0.0.1', '::1']);
@@ -57,7 +84,8 @@ export async function authorize(
   room: string,
   local: boolean,
   env: AuthEnv,
-  deps: AuthDeps = { keys: projectKeys(env), fetch },
+  // fetch called as deps.fetch() would get the wrong `this`, which Workers refuse.
+  deps: AuthDeps = { keys: clerkKeys, fetch: (input, init) => fetch(input, init) },
 ): Promise<Verdict> {
   if (!token) return { ok: false, status: 401, reason: 'Sign in first' };
 
@@ -68,14 +96,8 @@ export async function authorize(
     return { ok: false, status: 401, reason: 'Test sign-ins only work locally' };
   }
 
-  let userId: string;
-  try {
-    const { payload } = await jwtVerify(token, deps.keys, { issuer: `${env.SUPABASE_URL}/auth/v1`, audience: 'authenticated' });
-    if (typeof payload.sub !== 'string') throw new Error('No user in the token');
-    userId = payload.sub;
-  } catch {
-    return { ok: false, status: 401, reason: 'Your sign-in has expired: sign in again' };
-  }
+  const userId = await personOf(token, env, deps.keys);
+  if (!userId) return { ok: false, status: 401, reason: 'Your sign-in has expired: sign in again' };
 
   const res = await deps.fetch(`${env.SUPABASE_URL}/rest/v1/cowork_sessions?id=eq.${encodeURIComponent(room)}&status=eq.active&select=id`, {
     headers: { apikey: env.SUPABASE_KEY, authorization: `Bearer ${token}`, accept: 'application/json' },

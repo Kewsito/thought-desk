@@ -1,58 +1,56 @@
 # Turning on sign-in
 
-The database is ready: tables, rules and tests (see [README.md](README.md)). These steps, in the Supabase dashboard and with Google, GitHub and Cloudflare, need your accounts, so they're yours to do. Each one takes a few minutes. The app works without them, except for signing in.
+The database is ready: tables, rules and tests (see [README.md](README.md)). Clerk signs people in; Supabase keeps profiles, friends and invites, and trusts the tokens Clerk issues. The steps below need your accounts, so they're yours unless they say **Done**. The app works without them, except for signing in.
 
-Your project: **thought-desk-europe**, `https://nbzojbfkkpeisitbkwpg.supabase.co`.
+- Clerk application: **Thought Desk**, development instance `smiling-sunbird-3571.clerk.accounts.dev`.
+- Supabase project: **thought-desk-europe**, `https://nbzojbfkkpeisitbkwpg.supabase.co`.
 
-## 1. Where sign-in may come back to
+## 1. Clerk
 
-Supabase dashboard → **Authentication** → **URL Configuration** → **Redirect URLs**. Add both:
+**Done** (through the Clerk connection), in the development instance:
 
-- `http://127.0.0.1:*/auth/callback` (the desktop app: a one-time listener on a free port)
-- `http://localhost:1420/**` (trying the app in a browser while developing)
+- Sign-in with Google, GitHub or a code by email. Passwords are off.
+- Session tokens carry `role: authenticated`, which Supabase needs, and the person's name and picture (`name`, `picture`, `has_image`), which their profile starts from.
+- Throwaway email domains are blocked. The app signs in through Clerk's Native API, which skips CAPTCHA, so this and Clerk's own rate limits keep out bulk sign-ups.
+- The Native API is on (**Configure** → **Native applications**).
 
-## 2. Sign-in codes by email
+**Yours: let the app talk to Clerk.** Clerk takes requests from a signed-in app only if it runs on a page in the instance's list of allowed origins, and only a secret key can set that list. In Clerk → **Configure** → **API keys**, copy a secret key (`sk_test_…`), then run this in PowerShell and paste the key when asked:
 
-When someone picks **Email** in Thought Desk, Supabase emails them. Two settings decide what that email holds and who can get it.
-
-**What it holds: a code, not a link.** Out of the box the email holds a link, and a link opens the web browser, not Thought Desk. Wherever the email's text says `{{ .Token }}`, Supabase writes the 6-digit code instead. Supabase sends one of two emails: **Confirm signup** the first time an address is used, **Magic Link** every time after. Both need the code.
-
-**Authentication** → **Emails** → **Templates**. In both **Confirm signup** and **Magic Link**, set the subject to `Your Thought Desk code` and the body to:
-
-```html
-<h2>Your Thought Desk code</h2>
-<p>Enter this code in Thought Desk to sign in:</p>
-<p style="font-size: 28px; font-weight: 600; letter-spacing: 6px">{{ .Token }}</p>
-<p>It works for an hour. If you didn't ask for it, you can ignore this email.</p>
+```powershell
+$key = Read-Host "Clerk secret key" -MaskInput
+Invoke-RestMethod -Method Patch -Uri https://api.clerk.com/v1/instance -Headers @{ Authorization = "Bearer $key" } -ContentType "application/json" -Body '{"allowed_origins": ["http://tauri.localhost", "http://localhost:1420"]}'
 ```
 
-**Who can get it: for now, only you.** Supabase's built-in mailer is for trying things out. It sends only to the people in your Supabase organization (the address you log in to Supabase with), and only a few emails an hour. Anyone else who asks for a code is told to use Google or GitHub, which send no email and work for everyone.
+`http://tauri.localhost` is the desktop app; `http://localhost:1420` is the browser preview and the desktop development build. The call replaces the whole list.
 
-To let everyone sign in by email, give Supabase a mailer of your own. Without a domain of your own, the free way is a Gmail account. Make a new one for Thought Desk, since friends see it as the sender.
+## 2. Supabase: trust Clerk
 
-1. In that Google account, turn on **2-Step Verification**, then create an **app password** (search for **App passwords** in the Google Account settings).
-2. Supabase → **Authentication** → **Emails** → **SMTP Settings**: turn on custom SMTP, then fill in host `smtp.gmail.com`, port `465`, the Gmail address as both username and sender email, the app password as the password, and `Thought Desk` as the sender name.
+1. Supabase → **Authentication** → **Sign In / Providers** → **Third-Party Auth** → **Add provider** → **Clerk**. Enter the domain with `https://`: `https://smiling-sunbird-3571.clerk.accounts.dev`.
+2. On the same page, under Supabase's own sign-in: turn off **Allow new users to sign up**, and turn off the **Email**, **Google** and **GitHub** providers if they're on. Nobody needs an account with Supabase itself, and the database ignores its tokens anyway (`private.me()` in [README.md](README.md)).
 
-Supabase then sends up to 30 sign-in emails an hour (raise it under **Authentication** → **Rate Limits**), and Gmail a few hundred a day. If you own a domain later, a sending service such as Resend is the sturdier choice.
+## 3. Google and GitHub
 
-## 3. Google
+**Done** for development: Clerk's development instance uses your own Google client and GitHub OAuth app, both sending people back to Clerk (`https://smiling-sunbird-3571.clerk.accounts.dev/v1/oauth_callback`). The address the app comes back to afterwards, `http://127.0.0.1:47823/auth/callback`, is between Clerk and the app; Google and GitHub never see it.
 
-1. [Google Cloud Console](https://console.cloud.google.com/) → create a project (or pick one) → **APIs & Services** → **OAuth consent screen**: choose External, name it **Thought Desk**, and add your email. Keep the basic scopes (email, profile, openid). Under **Publishing status**, choose **In production** so anyone can sign in. These basic scopes don't need Google's review.
-2. **Credentials** → **Create credentials** → **OAuth client ID** → **Web application**. Under **Authorized redirect URIs**, add `https://nbzojbfkkpeisitbkwpg.supabase.co/auth/v1/callback`.
-3. Copy the **Client ID** and **Client secret** into Supabase → **Authentication** → **Sign In / Providers** → **Google**, and turn it on.
+## 4. Try it
 
-## 4. GitHub
+`npm run dev` opens the browser preview at http://localhost:1420, and `npm run app` the desktop app. In development, Clerk's test addresses sign in without a real email: any address ending in `+clerk_test@example.com` (for example `ana+clerk_test@example.com`) takes the code `424242`.
 
-1. GitHub → **Settings** → **Developer settings** → **OAuth Apps** → **New OAuth App**:
-   - Name: **Thought Desk**
-   - Homepage URL: your repository's address
-   - Authorization callback URL: `https://nbzojbfkkpeisitbkwpg.supabase.co/auth/v1/callback`
-2. **Register application** → **Generate a new client secret**.
-3. Copy the **Client ID** and the secret into Supabase → **Sign In / Providers** → **GitHub**, and turn it on.
+## 5. Before the release: Clerk production
 
-## 5. The relay for writing together (Cloudflare)
+Clerk's development instance is for development: it's marked as such, and anyone can sign up on it with test addresses. Before releasing accounts:
 
-Done: the relay runs at relay.thoughtdesk.org. To deploy a new version of it:
+1. **A production instance** for thoughtdesk.org (the Clerk connection can create it). Add the DNS records it lists in Cloudflare, for `clerk.thoughtdesk.org` and its email, with the proxy off (DNS only).
+2. **Its settings**, as in step 1: the same session token claims, passwords off, throwaway domains blocked, the Native API on. Allowed origins: just `["http://tauri.localhost"]`, set with the production secret key (`sk_live_…`). Under **Native applications**, add `http://127.0.0.1:47823/auth/callback` to the allowlist for SSO redirects. Production is stricter than development, so check first that it takes that address and that origin. If it doesn't, the fallback is a `thoughtdesk://` link (the browser asks "Open Thought Desk?").
+3. **Google:** in your Google OAuth client, add `https://clerk.thoughtdesk.org/v1/oauth_callback` under **Authorized redirect URIs**, and put the client ID and secret in Clerk production's Google settings.
+4. **GitHub:** an OAuth app has only one callback, so make a second one for production, with the callback `https://clerk.thoughtdesk.org/v1/oauth_callback`, and put its ID and secret in Clerk production's GitHub settings.
+5. **Supabase:** add Clerk again under **Third-Party Auth**, with the domain `https://clerk.thoughtdesk.org`. Once nobody uses development any more, remove its domain there, from `private.me()` (in a new migration) and from the relay's `CLERK_ISSUERS`.
+6. **The app:** release builds need the production key. Change the default in `src/lib/cloud/clerk.ts` to the production publishable key (`pk_live_…`), or set `VITE_CLERK_KEY` when building.
+7. **How long a sign-in lasts:** a week on Clerk's free plan, then people sign in again. Clerk Pro ($25 a month) can make it longer.
+
+## 6. The relay for writing together (Cloudflare)
+
+Done: the relay runs at relay.thoughtdesk.org. Deploy it again after a change to `server/` (moving to Clerk is one: the deployed relay still checks Supabase's tokens):
 
 ```bash
 cd server
@@ -64,5 +62,6 @@ See [server/README.md](../server/README.md).
 
 ## Good to know
 
-- **A free Supabase project pauses after a week without use.** Sign-in then fails until you press **Restore** in the dashboard. Your notes aren't affected: they're on your computer.
-- **What's online:** your account, profile (name, @username, picture), friends list, when you were last here (friends only), and invites. Your pages aren't: a page you write with a friend goes through the relay while you write and isn't kept there.
+- **Clerk's bot protection (Protect) doesn't run in the app.** Clerk asks clerk-js to load a script from `cdn.protect.clerk.com` during sign-in; the app's content security policy refuses it (a "Refused to load the script" line in the console), and signing in works without it. Throwaway-domain blocking and Clerk's rate limits stand in.
+- **A free Supabase project pauses after a week without use.** Signing in still works, but friends and invites don't until you press **Restore** in the dashboard. Your notes aren't affected: they're on your computer.
+- **What's online:** your account with Clerk (email address, name and picture, and sign-in details such as IP address and browser); your profile with Supabase (name, @username, picture), friends list, when you were last here (friends only) and invites. Your pages aren't: a page you write with a friend goes through the relay while you write and isn't kept there.

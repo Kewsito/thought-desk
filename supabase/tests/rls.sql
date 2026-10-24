@@ -1,11 +1,14 @@
 -- Row-level security tests for the accounts, friends and sessions schema
--- (supabase/migrations/*_accounts_friends_sessions.sql).
+-- (supabase/migrations/, as of *_accounts_on_clerk.sql).
 --
 -- Run the whole file as one script against a database that has the
--- migration: the Supabase SQL editor, psql, or the Supabase MCP execute_sql
+-- migrations: the Supabase SQL editor, psql, or the Supabase MCP execute_sql
 -- tool. It runs in one transaction that is rolled back at the end, so the
 -- test users and rows never persist. A failed check raises 'FAIL: ...' and
 -- stops the run; if every check passes, the last result says so.
+--
+-- People are signed in the way Clerk signs them in: request.jwt.claims holds
+-- a Clerk session token's claims (sub is a Clerk user id like 'user_ana').
 
 begin;
 
@@ -51,14 +54,22 @@ begin
 end;
 $$;
 
--- The test users' ids.
-create function pg_temp.uid(who text) returns uuid
+-- The test users' Clerk ids.
+create function pg_temp.uid(who text) returns text
 language sql immutable as $$
-  select case who
-    when 'ana' then 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
-    when 'ben' then 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
-    when 'cat' then 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
-  end::uuid;
+  select 'user_' || who;
+$$;
+
+-- The claims of a Clerk session token for `who` from the development
+-- instance, with `extra` added or overriding.
+create function pg_temp.token(who text, extra jsonb default '{}') returns text
+language sql immutable as $$
+  select (jsonb_build_object(
+            'sub', 'user_' || who,
+            'role', 'authenticated',
+            'iss', 'https://smiling-sunbird-3571.clerk.accounts.dev',
+            'sts', 'active')
+          || extra)::text;
 $$;
 
 -- Session ids, handed from one user's block to the next.
@@ -70,63 +81,66 @@ $$;
 
 -- Setup: Ana, Ben and Cat sign up --------------------------------------------
 
-insert into auth.users (id, aud, role, email, raw_user_meta_data, raw_app_meta_data)
-values
-  ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'authenticated', 'authenticated', 'ana@example.test',
-   '{"full_name": "Ana Lima", "avatar_url": "https://lh3.googleusercontent.com/a/ana"}', '{}'),
-  ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'authenticated', 'authenticated', 'ben@example.test',
-   '{"full_name": "  ", "name": "Ben Okafor", "picture": "http://example.test/ben.png"}', '{}'),
-  ('cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'authenticated', 'authenticated', 'cat@example.test',
-   '{"user_name": "catcodes", "avatar_url": "javascript:alert(1)", "picture": "https://avatars.githubusercontent.com/u/3"}', '{}');
+-- Signing in makes the profile (ensure_profile), from the name and picture
+-- in the token.
+set local role authenticated;
+
+select set_config('request.jwt.claims',
+  pg_temp.token('ana', '{"name": "Ana Lima", "picture": "https://img.clerk.com/eyJ0eXBlIjoicHJveHkifQ", "has_image": true}'), true);
+select public.ensure_profile();
+
+-- Ben's name is blank, and his picture is Clerk's stand-in (has_image false).
+select set_config('request.jwt.claims',
+  pg_temp.token('ben', '{"name": "  ", "picture": "https://img.clerk.com/eyJ0eXBlIjoiZGVmYXVsdCJ9", "has_image": false}'), true);
+select public.ensure_profile();
+
+-- Cat has no name, and a picture on some other host.
+select set_config('request.jwt.claims',
+  pg_temp.token('cat', '{"name": null, "picture": "https://tracker.example.test/cat.png", "has_image": true}'), true);
+select public.ensure_profile();
+
+do $$
+begin
+  perform pg_temp.ok((select count(*) from public.profiles) = 1, 'Cat sees only her own profile after signing up');
+  perform pg_temp.ok((select private.me()) = pg_temp.uid('cat'), 'private.me() is the token''s sub');
+end;
+$$;
+
+reset role;
 
 do $$
 begin
   perform pg_temp.ok(
     (select count(*) from public.profiles
      where id in (pg_temp.uid('ana'), pg_temp.uid('ben'), pg_temp.uid('cat'))) = 3,
-    'the sign-up trigger made a profile for each user');
+    'ensure_profile made a profile for each user');
   perform pg_temp.ok(
-    (select display_name = 'Ana Lima' and avatar_url = 'https://lh3.googleusercontent.com/a/ana' and username is null
+    (select display_name = 'Ana Lima' and avatar_url = 'https://img.clerk.com/eyJ0eXBlIjoicHJveHkifQ' and username is null
      from public.profiles where id = pg_temp.uid('ana')),
-    'Ana: full_name and a Google avatar_url are used; no username yet');
+    'Ana: the token''s name and Clerk picture are used; no username yet');
   perform pg_temp.ok(
-    (select display_name = 'Ben Okafor' and avatar_url is null
+    (select display_name = '' and avatar_url is null
      from public.profiles where id = pg_temp.uid('ben')),
-    'Ben: a blank full_name falls through to name; an http picture is dropped');
+    'Ben: a blank name is left empty; Clerk''s stand-in picture (has_image false) is dropped');
   perform pg_temp.ok(
-    (select display_name = 'catcodes' and avatar_url = 'https://avatars.githubusercontent.com/u/3'
+    (select display_name = '' and avatar_url is null
      from public.profiles where id = pg_temp.uid('cat')),
-    'Cat: user_name is used; a non-https avatar_url falls through to a GitHub picture');
+    'Cat: no name; a picture on another host is dropped');
 
-  -- A picture on any other host is dropped: it would show its owner the IP
-  -- addresses of everyone who sees the profile.
-  insert into auth.users (id, aud, role, email, raw_user_meta_data)
-  values ('ffffffff-ffff-4fff-8fff-ffffffffffff', 'authenticated', 'authenticated', 'fay@example.test',
-          '{"full_name": "Fay", "avatar_url": "https://tracker.example.test/fay.png"}');
-  perform pg_temp.ok(
-    (select avatar_url is null from public.profiles where id = 'ffffffff-ffff-4fff-8fff-ffffffffffff'),
-    'an avatar on an unknown host is dropped');
-  delete from auth.users where id = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+  -- A picture on any other host would show its owner the IP addresses of
+  -- everyone who sees the profile.
   perform pg_temp.fails($q$update public.profiles set avatar_url = 'https://tracker.example.test/x.png' where id = pg_temp.uid('ana')$q$,
-    '23514', 'even the database owner cannot store an avatar on an unknown host');
-
-  -- No names at all: the email before '@', cut to 50 characters.
-  insert into auth.users (id, aud, role, email)
-  values ('dddddddd-dddd-4ddd-8ddd-dddddddddddd', 'authenticated', 'authenticated',
-          'dee.' || repeat('x', 60) || '@example.test');
-  perform pg_temp.ok(
-    (select display_name = left('dee.' || repeat('x', 60), 50) and avatar_url is null
-     from public.profiles where id = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'),
-    'without names, display_name is the email before @, cut to 50 characters');
-  delete from auth.users where id = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
-  perform pg_temp.ok(
-    not exists (select 1 from public.profiles where id = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'),
-    'deleting an account deletes its profile');
+    '23514', 'even the database owner cannot store an avatar on another host');
+  perform pg_temp.fails($q$update public.profiles set avatar_url = 'http://img.clerk.com/x' where id = pg_temp.uid('ana')$q$,
+    '23514', 'nor an http one');
+  perform pg_temp.fails($q$insert into public.profiles (id) values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')$q$,
+    '23514', 'a profile id must be a Clerk user id');
 
   perform pg_temp.ok(
     (select bool_and(relrowsecurity) from pg_class
      where oid in ('public.profiles'::regclass, 'public.friendships'::regclass,
-                   'public.presence'::regclass, 'public.cowork_sessions'::regclass)),
+                   'public.presence'::regclass, 'public.cowork_sessions'::regclass,
+                   'private.friend_requests_sent'::regclass, 'private.profile_lookups'::regclass)),
     'RLS is on for every table');
 
   -- Realtime sends a deleted row's key to everyone listening, so a
@@ -136,21 +150,57 @@ begin
      join pg_attribute a on a.attrelid = i.indrelid and a.attnum = any (i.indkey)
      where i.indrelid = 'public.friendships'::regclass and i.indisprimary) = array['id'],
     'a friendship''s key is an opaque id, not who it is between');
+  perform pg_temp.ok(
+    not exists (select 1 from pg_trigger where tgrelid = 'auth.users'::regclass and tgname = 'on_auth_user_created'),
+    'Supabase Auth sign-ups no longer make profiles');
 end;
 $$;
 
--- Ana and Ben pick usernames (Cat picks hers further down). Ben and Cat have
--- been online before; Ana's presence row comes from touch_presence().
-update public.profiles set username = 'ana' where id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-update public.profiles set username = 'ben' where id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
-insert into public.presence (user_id)
-values ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'), ('cccccccc-cccc-4ccc-8ccc-cccccccccccc');
+-- Ana and Ben pick usernames (Cat picks hers further down), and Ben a name.
+-- Ben and Cat have been online before; Ana's presence row comes from
+-- touch_presence().
+update public.profiles set username = 'ana' where id = 'user_ana';
+update public.profiles set username = 'ben', display_name = 'Ben Okafor' where id = 'user_ben';
+insert into public.presence (user_id) values ('user_ben'), ('user_cat');
+
+
+-- Tokens Clerk didn't issue get nothing ---------------------------------------
+
+set local role authenticated;
+
+do $$
+declare
+  claims text;
+begin
+  foreach claims in array array[
+    -- Supabase Auth's own token for the same id
+    pg_temp.token('ana', '{"iss": "https://nbzojbfkkpeisitbkwpg.supabase.co/auth/v1"}'),
+    -- another Clerk instance
+    pg_temp.token('ana', '{"iss": "https://someone-else.clerk.accounts.dev"}'),
+    -- no issuer at all
+    pg_temp.token('ana', '{"iss": null}'),
+    -- a session still waiting on a step (Clerk's "pending")
+    pg_temp.token('ana', '{"sts": "pending"}')
+  ] loop
+    perform set_config('request.jwt.claims', claims, true);
+    perform pg_temp.ok((select private.me()) is null, 'private.me() is null for ' || claims);
+    perform pg_temp.ok((select count(*) from public.profiles) = 0, 'no profiles for ' || claims);
+    perform pg_temp.ok(not exists (select 1 from public.find_profile('ben')), 'find_profile finds nobody for ' || claims);
+    perform pg_temp.fails('select public.ensure_profile()', '42501', 'ensure_profile refuses ' || claims);
+    perform pg_temp.fails('select public.touch_presence()', '42501', 'touch_presence refuses ' || claims);
+    perform pg_temp.ok(pg_temp.changed($q$update public.profiles set display_name = 'x'$q$) = 0, 'no edits for ' || claims);
+  end loop;
+
+  -- The right issuer with an id that isn't Clerk's.
+  perform set_config('request.jwt.claims', pg_temp.token('ana', '{"sub": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"}'), true);
+  perform pg_temp.fails('select public.ensure_profile()', '23514', 'a profile id must be a Clerk user id, even from Clerk''s issuer');
+end;
+$$;
 
 
 -- Ana: strangers stay hidden; find_profile matches exact usernames only ------
 
-set local role authenticated;
-select set_config('request.jwt.claims', json_build_object('sub', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'role', 'authenticated')::text, true);
+select set_config('request.jwt.claims', pg_temp.token('ana'), true);
 
 do $$
 begin
@@ -184,21 +234,37 @@ begin
     'Ana cannot edit Ben''s profile');
   perform pg_temp.fails($q$update public.profiles set created_at = now() where id = pg_temp.uid('ana')$q$,
     '42501', 'created_at cannot be changed');
+  perform pg_temp.fails($q$update public.profiles set id = 'user_other' where id = pg_temp.uid('ana')$q$,
+    '42501', 'nobody changes their id');
   perform pg_temp.fails($q$update public.profiles set username = 'Ana!' where id = pg_temp.uid('ana')$q$,
     '23514', 'usernames must match ^[a-z0-9_]{3,20}$');
-  perform pg_temp.fails($q$update public.profiles set avatar_url = 'https://avatars.githubusercontent.com/u/1' where id = pg_temp.uid('ana')$q$,
-    '42501', 'nobody sets their own avatar: only sign-up does');
-  perform pg_temp.fails($q$insert into public.profiles (id) values (gen_random_uuid())$q$,
+  perform pg_temp.fails($q$update public.profiles set avatar_url = 'https://img.clerk.com/mine' where id = pg_temp.uid('ana')$q$,
+    '42501', 'nobody sets their own avatar: only ensure_profile does, from the token');
+  perform pg_temp.fails($q$insert into public.profiles (id) values ('user_new')$q$,
     '42501', 'profiles cannot be inserted directly');
   perform pg_temp.fails($q$delete from public.profiles where id = pg_temp.uid('ana')$q$,
     '42501', 'profiles cannot be deleted directly');
   perform pg_temp.fails($q$insert into public.presence (user_id) values (pg_temp.uid('ana'))$q$,
     '42501', 'presence is written only by touch_presence()');
 
+  -- Signing in again keeps the name she chose, and follows Clerk's picture.
+  perform set_config('request.jwt.claims',
+    pg_temp.token('ana', '{"name": "Ana Lima", "picture": "https://img.clerk.com/new", "has_image": true}'), true);
+  perform pg_temp.ok(
+    (select display_name = 'Ana L.' and avatar_url = 'https://img.clerk.com/new' from public.ensure_profile()),
+    'signing in again keeps her name and takes the new picture');
+  perform set_config('request.jwt.claims',
+    pg_temp.token('ana', '{"name": "Ana Lima", "picture": "https://img.clerk.com/stand-in", "has_image": false}'), true);
+  perform pg_temp.ok((select avatar_url is null from public.ensure_profile()),
+    'removing the picture in Clerk removes it here');
+  perform set_config('request.jwt.claims', pg_temp.token('ana'), true);
+
   -- Internal functions are off limits.
   perform pg_temp.fails('select public.rls_auto_enable()', '42501', 'rls_auto_enable() cannot be called');
-  perform pg_temp.fails('select public.handle_new_user()', '42501', 'handle_new_user() cannot be called');
   perform pg_temp.fails('select private.expire_stale_sessions()', '42501', 'the expiry sweep cannot be called');
+  perform pg_temp.fails('select private.limit_friend_requests()', '42501', 'the request limit trigger cannot be called');
+  perform pg_temp.fails('select count(*) from private.profile_lookups', '42501', 'the lookup log cannot be read');
+  perform pg_temp.fails('select count(*) from private.friend_requests_sent', '42501', 'the request log cannot be read');
 
   -- Friend requests: as yourself, pending, to someone who has a username.
   perform pg_temp.fails($q$insert into public.friendships (requester, addressee) values (pg_temp.uid('ben'), pg_temp.uid('ana'))$q$,
@@ -240,7 +306,7 @@ $$;
 
 -- Ben: only the addressee accepts --------------------------------------------
 
-select set_config('request.jwt.claims', json_build_object('sub', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'role', 'authenticated')::text, true);
+select set_config('request.jwt.claims', pg_temp.token('ben'), true);
 
 do $$
 begin
@@ -276,7 +342,7 @@ $$;
 
 -- Cat: a stranger to both of them --------------------------------------------
 
-select set_config('request.jwt.claims', json_build_object('sub', 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'role', 'authenticated')::text, true);
+select set_config('request.jwt.claims', pg_temp.token('cat'), true);
 
 do $$
 begin
@@ -304,7 +370,7 @@ $$;
 
 -- Ana invites Ben; nobody else can be invited --------------------------------
 
-select set_config('request.jwt.claims', json_build_object('sub', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'role', 'authenticated')::text, true);
+select set_config('request.jwt.claims', pg_temp.token('ana'), true);
 
 do $$
 declare
@@ -347,7 +413,7 @@ $$;
 
 -- Cat cannot see or touch their sessions -------------------------------------
 
-select set_config('request.jwt.claims', json_build_object('sub', 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'role', 'authenticated')::text, true);
+select set_config('request.jwt.claims', pg_temp.token('cat'), true);
 
 do $$
 begin
@@ -361,10 +427,21 @@ begin
 end;
 $$;
 
+-- Nor can Ben with a token Clerk didn't issue.
+select set_config('request.jwt.claims', pg_temp.token('ben', '{"iss": "https://nbzojbfkkpeisitbkwpg.supabase.co/auth/v1"}'), true);
+
+do $$
+begin
+  perform pg_temp.ok((select count(*) from public.cowork_sessions) = 0, 'another issuer''s token sees no sessions');
+  perform pg_temp.fails($q$select public.respond_session(pg_temp.sid('invite'), true)$q$,
+    'P0002', 'another issuer''s token cannot answer an invite');
+end;
+$$;
+
 
 -- Ben: only the guest answers an invite; end_session rules -------------------
 
-select set_config('request.jwt.claims', json_build_object('sub', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'role', 'authenticated')::text, true);
+select set_config('request.jwt.claims', pg_temp.token('ben'), true);
 
 do $$
 declare
@@ -410,7 +487,7 @@ $$;
 
 -- Ana: only the host answers a request, and only with a title -----------------
 
-select set_config('request.jwt.claims', json_build_object('sub', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'role', 'authenticated')::text, true);
+select set_config('request.jwt.claims', pg_temp.token('ana'), true);
 
 do $$
 declare
@@ -445,7 +522,7 @@ update public.cowork_sessions set created_at = now() - interval '2 hours'
 where id = current_setting('rls_test.expire_me')::uuid;
 
 set local role authenticated;
-select set_config('request.jwt.claims', json_build_object('sub', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'role', 'authenticated')::text, true);
+select set_config('request.jwt.claims', pg_temp.token('ben'), true);
 
 do $$
 begin
@@ -480,7 +557,7 @@ $$;
 -- Ana after the unfriending ---------------------------------------------------
 
 set local role authenticated;
-select set_config('request.jwt.claims', json_build_object('sub', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'role', 'authenticated')::text, true);
+select set_config('request.jwt.claims', pg_temp.token('ana'), true);
 
 do $$
 begin
@@ -496,20 +573,19 @@ end;
 $$;
 
 
--- Avatars come from sign-up alone; requests and lookups have limits ---------
+-- Requests and lookups have limits -------------------------------------------
 
 -- Twenty-one people with usernames for Ana to ask, Cat with a day's worth of
 -- requests already sent, and Ben with an hour's worth of lookups done.
 reset role;
-insert into auth.users (id, aud, role, email)
-select ('eeeeeeee-eeee-4eee-8eee-' || lpad(n::text, 12, '0'))::uuid, 'authenticated', 'authenticated', 'many' || n || '@example.test'
+insert into public.profiles (id, username)
+select 'user_many' || lpad(n::text, 2, '0'), 'many' || lpad(n::text, 2, '0')
 from generate_series(1, 21) n;
-update public.profiles set username = 'many' || right(id::text, 2) where id::text like 'eeeeeeee-%';
 insert into private.friend_requests_sent (requester) select pg_temp.uid('cat') from generate_series(1, 50);
 insert into private.profile_lookups (user_id) select pg_temp.uid('ben') from generate_series(1, 100);
 
 set local role authenticated;
-select set_config('request.jwt.claims', json_build_object('sub', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'role', 'authenticated')::text, true);
+select set_config('request.jwt.claims', pg_temp.token('ana'), true);
 
 do $$
 declare
@@ -520,23 +596,23 @@ begin
   -- Up to 20 requests may wait at once.
   while (select count(*) from public.friendships where requester = pg_temp.uid('ana') and status = 'pending') < 20 loop
     n := n + 1;
-    insert into public.friendships (requester, addressee) values (pg_temp.uid('ana'), ('eeeeeeee-eeee-4eee-8eee-' || lpad(n::text, 12, '0'))::uuid);
+    insert into public.friendships (requester, addressee) values (pg_temp.uid('ana'), 'user_many' || lpad(n::text, 2, '0'));
   end loop;
-  perform pg_temp.fails($q$insert into public.friendships (requester, addressee) values (pg_temp.uid('ana'), 'eeeeeeee-eeee-4eee-8eee-000000000021')$q$,
+  perform pg_temp.fails($q$insert into public.friendships (requester, addressee) values (pg_temp.uid('ana'), 'user_many21')$q$,
     'P0001', 'at most 20 friend requests wait at once', '%20 friend requests waiting%');
 end;
 $$;
 
-select set_config('request.jwt.claims', json_build_object('sub', 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'role', 'authenticated')::text, true);
+select set_config('request.jwt.claims', pg_temp.token('cat'), true);
 
 do $$
 begin
-  perform pg_temp.fails($q$insert into public.friendships (requester, addressee) values (pg_temp.uid('cat'), 'eeeeeeee-eeee-4eee-8eee-000000000021')$q$,
+  perform pg_temp.fails($q$insert into public.friendships (requester, addressee) values (pg_temp.uid('cat'), 'user_many21')$q$,
     'P0001', 'at most 50 friend requests a day, cancelled ones included', '%a lot of friend requests%');
 end;
 $$;
 
-select set_config('request.jwt.claims', json_build_object('sub', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'role', 'authenticated')::text, true);
+select set_config('request.jwt.claims', pg_temp.token('ben'), true);
 
 do $$
 begin
@@ -545,7 +621,21 @@ begin
 end;
 $$;
 
+
+-- Deleting an account ----------------------------------------------------------
+
+-- Done by hand on request (see the privacy policy): deleting the profile
+-- takes their friendships, presence and sessions with it.
 reset role;
+delete from public.profiles where id = 'user_ben';
+
+do $$
+begin
+  perform pg_temp.ok(not exists (select 1 from public.presence where user_id = 'user_ben'), 'their presence goes');
+  perform pg_temp.ok(not exists (select 1 from public.cowork_sessions where 'user_ben' in (host, guest)), 'their sessions go');
+  perform pg_temp.ok(not exists (select 1 from public.friendships where 'user_ben' in (requester, addressee)), 'their friendships go');
+end;
+$$;
 
 
 -- Signed out: nothing at all --------------------------------------------------
@@ -559,16 +649,18 @@ begin
   perform pg_temp.fails('select 1 from public.friendships', '42501', 'anon cannot read friendships');
   perform pg_temp.fails('select 1 from public.presence', '42501', 'anon cannot read presence');
   perform pg_temp.fails('select 1 from public.cowork_sessions', '42501', 'anon cannot read sessions');
-  perform pg_temp.fails($q$insert into public.friendships (requester, addressee) values (pg_temp.uid('ana'), pg_temp.uid('ben'))$q$,
+  perform pg_temp.fails($q$insert into public.friendships (requester, addressee) values (pg_temp.uid('ana'), pg_temp.uid('cat'))$q$,
     '42501', 'anon cannot send friend requests');
+  perform pg_temp.fails('select public.ensure_profile()', '42501', 'anon cannot call ensure_profile');
   perform pg_temp.fails($q$select * from public.find_profile('ana')$q$, '42501', 'anon cannot call find_profile');
-  perform pg_temp.fails($q$select public.are_friends(pg_temp.uid('ana'), pg_temp.uid('ben'))$q$,
+  perform pg_temp.fails($q$select public.are_friends(pg_temp.uid('ana'), pg_temp.uid('cat'))$q$,
     '42501', 'anon cannot call are_friends');
   perform pg_temp.fails('select public.touch_presence()', '42501', 'anon cannot call touch_presence');
   perform pg_temp.fails($q$select public.respond_session(pg_temp.sid('after_unfriend'), true)$q$,
     '42501', 'anon cannot call respond_session');
   perform pg_temp.fails($q$select public.end_session(pg_temp.sid('after_unfriend'))$q$,
     '42501', 'anon cannot call end_session');
+  perform pg_temp.fails('select private.me()', '42501', 'anon cannot call private.me');
   perform pg_temp.fails('select public.rls_auto_enable()', '42501', 'anon cannot call rls_auto_enable');
 end;
 $$;

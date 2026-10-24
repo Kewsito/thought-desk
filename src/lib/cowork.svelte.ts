@@ -60,6 +60,10 @@ const IDLE_AFTER = 10 * 60_000;
 const idleAfter = () => (window as { __coworkIdleMs?: number }).__coworkIdleMs ?? IDLE_AFTER;
 /** Wake-ups to the other person's app go at most this often. */
 const NUDGE_EVERY = 10_000;
+/** A sign-in token lasts a minute, and the relay lets a connection go if it
+ *  hasn't seen a fresh one for two (server/src/index.ts), so one goes to it
+ *  over the connection this often. */
+const RENEW_EVERY = 45_000;
 /** What the other side can put here: a title, a name, and the whole page's
  *  state. Past the last, the session ends rather than keep growing. */
 const MAX_TITLE = 500;
@@ -102,6 +106,7 @@ export class Session {
   /** Holders: the session's tab, and editors showing the page (both panes may). */
   uses = 0;
   #provider: YProvider | null = null;
+  #renew: ReturnType<typeof setInterval> | undefined;
   #timer: ReturnType<typeof setTimeout> | undefined;
   #stopEffects: () => void = () => {};
   /** The last edit from either side, or sign of someone at the page here. */
@@ -198,6 +203,11 @@ export class Session {
     provider.on('sync', (synced: boolean) => {
       if (synced && this.#provider === provider) this.synced = true;
     });
+    clearInterval(this.#renew);
+    this.#renew = setInterval(async () => {
+      const fresh = await (await cloud()).accessToken().catch(() => null);
+      if (fresh && this.#provider === provider && provider.wsconnected) provider.sendMessage('token:' + fresh);
+    }, RENEW_EVERY);
     this.#provider = provider;
     this.status = 'connecting';
     this.#armIdle();
@@ -208,6 +218,7 @@ export class Session {
     const provider = this.#provider;
     // Cleared first, so the closing connection's last word is ignored.
     this.#provider = null;
+    clearInterval(this.#renew);
     provider?.destroy();
   }
 
@@ -328,6 +339,7 @@ export class Session {
     window.removeEventListener('focus', this.#back);
     document.removeEventListener('visibilitychange', this.#back);
     clearTimeout(this.#idle);
+    clearInterval(this.#renew);
     this.#nudges?.stop();
     this.#stopEffects();
     if (this.#timer !== undefined) await this.save();

@@ -1,29 +1,33 @@
 //! Signing in with Google or GitHub from the desktop. The browser comes back
-//! to a one-time listener on 127.0.0.1 with a code the app exchanges for a
-//! session (OAuth's loopback redirect for native apps, RFC 8252). The code
-//! is useless without the secret the app keeps (PKCE), so nothing else on
-//! this computer can use it.
+//! to a one-time listener on 127.0.0.1 (OAuth's loopback redirect for native
+//! apps, RFC 8252), on a fixed port because Clerk sends people back only to
+//! addresses on its allowlist. What comes back (a nonce that lets the app
+//! take over the sign-in it started) is useless without the client token the
+//! app keeps, so nothing else on this computer can use it.
 
-use std::io::{Read, Write};
+use std::io::{ErrorKind, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
 
+/// The port the browser comes back to: http://127.0.0.1:47823/auth/callback.
+pub const PORT: u16 = 47823;
+const PATH: &str = "/auth/callback";
 /// Which listener is current: starting another sign-in retires the last one.
 static CURRENT: AtomicU64 = AtomicU64::new(0);
 /// How long a sign-in may take in the browser.
 const WAIT: Duration = Duration::from_secs(600);
-const PATH: &str = "/auth/callback";
+/// Clerk's codes for "new here: make the account", which aren't failures.
+const TRANSFERS: [&str; 2] = ["external_account_not_found", "external_account_exists"];
 
-/// Starts listening on a free port and returns it. When the browser comes
-/// back, the window is brought forward and `auth-callback` carries the
-/// query string (`code=…`, or `error=…&error_description=…`).
-pub fn listen(app: AppHandle) -> std::io::Result<u16> {
-    let listener = TcpListener::bind(("127.0.0.1", 0))?;
-    listener.set_nonblocking(true)?;
-    let port = listener.local_addr()?.port();
+/// Starts listening and returns the port. When the browser comes back, the
+/// window is brought forward and `auth-callback` carries the query string
+/// (`rotating_token_nonce=…`, or `__clerk_status=failed&__clerk_error_code=…`).
+pub fn listen(app: AppHandle) -> Result<u16, String> {
     let me = CURRENT.fetch_add(1, Ordering::SeqCst) + 1;
+    let listener = bind(PORT)?;
+    listener.set_nonblocking(true).map_err(|e| e.to_string())?;
     std::thread::spawn(move || {
         let deadline = Instant::now() + WAIT;
         while Instant::now() < deadline && CURRENT.load(Ordering::SeqCst) == me {
@@ -39,12 +43,30 @@ pub fn listen(app: AppHandle) -> std::io::Result<u16> {
                         return;
                     }
                 }
-                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => std::thread::sleep(Duration::from_millis(100)),
+                Err(e) if e.kind() == ErrorKind::WouldBlock => std::thread::sleep(Duration::from_millis(100)),
                 Err(_) => return,
             }
         }
     });
-    Ok(port)
+    Ok(PORT)
+}
+
+/// Binds the port, waiting a moment for a sign-in started just before to let
+/// go of it (its listener checks every tenth of a second).
+fn bind(port: u16) -> Result<TcpListener, String> {
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        match TcpListener::bind(("127.0.0.1", port)) {
+            Ok(listener) => return Ok(listener),
+            Err(e) if e.kind() == ErrorKind::AddrInUse && Instant::now() < deadline => std::thread::sleep(Duration::from_millis(50)),
+            Err(e) if e.kind() == ErrorKind::AddrInUse => {
+                return Err(format!(
+                    "Signing in with Google or GitHub needs port {port}, and another program is using it. Close it and try again, or sign in with an email code."
+                ))
+            }
+            Err(e) => return Err(e.to_string()),
+        }
+    }
 }
 
 /// Answers one browser request. The callback gets a page saying how sign-in
@@ -55,17 +77,17 @@ fn answer(mut stream: TcpStream) -> Option<String> {
     let mut buf = [0u8; 8192];
     let n = stream.read(&mut buf).ok()?;
     let request = String::from_utf8_lossy(&buf[..n]);
-    match callback_query(&request) {
-        Some(query) => {
-            let ok = query.split('&').any(|p| p.starts_with("code=")) && !query.split('&').any(|p| p.starts_with("error="));
-            let _ = stream.write_all(page(ok).as_bytes());
-            Some(query.to_string())
-        }
-        None => {
-            let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
-            None
-        }
-    }
+    let query = callback_query(&request).map(str::to_string);
+    let reply = match &query {
+        Some(query) => page(!failed(query)),
+        None => "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_string(),
+    };
+    let _ = stream.write_all(reply.as_bytes());
+    // Let the browser hang up first, so the port isn't left waiting to close
+    // (TIME_WAIT) and can be listened on again at once.
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
+    let _ = stream.read(&mut buf);
+    query
 }
 
 /// The query string of a `GET /auth/callback?…` request line.
@@ -76,6 +98,14 @@ fn callback_query(request: &str) -> Option<&str> {
     }
     let (path, query) = parts.next()?.split_once('?').unwrap_or((PATH, ""));
     (path == PATH && !query.is_empty()).then_some(query)
+}
+
+/// Whether the sign-in came back failed (not merely "new here").
+fn failed(query: &str) -> bool {
+    let pairs: Vec<(&str, &str)> = query.split('&').filter_map(|p| p.split_once('=')).collect();
+    let has = |key: &str, value: &str| pairs.iter().any(|&(k, v)| k == key && v == value);
+    let transfer = pairs.iter().any(|&(k, v)| k == "__clerk_error_code" && TRANSFERS.contains(&v));
+    pairs.iter().any(|&(k, _)| k == "error") || (has("__clerk_status", "failed") && !transfer)
 }
 
 fn page(ok: bool) -> String {
@@ -104,28 +134,59 @@ mod tests {
 
     #[test]
     fn reads_only_the_callback() {
-        assert_eq!(callback_query("GET /auth/callback?code=abc&x=1 HTTP/1.1\r\nHost: x\r\n"), Some("code=abc&x=1"));
-        assert_eq!(callback_query("GET /auth/callback?error=access_denied HTTP/1.1"), Some("error=access_denied"));
+        assert_eq!(callback_query("GET /auth/callback?rotating_token_nonce=abc HTTP/1.1\r\nHost: x\r\n"), Some("rotating_token_nonce=abc"));
+        assert_eq!(callback_query("GET /auth/callback?__clerk_status=failed HTTP/1.1"), Some("__clerk_status=failed"));
         for other in ["GET /favicon.ico HTTP/1.1", "POST /auth/callback?code=abc HTTP/1.1", "GET /auth/callback HTTP/1.1", ""] {
             assert_eq!(callback_query(other), None, "{other}");
         }
     }
 
     #[test]
-    fn answers_the_browser() {
-        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    fn tells_a_failure_from_a_new_account() {
+        assert!(!failed("rotating_token_nonce=abc"));
+        assert!(failed("__clerk_status=failed&__clerk_error_code=oauth_access_denied"));
+        assert!(failed("__clerk_status=failed"));
+        assert!(failed("error=access_denied&error_description=No"));
+        assert!(!failed("__clerk_status=failed&__clerk_error_code=external_account_not_found&rotating_token_nonce=abc"));
+    }
+
+    /// The browser's side of a sign-in coming back: it sends the request and
+    /// reads the reply, then hangs up (as browsers do after "Connection:
+    /// close") or, if `lingers`, waits for the app to.
+    fn browse(port: u16, path: &str, lingers: bool) -> String {
+        let mut s = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        s.write_all(format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n").as_bytes()).unwrap();
+        let mut reply = Vec::new();
+        let mut buf = [0u8; 4096];
+        loop {
+            let n = s.read(&mut buf).unwrap();
+            reply.extend_from_slice(&buf[..n]);
+            if n == 0 || (!lingers && reply.ends_with(b"</html>")) {
+                return String::from_utf8(reply).unwrap();
+            }
+        }
+    }
+
+    /// One sign-in coming back to a listener on `port`; returns the page.
+    fn sign_in(port: u16, query: &str, lingers: bool) -> String {
+        let listener = bind(port).expect("the port is free");
         let port = listener.local_addr().unwrap().port();
-        let browser = std::thread::spawn(move || {
-            let mut s = TcpStream::connect(("127.0.0.1", port)).unwrap();
-            s.write_all(b"GET /auth/callback?code=xyz HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n").unwrap();
-            let mut reply = String::new();
-            s.read_to_string(&mut reply).unwrap();
-            reply
-        });
+        let path = format!("{PATH}?{query}");
+        let browser = std::thread::spawn(move || browse(port, &path, lingers));
         let (stream, _) = listener.accept().unwrap();
-        assert_eq!(answer(stream).as_deref(), Some("code=xyz"));
-        let reply = browser.join().unwrap();
+        assert_eq!(answer(stream).as_deref(), Some(query));
+        browser.join().unwrap()
+    }
+
+    #[test]
+    fn answers_the_browser_and_lets_go_of_the_port() {
+        let port = bind(0).unwrap().local_addr().unwrap().port();
+        let reply = sign_in(port, "rotating_token_nonce=xyz", false);
         assert!(reply.starts_with("HTTP/1.1 200 OK"), "{reply}");
         assert!(reply.contains("You're signed in"));
+        // Another sign-in right after listens on the same port, even after a
+        // browser that didn't hang up.
+        assert!(sign_in(port, "__clerk_status=failed&__clerk_error_code=oauth_access_denied", true).contains("Sign-in didn't finish"));
+        assert!(sign_in(port, "rotating_token_nonce=abc", false).contains("You're signed in"));
     }
 }

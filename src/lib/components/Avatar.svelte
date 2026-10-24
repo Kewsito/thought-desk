@@ -3,9 +3,9 @@
 
   let { name, url = null, seed = name, size = 28 }: { name: string; url?: string | null; seed?: string; size?: number } = $props();
 
-  // Only Google's and GitHub's picture hosts (the ones sign-up takes them
-  // from): a picture elsewhere would show its server who's looking, and when.
-  const KNOWN = /^https:\/\/(lh\d+\.googleusercontent\.com|avatars\.githubusercontent\.com)\//;
+  // Only Clerk's picture host (sign-in keeps everyone's pictures there): a
+  // picture elsewhere would show its server who's looking, and when.
+  const KNOWN = /^https:\/\/img\.clerk\.com\//;
   const src = $derived(url && KNOWN.test(url) ? url : null);
   let broken = $state(false);
   const initials = $derived(

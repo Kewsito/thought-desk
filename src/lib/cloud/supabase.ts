@@ -1,14 +1,11 @@
 /**
- * The real cloud: Supabase. Signing in uses PKCE. On the desktop, Google and
- * GitHub come back to a one-time listener on 127.0.0.1 (src-tauri/src/auth.rs);
- * in a browser (development) the page itself is redirected back.
+ * The real cloud: Supabase, for profiles, friends, sessions and live updates.
+ * Signing in is Clerk's (clerk.ts): Supabase trusts the session tokens Clerk
+ * issues, and every request carries one.
  */
 
-import { createClient, type AuthError, type PostgrestError, type User } from '@supabase/supabase-js';
-import { listen } from '@tauri-apps/api/event';
-import { openUrl } from '@tauri-apps/plugin-opener';
-import { api } from '../api';
-import { isDesktop } from '../platform';
+import { createClient, type PostgrestError } from '@supabase/supabase-js';
+import * as clerk from './clerk';
 import { ONLINE_FOR, type Cloud, type CloudChange, type CloudUser, type Friend, type LiveSession, type Profile, type Provider } from './types';
 
 /** The project and its publishable key: both public by design (row-level security protects the data). */
@@ -39,7 +36,6 @@ const asSession = (r: SessionRow): LiveSession => ({
   updatedAt: Date.parse(r.updated_at),
 });
 
-const asUser = (u: User | null | undefined): CloudUser | null => (u ? { id: u.id, email: u.email ?? null } : null);
 const asProfile = (r: { id: string; username: string | null; display_name: string; avatar_url: string | null }): Profile => ({
   id: r.id,
   username: r.username,
@@ -48,16 +44,12 @@ const asProfile = (r: { id: string; username: string | null; display_name: strin
 });
 
 /** An error as something to show people. */
-function friendly(e: AuthError | PostgrestError | Error | null | undefined, fallback = 'Something went wrong. Try again.'): Error {
+function friendly(e: PostgrestError | Error | null | undefined, fallback = 'Something went wrong. Try again.'): Error {
   if (!e) return new Error(fallback);
   const code = 'code' in e ? String(e.code ?? '') : '';
-  const status = 'status' in e ? Number(e.status) : 0;
   if (code === '23505') return new Error('That username is taken.');
   if (code === '23514') return new Error('Use 3–20 lowercase letters, digits or _.');
-  if (code === 'email_address_not_authorized')
-    return new Error("Email sign-in can't reach this address yet. Use Google or GitHub, or ask whoever runs this Thought Desk to set up email.");
-  if (code === 'over_email_send_rate_limit' || status === 429) return new Error('Too many tries for now. Wait a minute and try again.');
-  if (e instanceof TypeError || /fetch/i.test(e.message)) return new Error("Can't reach the sign-in service. Check your internet connection.");
+  if (e instanceof TypeError || /fetch/i.test(e.message)) return new Error("Can't reach the cloud. Check your internet connection.");
   return new Error(e.message || fallback);
 }
 
@@ -71,127 +63,54 @@ function sessionError(e: PostgrestError): Error {
   return friendly(e);
 }
 
-/** Where the app keeps the sign-in: encrypted by Windows in its own folder,
- *  not in the WebView's storage, where any program could read it. One kept
- *  there by an earlier version moves over the first time it's asked for. */
-const desktopStorage = {
-  async getItem(key: string) {
-    const kept = await api.secretGet(key);
-    if (kept !== null) return kept;
-    const old = localStorage.getItem(key);
-    if (old === null) return null;
-    await api.secretSet(key, old);
-    localStorage.removeItem(key);
-    return old;
-  },
-  setItem: (key: string, value: string) => api.secretSet(key, value),
-  async removeItem(key: string) {
-    localStorage.removeItem(key);
-    await api.secretRemove(key);
-  },
-};
+/** How often Realtime renews its sign-in. A Clerk token lasts a minute and
+ *  Realtime closes a channel the moment its token runs out, so it renews
+ *  often, always to a token with time to spare (see clerk.sessionToken). */
+const HEARTBEAT = 10_000;
+
+type Channel = ReturnType<SupabaseCloud['client']['channel']>;
 
 class SupabaseCloud implements Cloud {
   readonly client = createClient(SUPABASE_URL, SUPABASE_KEY, {
-    auth: {
-      flowType: 'pkce',
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: false,
-      storageKey: 'thoughtdesk.auth',
-      // The browser preview (development only) keeps it in localStorage.
-      ...(isDesktop() ? { storage: desktopStorage } : {}),
-    },
+    accessToken: () => clerk.sessionToken(),
+    realtime: { heartbeatIntervalMs: HEARTBEAT },
   });
-  #cancel: (() => void) | null = null;
+  #listeners = 0;
 
-  async user() {
-    return asUser((await this.client.auth.getSession()).data.session?.user);
+  /** In a browser (development): finishes a Google or GitHub sign-in that came back to this page. */
+  finishRedirect = clerk.finishRedirect;
+  user = clerk.user;
+  onAuth = clerk.onAuth;
+  cancelSignIn = clerk.cancelSignIn;
+  signOut = clerk.signOut;
+
+  signInWith(provider: Provider) {
+    return clerk.signInWith(provider);
   }
 
-  onAuth(cb: (user: CloudUser | null) => void) {
-    // Supabase asks that its own calls wait until this callback has returned.
-    const { data } = this.client.auth.onAuthStateChange((_event, session) => setTimeout(() => cb(asUser(session?.user))));
-    return () => data.subscription.unsubscribe();
+  sendEmailCode(email: string) {
+    return clerk.sendEmailCode(email);
   }
 
-  async signInWith(provider: Provider) {
-    if (!isDesktop()) {
-      // The page goes to the provider and comes back with ?code= (see finishRedirect).
-      const { error } = await this.client.auth.signInWithOAuth({ provider, options: { redirectTo: location.origin + location.pathname } });
-      if (error) throw friendly(error);
-      return new Promise<void>(() => {});
-    }
-    const port = await api.authListen();
-    const { data, error } = await this.client.auth.signInWithOAuth({
-      provider,
-      options: { redirectTo: `http://127.0.0.1:${port}/auth/callback`, skipBrowserRedirect: true },
-    });
-    if (error || !data.url) throw friendly(error);
-    let stop: (() => void) | undefined;
-    const back = new Promise<string>((resolve, reject) => {
-      this.#cancel = () => reject(new Error('cancelled'));
-      void listen<string>('auth-callback', (e) => resolve(e.payload)).then((unlisten) => (stop = unlisten));
-    });
-    try {
-      await openUrl(data.url);
-      const params = new URLSearchParams(await back);
-      const code = params.get('code');
-      if (!code) throw new Error(params.get('error_description')?.replace(/\+/g, ' ') || 'Sign-in was cancelled.');
-      const { error: exchange } = await this.client.auth.exchangeCodeForSession(code);
-      if (exchange) throw friendly(exchange);
-    } finally {
-      stop?.();
-      this.#cancel = null;
-    }
+  verifyEmailCode(_email: string, code: string) {
+    return clerk.verifyEmailCode(code);
   }
 
-  cancelSignIn() {
-    this.#cancel?.();
+  accessToken() {
+    return clerk.sessionToken();
   }
 
-  /** In a browser (development): finishes a Google or GitHub sign-in that came back with ?code=. */
-  async finishRedirect() {
-    const code = new URLSearchParams(location.search).get('code');
-    if (!code) return;
-    history.replaceState(null, '', location.pathname);
-    const { error } = await this.client.auth.exchangeCodeForSession(code);
-    if (error) throw friendly(error);
-  }
-
-  async sendEmailCode(email: string) {
-    const { error } = await this.client.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
-    if (error) throw friendly(error);
-  }
-
-  async verifyEmailCode(email: string, code: string) {
-    const { error } = await this.client.auth.verifyOtp({ email, token: code, type: 'email' });
-    if (error && (error.code === 'otp_expired' || error.status === 401 || error.status === 403))
-      throw new Error("That code isn't right, or it has expired. Ask for a new one.");
-    if (error) throw friendly(error);
-  }
-
-  async signOut() {
-    // This computer only: other devices stay signed in.
-    const { error } = await this.client.auth.signOut({ scope: 'local' });
-    if (error) throw friendly(error);
-  }
-
-  async accessToken() {
-    return (await this.client.auth.getSession()).data.session?.access_token ?? null;
-  }
-
+  /** Makes your profile the first time (from your Clerk name and picture),
+   *  and keeps its picture in step with Clerk's. */
   async myProfile() {
-    const me = await this.user();
-    if (!me) return null;
-    const { data, error } = await this.client.from('profiles').select(PROFILE_COLS).eq('id', me.id).maybeSingle();
+    if (!(await this.user())) return null;
+    const { data, error } = await this.client.rpc('ensure_profile');
     if (error) throw friendly(error);
-    return data ? asProfile(data) : null;
+    return data ? asProfile(data as Parameters<typeof asProfile>[0]) : null;
   }
 
   async updateProfile(patch: { username?: string; displayName?: string }) {
-    const me = await this.user();
-    if (!me) throw new Error('Sign in first.');
+    const me = await this.#me();
     const row: Record<string, string> = {};
     if (patch.username !== undefined) row.username = patch.username;
     if (patch.displayName !== undefined) row.display_name = patch.displayName;
@@ -233,23 +152,20 @@ class SupabaseCloud implements Cloud {
   }
 
   async requestFriend(userId: string) {
-    const me = await this.user();
-    if (!me) throw new Error('Sign in first.');
+    const me = await this.#me();
     const { error } = await this.client.from('friendships').insert({ requester: me.id, addressee: userId });
     if (error?.code === '23505') throw new Error("You're already friends, or one of you has asked already.");
     if (error) throw friendly(error);
   }
 
   async acceptFriend(userId: string) {
-    const me = await this.user();
-    if (!me) throw new Error('Sign in first.');
+    const me = await this.#me();
     const { error } = await this.client.from('friendships').update({ status: 'accepted' }).eq('requester', userId).eq('addressee', me.id);
     if (error) throw friendly(error);
   }
 
   async removeFriend(userId: string) {
-    const me = await this.user();
-    if (!me) throw new Error('Sign in first.');
+    const me = await this.#me();
     const pair = (a: string, b: string) => 'and(requester.eq.' + a + ',addressee.eq.' + b + ')';
     const { error } = await this.client.from('friendships').delete().or(pair(me.id, userId) + ',' + pair(userId, me.id));
     if (error) throw friendly(error);
@@ -268,8 +184,7 @@ class SupabaseCloud implements Cloud {
   }
 
   async createSession({ kind, friendId, title }: { kind: 'invite' | 'request'; friendId: string; title: string }) {
-    const me = await this.user();
-    if (!me) throw new Error('Sign in first.');
+    const me = await this.#me();
     const row: Pick<SessionRow, 'host' | 'guest' | 'kind' | 'title'> =
       kind === 'invite' ? { host: me.id, guest: friendId, kind, title } : { host: friendId, guest: me.id, kind, title: '' };
     const { data, error } = await this.client.from('cowork_sessions').insert(row).select(SESSION_COLS).single();
@@ -289,30 +204,32 @@ class SupabaseCloud implements Cloud {
   }
 
   subscribe(cb: (change: CloudChange) => void) {
-    let channel: ReturnType<SupabaseCloud['client']['channel']> | null = null;
+    let stop: (() => void) | null = null;
     let stopped = false;
     void this.user().then((me) => {
       if (!me || stopped) return;
       // New and changed rows that concern you (row-level security filters
       // them again on the server). Not deletes: those reach every listener
       // unfiltered, so a declined request or a removed friend shows within
-      // the minute instead (the lists refresh every minute anyway).
-      const ch = this.client.channel('mine:' + me.id);
-      for (const [table, change, column] of [
-        ['friendships', 'friends', 'addressee'],
-        ['friendships', 'friends', 'requester'],
-        ['cowork_sessions', 'sessions', 'host'],
-        ['cowork_sessions', 'sessions', 'guest'],
-      ] as const) {
-        for (const event of ['INSERT', 'UPDATE'] as const)
-          ch.on('postgres_changes', { event, schema: 'public', table, filter: column + '=eq.' + me.id }, () => cb(change));
-      }
-      ch.subscribe();
-      channel = ch;
+      // the minute instead (the lists refresh every minute anyway). Each
+      // listener gets a channel of its own: Realtime hands back an existing
+      // channel of the same name, which takes no new callbacks once joined.
+      stop = this.#keep(`mine:${me.id}:${++this.#listeners}`, (ch) => {
+        for (const [table, change, column] of [
+          ['friendships', 'friends', 'addressee'],
+          ['friendships', 'friends', 'requester'],
+          ['cowork_sessions', 'sessions', 'host'],
+          ['cowork_sessions', 'sessions', 'guest'],
+        ] as const) {
+          for (const event of ['INSERT', 'UPDATE'] as const)
+            ch.on('postgres_changes', { event, schema: 'public', table, filter: column + '=eq.' + me.id }, () => cb(change));
+        }
+        return ch;
+      }).stop;
     });
     return () => {
       stopped = true;
-      if (channel) void this.client.removeChannel(channel);
+      stop?.();
     };
   }
 
@@ -320,13 +237,66 @@ class SupabaseCloud implements Cloud {
     // A broadcast, stored nowhere, on a channel named by the session's
     // unguessable id. It only makes the other app reconnect to the relay,
     // which checks who may join.
-    const channel = this.client
-      .channel('nudge:' + sessionId, { config: { broadcast: { self: false } } })
-      .on('broadcast', { event: 'nudge' }, () => onNudge())
-      .subscribe();
+    const kept = this.#keep('nudge:' + sessionId, (ch) => ch.on('broadcast', { event: 'nudge' }, () => onNudge()), { config: { broadcast: { self: false } } });
     return {
-      send: () => void channel.send({ type: 'broadcast', event: 'nudge', payload: {} }),
-      stop: () => void this.client.removeChannel(channel),
+      send: () => void kept.current()?.send({ type: 'broadcast', event: 'nudge', payload: {} }),
+      stop: kept.stop,
+    };
+  }
+
+  /** Whoever is signed in, or an error saying to sign in. */
+  async #me(): Promise<CloudUser> {
+    const me = await this.user();
+    if (!me) throw new Error('Sign in first.');
+    return me;
+  }
+
+  /** A Realtime channel that comes back if it closes on its own, or if the
+   *  server turns down what it listens for (Realtime rejoins neither: one
+   *  whose sign-in ran out, say), sooner or later depending on how often it
+   *  has failed. */
+  #keep(name: string, setup: (ch: Channel) => Channel, params?: Parameters<SupabaseCloud['client']['channel']>[1]) {
+    let current: Channel | null = null;
+    let stopped = false;
+    let wait = 1000;
+    /** When the current channel joined (0: it hasn't). */
+    let since = 0;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    const open = async () => {
+      // A join carries whatever sign-in Realtime last had, which may be none
+      // (it asks when the app starts, before anyone signs in): bring it up
+      // to date first, or the server checks the channel as signed out.
+      await this.client.realtime.setAuth().catch(() => {});
+      if (stopped) return;
+      const ch = setup(this.client.channel(name, params));
+      current = ch;
+      ch.on('system', {}, (message: { status?: string }) => message.status === 'error' && retire(ch));
+      ch.subscribe((status) => {
+        if (status !== 'SUBSCRIBED') retire(ch);
+        else if (current === ch) since = Date.now();
+      });
+    };
+    // Gone, or no use: make a new one (the same name would give back this one).
+    const retire = (ch: Channel) => {
+      if (stopped || current !== ch) return;
+      current = null;
+      // Up for a while before this: start the waiting over.
+      if (since && Date.now() - since > 60_000) wait = 1000;
+      since = 0;
+      void this.client.removeChannel(ch).finally(() => {
+        if (!stopped) retry = setTimeout(open, wait);
+        wait = Math.min(wait * 2, 60_000);
+      });
+    };
+    void open();
+    return {
+      current: () => current,
+      stop: () => {
+        stopped = true;
+        clearTimeout(retry);
+        if (current) void this.client.removeChannel(current);
+        current = null;
+      },
     };
   }
 }

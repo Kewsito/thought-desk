@@ -56,7 +56,7 @@
     if (!p) return;
     untrack(() => {
       displayName = p.displayName;
-      username = p.username ?? suggestUsername(p.displayName);
+      username = p.username ?? suggestUsername(p.displayName || (account.user?.email ?? '').split('@')[0]);
     });
   });
 

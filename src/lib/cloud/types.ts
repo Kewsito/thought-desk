@@ -1,8 +1,8 @@
 /**
- * What the app needs from the cloud: accounts and profiles (and, later,
- * friends and live sessions). Notes never go there. The real cloud is
- * Supabase (supabase.ts); interface tests use a fake shared by two browser
- * profiles (fake.ts). Errors carry messages meant for people.
+ * What the app needs from the cloud: accounts, profiles, friends and live
+ * sessions. Notes never go there. The real cloud is Supabase (supabase.ts),
+ * with Clerk for signing in (clerk.ts); interface tests use a fake shared by
+ * two browser profiles (fake.ts). Errors carry messages meant for people.
  */
 
 export type Provider = 'google' | 'github';

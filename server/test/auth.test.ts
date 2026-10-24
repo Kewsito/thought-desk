@@ -2,17 +2,37 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { SignJWT, generateKeyPair, type JWTVerifyGetKey } from 'jose';
-import { authorize, isLocal, tokenFrom, type AuthDeps, type AuthEnv } from '../src/auth.ts';
+import { authorize, isLocal, personOf, tokenFrom, type AuthDeps, type AuthEnv } from '../src/auth.ts';
 
-const env: AuthEnv = { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_KEY: 'sb_publishable_test' };
+const DEV = 'https://example-dev.clerk.accounts.dev';
+const PROD = 'https://clerk.thoughtdesk.org';
+const env: AuthEnv = {
+  SUPABASE_URL: 'https://project.supabase.co',
+  SUPABASE_KEY: 'sb_publishable_test',
+  CLERK_ISSUERS: `${DEV}, ${PROD}`,
+  APP_ORIGINS: 'http://tauri.localhost,http://localhost:1420',
+};
 const ROOM = '0b9a1c2d-3e4f-4a5b-8c6d-7e8f9a0b1c2d';
-const ANA = '11111111-1111-4111-8111-111111111111';
+const ANA = 'user_2ana0000000000000000000000';
 
-const { publicKey, privateKey } = await generateKeyPair('ES256');
-const keys: JWTVerifyGetKey = async () => publicKey;
+// Clerk signs session tokens with RS256; each instance has its own keys.
+const clerk = await generateKeyPair('RS256');
+const stranger = await generateKeyPair('RS256');
+const keysOf = new Map<string, CryptoKey>([
+  [DEV, clerk.publicKey],
+  [PROD, clerk.publicKey],
+]);
+const keys = (issuer: string): JWTVerifyGetKey => async () => {
+  const key = keysOf.get(issuer);
+  if (!key) throw new Error(`asked for the keys of ${issuer}`);
+  return key;
+};
 
-function token({ sub = ANA, iss = `${env.SUPABASE_URL}/auth/v1`, aud = 'authenticated', expires = '1h' } = {}) {
-  return new SignJWT({ role: 'authenticated' }).setProtectedHeader({ alg: 'ES256' }).setSubject(sub).setIssuer(iss).setAudience(aud).setIssuedAt().setExpirationTime(expires).sign(privateKey);
+/** A Clerk session token, with what Clerk puts in one. */
+function token({ sub = ANA, iss = DEV, azp = 'http://tauri.localhost' as string | undefined, sts = 'active', expires = '1m', key = clerk.privateKey } = {}) {
+  const claims: Record<string, unknown> = { sid: 'sess_1', sts, v: 2, role: 'authenticated' };
+  if (azp !== undefined) claims.azp = azp;
+  return new SignJWT(claims).setProtectedHeader({ alg: 'RS256', kid: 'ins_1' }).setSubject(sub).setIssuer(iss).setIssuedAt().setExpirationTime(expires).sign(key);
 }
 
 /** Supabase's answer to "is this session active and mine?", and what it was asked. */
@@ -35,6 +55,11 @@ test('someone in the active session gets in, checked with their own token', asyn
   assert.equal(asked[0].auth, `Bearer ${t}`);
 });
 
+test('either Clerk instance will do, and a token made without a page (no azp) too', async () => {
+  for (const t of [await token({ iss: PROD }), await token({ azp: 'http://localhost:1420' }), await token({ azp: undefined })])
+    assert.equal(await personOf(t, env, keys), ANA);
+});
+
 test('someone not in it (or after it ended) is turned away', async () => {
   const { deps } = supabase([]);
   const verdict = await authorize(await token(), ROOM, false, env, deps);
@@ -42,22 +67,33 @@ test('someone not in it (or after it ended) is turned away', async () => {
   assert.equal(!verdict.ok && verdict.status, 403);
 });
 
-test('no token, an expired one, or one from another project is refused', async () => {
+test('no token, an expired one, or one not from our Clerk for the app is refused', async () => {
   const { deps, asked } = supabase([{ id: ROOM }]);
-  for (const t of ['', 'not-a-token', await token({ expires: '-1m' }), await token({ iss: 'https://other.supabase.co/auth/v1' }), await token({ aud: 'anon' })]) {
+  const refused = {
+    'no token': '',
+    'not a token': 'not-a-token',
+    expired: await token({ expires: '-1m' }),
+    'another Clerk instance': await token({ iss: 'https://someone-else.clerk.accounts.dev' }),
+    'Supabase Auth': await token({ iss: 'https://project.supabase.co/auth/v1' }),
+    'signed with other keys': await token({ key: stranger.privateKey }),
+    'made on another page': await token({ azp: 'https://evil.example' }),
+    'a session waiting on a step': await token({ sts: 'pending' }),
+    'no user': await token({ sub: '' }),
+  };
+  for (const [what, t] of Object.entries(refused)) {
     const verdict = await authorize(t, ROOM, false, env, deps);
-    assert.equal(verdict.ok, false, t);
-    assert.equal(!verdict.ok && verdict.status, 401, t);
+    assert.equal(verdict.ok, false, what);
+    assert.equal(!verdict.ok && verdict.status, 401, what);
   }
   assert.equal(asked.length, 0, 'never asks Supabase about a bad token');
 });
 
 test('test sign-ins work only in test mode, and only from this computer', async () => {
   const { deps } = supabase([]);
-  const fake = `test.${ANA}`;
+  const fake = 'test.11111111-1111-4111-8111-111111111111';
   assert.equal((await authorize(fake, ROOM, true, env, deps)).ok, false, 'not without test mode');
   const testing = { ...env, AUTH_MODE: 'test' };
-  assert.deepEqual(await authorize(fake, ROOM, true, testing, deps), { ok: true, userId: ANA });
+  assert.deepEqual(await authorize(fake, ROOM, true, testing, deps), { ok: true, userId: '11111111-1111-4111-8111-111111111111' });
   assert.equal((await authorize(fake, ROOM, false, testing, deps)).ok, false, 'never from outside');
   assert.equal((await authorize('test.nope', ROOM, true, testing, deps)).ok, false);
 });

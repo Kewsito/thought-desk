@@ -3,8 +3,9 @@
  * people's edits and cursors between them (Yjs over a WebSocket). It keeps
  * nothing: when everyone has left, the room is gone. Each person's app keeps
  * the session's state, so reconnecting loses nothing. Only the two people in
- * an active session get in (see auth.ts), and the room asks again every
- * minute, so an ended session or an expired sign-in doesn't linger.
+ * an active session get in (see auth.ts), and they stay only while their app
+ * keeps showing a fresh sign-in, each checked again, so an ended session or
+ * a sign-out doesn't linger.
  */
 
 import { routePartykitRequest, type Connection, type ConnectionContext, type WSMessage } from 'partyserver';
@@ -17,27 +18,38 @@ interface Env extends AuthEnv {
 
 /** Who connected, as the Worker checked it (set by the Worker, never by the client). */
 const USER = 'x-td-user';
-const TOKEN = 'x-td-token';
 const LOCAL = 'x-td-local';
 /** The largest message passed on: a whole long page pasted at once fits. */
 const MAX_MESSAGE = 4 * 1024 * 1024;
 /** Connections one person may have in a room (the app needs one). */
 const PER_PERSON = 3;
-/** How often a room checks its session is still on, with each person's sign-in. */
+/** A sign-in token lasts a minute; the app sends a fresh one every 45 seconds
+ *  ("token:<token>"). A connection that hasn't shown one for this long is let go. */
+const STALE = 120_000;
+/** How often a room looks for those, and the most often it checks one connection's token. */
 const RECHECK = 60_000;
+const RENEW_AT_MOST = 10_000;
+
+interface Who {
+  user: string;
+  /** From this computer (tests). */
+  local: boolean;
+  /** When its sign-in was last shown to be good. */
+  renewed: number;
+  /** When a fresh token last came in. */
+  asked: number;
+}
 
 export class Page extends YServer<Env> {
-  /** Each connection's person and sign-in, and whether it's from this computer (tests). */
-  #who = new Map<string, { user: string; token: string; local: boolean }>();
+  #who = new Map<string, Who>();
   #recheck: ReturnType<typeof setInterval> | null = null;
 
   onConnect(conn: Connection, ctx: ConnectionContext) {
     const user = ctx.request.headers.get(USER);
-    const token = ctx.request.headers.get(TOKEN);
-    if (!user || !token) return conn.close(4001, 'Sign in first');
+    if (!user) return conn.close(4001, 'Sign in first');
     if ([...this.#who.values()].filter((w) => w.user === user).length >= PER_PERSON) return conn.close(4008, 'Too many connections');
-    this.#who.set(conn.id, { user, token, local: ctx.request.headers.get(LOCAL) === '1' });
-    this.#recheck ??= setInterval(() => void this.#check(), RECHECK);
+    this.#who.set(conn.id, { user, local: ctx.request.headers.get(LOCAL) === '1', renewed: Date.now(), asked: 0 });
+    this.#recheck ??= setInterval(() => this.#check(), RECHECK);
     return super.onConnect(conn, ctx);
   }
 
@@ -45,6 +57,14 @@ export class Page extends YServer<Env> {
     const size = typeof message === 'string' ? message.length : message.byteLength;
     if (size > MAX_MESSAGE) return conn.close(1009, 'Message too big');
     return super.onMessage(conn, message);
+  }
+
+  /** A fresh sign-in from the app: checked like the first, session and all. */
+  onCustomMessage(conn: Connection, message: string) {
+    const who = this.#who.get(conn.id);
+    if (!who || !message.startsWith('token:') || Date.now() - who.asked < RENEW_AT_MOST) return;
+    who.asked = Date.now();
+    void this.#renew(conn, who, message.slice('token:'.length));
   }
 
   onClose(conn: Connection, code: number, reason: string, wasClean: boolean) {
@@ -56,16 +76,24 @@ export class Page extends YServer<Env> {
     return super.onClose(conn, code, reason, wasClean);
   }
 
-  /** Asks again for each connection: an expired sign-in closes it (the app
-   *  reconnects with a fresh one); a session that's over closes the room. */
-  async #check() {
+  async #renew(conn: Connection, who: Who, token: string) {
+    // Not answered (Supabase unreachable): the next one may be, and STALE decides.
+    const verdict = await authorize(token, this.name, who.local, this.env).catch(() => null);
+    if (!verdict) return;
+    if (!verdict.ok && verdict.status === 403) {
+      // The session is over, or the two are no longer friends: the room closes.
+      for (const c of this.getConnections()) c.close(4003, verdict.reason);
+    } else if (!verdict.ok) conn.close(4001, verdict.reason);
+    else if (verdict.userId !== who.user) conn.close(4001, 'Signed in as someone else');
+    else who.renewed = Date.now();
+  }
+
+  /** Lets go of connections whose sign-in hasn't been renewed (the app
+   *  reconnects with a fresh one, if it still has one). */
+  #check() {
     for (const conn of this.getConnections()) {
       const who = this.#who.get(conn.id);
-      if (!who) continue;
-      const verdict = await authorize(who.token, this.name, who.local, this.env).catch(() => null);
-      if (!verdict || verdict.ok) continue;
-      if (verdict.status === 401) conn.close(4001, verdict.reason);
-      else for (const c of this.getConnections()) c.close(4003, verdict.reason);
+      if (who && Date.now() - who.renewed > STALE) conn.close(4001, 'Your sign-in has expired: sign in again');
     }
   }
 }
@@ -80,14 +108,17 @@ export default {
     if (!room) return new Response('Not found', { status: 404 });
     const token = tokenFrom(request.headers.get('Sec-WebSocket-Protocol'));
     const local = isLocal(request);
-    const verdict = await authorize(token, room, local, env);
+    const verdict = await authorize(token, room, local, env).catch((e) => {
+      console.error('Could not check a sign-in', e);
+      return null;
+    });
+    if (!verdict) return new Response('Could not check your sign-in. Try again in a moment.', { status: 503 });
     if (!verdict.ok) return new Response(verdict.reason, { status: verdict.status });
 
     // The room learns who this is from here alone: these overwrite anything the client sent.
     const headers = new Headers(request.headers);
     headers.delete('Sec-WebSocket-Protocol');
     headers.set(USER, verdict.userId);
-    headers.set(TOKEN, token);
     headers.set(LOCAL, local ? '1' : '0');
     const res = await routePartykitRequest(new Request(request, { headers }), env as unknown as Record<string, unknown>);
     if (!res) return new Response('Not found', { status: 404 });
