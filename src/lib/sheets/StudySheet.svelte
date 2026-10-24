@@ -1,6 +1,7 @@
 <script lang="ts">
   import Icon from '../components/Icon.svelte';
   import Modal from '../components/Modal.svelte';
+  import PageIcon from '../components/PageIcon.svelte';
   import RichText from '../ui/RichText.svelte';
   import { cards } from '../cards.svelte';
   import { clock } from '../clock.svelte';
@@ -196,7 +197,7 @@
                 store.open(source.id);
               }}
             >
-              {#if source.icon}<span>{source.icon}</span>{:else}<Icon name="page" size={12} />{/if}
+              {#if source.icon}<span><PageIcon icon={source.icon} /></span>{:else}<Icon name="page" size={12} />{/if}
               {source.title || 'Untitled'}
             </button>
           {/if}
