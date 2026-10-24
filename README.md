@@ -181,6 +181,7 @@ src-tauri/src/
   files.rs               `tdfile://` protocol (byte ranges), stray-file cleanup
   stress.rs              heavy-workspace benchmark (`cargo test --release stress -- --ignored`)
   memory.rs              WebView2 suspend/trim while minimized, idle, or after Settings
+site/                    thoughtdesk.org: the website, and the Worker that serves it (see site/README.md)
 ```
 
 ## Contributing
