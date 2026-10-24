@@ -34,7 +34,13 @@ async function twoFriends(ana: Page, browser: Browser, { idleMs }: { idleMs?: nu
 const editor = (page: Page) => page.locator('.scroller .ProseMirror');
 const title = (page: Page) => page.locator('.scroller h1.title');
 const liveTab = (page: Page) => page.locator('.titlebar [role=tab][aria-selected=true] .tab-live');
-const friendsList = (page: Page) => page.locator('.sidebar [role=list][aria-label=Friends]');
+const friendsPage = (page: Page) => page.locator('.friends-view');
+
+/** Opens the Friends page from the sidebar. */
+async function openFriends(page: Page) {
+  await page.locator('.sidebar .views').getByRole('button', { name: 'Friends' }).click();
+  await expect(friendsPage(page)).toBeVisible();
+}
 
 async function typeAtEnd(page: Page, text: string) {
   await editor(page).click();
@@ -60,7 +66,8 @@ test('invite, join, write together in a new tab, end: both keep the page', async
   await test.step('Ana invites Ben to a page; Ben sees it and joins', async () => {
     await inviteBen(ana);
     await expect(ben.locator('.toast', { hasText: 'Ana Lima invites you to write together' })).toBeVisible(LIVE);
-    await expect(friendsList(ben)).toContainText('“Study plan”');
+    await openFriends(ben);
+    await expect(friendsPage(ben)).toContainText('“Study plan”');
     await ben.getByRole('button', { name: 'Join Ana Lima' }).click();
   });
 
@@ -147,6 +154,7 @@ test('a quiet session lets go of the relay; writing or coming back wakes both si
   const { ben } = await twoFriends(ana, browser, { idleMs: 3000 });
   const chip = (page: Page) => page.locator('.live-chip');
   await inviteBen(ana);
+  await openFriends(ben);
   await ben.getByRole('button', { name: 'Join Ana Lima' }).click();
   await expect(chip(ana)).toContainText('Live with Ben Ito', LIVE);
   await expect(chip(ben)).toContainText('Live with Ana Lima', LIVE);
@@ -186,6 +194,7 @@ test('in a page written together, a picture from the web waits for a click', asy
     return route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"/>' });
   });
   await inviteBen(ana);
+  await openFriends(ben);
   await ben.getByRole('button', { name: 'Join Ana Lima' }).click();
   await expect(editor(ben)).toContainText('Before the midterm', LIVE);
 
@@ -210,11 +219,14 @@ test('asking to write together: the host picks the page, and closing the tab end
   test.setTimeout(90_000);
   const { cloud, ben } = await twoFriends(ana, browser);
 
-  await friendsList(ben).getByRole('button', { name: 'Ana Lima' }).click();
-  await ben.getByRole('menuitem', { name: 'Ask to Write Together' }).click();
+  await openFriends(ben);
+  await ben.getByRole('button', { name: 'Write with Ana Lima' }).click();
+  await ben.getByRole('menuitem', { name: 'One of Their Pages' }).click();
   await expect(ben.locator('.toast', { hasText: 'Asked Ana Lima to write together' })).toBeVisible();
 
-  await expect(ana.locator('.toast', { hasText: 'Ben Ito wants to write together' })).toBeVisible(LIVE);
+  const asked = ana.locator('.toast', { hasText: 'Ben Ito wants to write together' });
+  await expect(asked).toBeVisible(LIVE);
+  await asked.getByRole('button', { name: 'Open Friends' }).click();
   await ana.getByRole('button', { name: 'Choose a page for Ben Ito' }).click();
   await ana.getByRole('menuitem', { name: 'A New Page' }).click();
 
@@ -236,18 +248,21 @@ test('an invite can be declined, or withdrawn', async ({ page: ana, browser }) =
   const { cloud, ben } = await twoFriends(ana, browser);
 
   await inviteBen(ana);
-  await expect(friendsList(ben)).toContainText('“Study plan”', LIVE);
+  await openFriends(ben);
+  await expect(friendsPage(ben)).toContainText('“Study plan”', LIVE);
   await ben.getByRole('button', { name: 'Decline Ana Lima' }).click();
   await expect(ana.locator('.toast', { hasText: 'Ben Ito said no this time.' })).toBeVisible(LIVE);
-  await expect(friendsList(ana)).not.toContainText('“Study plan”');
   await expect(ana.locator('.tab-live')).toHaveCount(0);
 
-  await ana.locator('.titlebar [data-tip="More"]').click();
-  await ana.getByRole('menuitem', { name: 'Invite a Friend…' }).click();
-  await ana.getByRole('button', { name: 'Invite Ben Ito' }).click();
-  await expect(friendsList(ben)).toContainText('“Study plan”', LIVE);
+  // Again from Ana's Friends page, picking the page from her recent ones.
+  await openFriends(ana);
+  await expect(friendsPage(ana)).not.toContainText('“Study plan”');
+  await ana.getByRole('button', { name: 'Write with Ben Ito' }).click();
+  await ana.getByRole('menuitem', { name: 'Study plan' }).click();
+  await expect(friendsPage(ana)).toContainText('Invited to write “Study plan”');
+  await expect(friendsPage(ben)).toContainText('“Study plan”', LIVE);
   await ana.getByRole('button', { name: 'Withdraw invite to Ben Ito' }).click();
-  await expect(friendsList(ben)).not.toContainText('“Study plan”', LIVE);
+  await expect(friendsPage(ben)).not.toContainText('“Study plan”', LIVE);
   expect(cloud.sessions.map((s) => s.status)).toEqual(['declined', 'cancelled']);
   await ben.context().close();
 });

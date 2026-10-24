@@ -59,6 +59,7 @@
   import ImportSheet from './lib/sheets/ImportSheet.svelte';
   import StudySheet from './lib/sheets/StudySheet.svelte';
   import FlashcardsView from './lib/views/FlashcardsView.svelte';
+  import FriendsView from './lib/views/FriendsView.svelte';
   import { cards } from './lib/cards.svelte';
   import { databases } from './lib/databases.svelte';
   import DatabaseView from './lib/db/DatabaseView.svelte';
@@ -124,6 +125,7 @@
     goCalendar: () => store.go('calendar'),
     goFiles: () => store.go('files'),
     goCards: () => store.go('cards'),
+    goFriends: () => store.go('friends'),
     zoomIn,
     zoomOut,
     zoomReset,
@@ -374,6 +376,8 @@
         {#if library.loaded}<FilesView />{/if}
       {:else if store.view === 'cards'}
         <FlashcardsView />
+      {:else if store.view === 'friends'}
+        <FriendsView />
       {:else if store.view === 'page' && store.current?.kind === 'database'}
         {#if databases.loaded}
           {#key store.currentId}<DatabaseView id={store.current.id} />{/key}

@@ -9,9 +9,9 @@ import type { PageMeta, PagePatch } from './types';
 const SAVE_DELAY = 400;
 
 /** What fills the main area: a page, a tag's items, a course, or an app view. */
-export type View = 'page' | 'tag' | 'course' | 'home' | 'assignments' | 'calendar' | 'files' | 'cards';
+export type View = 'page' | 'tag' | 'course' | 'home' | 'assignments' | 'calendar' | 'files' | 'cards' | 'friends';
 export type AppView = Exclude<View, 'page' | 'tag' | 'course'>;
-export const VIEWS: AppView[] = ['home', 'assignments', 'calendar', 'files', 'cards'];
+export const VIEWS: AppView[] = ['home', 'assignments', 'calendar', 'files', 'cards', 'friends'];
 
 /** A place in the app (one step of back/forward history). */
 export interface Entry {
@@ -235,6 +235,14 @@ class Store {
   });
   canGoBack = $derived(this.#historyIndex > 0);
   canGoForward = $derived(this.#historyIndex < this.#history.length - 1);
+  /** The page open now, or else the last one this tab showed before here. */
+  lastPage = $derived.by(() => {
+    for (let i = this.#historyIndex; i >= 0; i--) {
+      const e = this.#history[i];
+      if (e?.view === 'page' && e.id) return this.byId.get(e.id) ?? null;
+    }
+    return null;
+  });
 
   /** Whether a page is a database row (its parent is a database). */
   isRow(p: PageMeta): boolean {

@@ -28,6 +28,7 @@ const VIEW_LABELS: Record<string, { title: string; icon: string }> = {
   calendar: { title: 'Calendar', icon: 'calendar' },
   files: { title: 'Files', icon: 'files' },
   cards: { title: 'Flashcards', icon: 'cards' },
+  friends: { title: 'Friends', icon: 'users' },
 };
 
 const KNOWN_VIEWS = new Set<string>(['page', 'tag', 'course', ...VIEWS]);

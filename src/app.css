@@ -620,6 +620,8 @@ kbd {
   align-items: center;
   justify-content: center;
   gap: 6px;
+  /* A label stays on one line: next to a long one, the button keeps its width. */
+  white-space: nowrap;
   height: var(--h-md);
   min-width: 80px;
   padding: 0 16px;

@@ -449,7 +449,7 @@ class Cowork {
       if (row.status === 'pending' && !was && !first && !mine) {
         const name = this.otherName(row);
         if (row.kind === 'invite') announce(`${name} invites you to write together`, `“${row.title || 'Untitled'}”`, { label: 'Join', run: () => void this.join(row).catch((e) => ui.error(e)) });
-        else announce(`${name} wants to write together`, 'Pick a page to share, in Friends.');
+        else announce(`${name} wants to write together`, 'Pick a page to share, in Friends.', { label: 'Open Friends', run: () => store.go('friends') });
       }
       if (row.status === 'active' && !this.#held.has(row.id)) {
         const fresh = !first && was?.status !== 'active';

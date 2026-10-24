@@ -1,6 +1,6 @@
 // Friends: two people (two browser profiles) sharing the fake cloud. Ana
-// adds Ben by username, Ben accepts, both see each other online; requests
-// can be declined, and friends removed.
+// adds Ben by username on the Friends page, Ben accepts, both see each other
+// online; requests can be declined, and friends removed.
 import type { Browser, Page } from '@playwright/test';
 import { test, expect, open } from './fixtures';
 import { FakeCloud } from './fake-cloud';
@@ -18,11 +18,18 @@ async function person(browser: Browser, cloud: FakeCloud, email: string, name: s
   return page;
 }
 
-const friendsList = (page: Page) => page.locator('.sidebar [role=list][aria-label=Friends]');
+const friendsPage = (page: Page) => page.locator('.friends-view');
+
+/** Opens the Friends page from the sidebar. */
+async function openFriends(page: Page) {
+  await page.locator('.sidebar .views').getByRole('button', { name: 'Friends' }).click();
+  await expect(friendsPage(page)).toBeVisible();
+}
 
 async function addFriend(page: Page, username: string) {
   await expect(page.getByRole('alertdialog')).toHaveCount(0);
-  await page.locator('.sidebar [data-tip="Add a friend"]').click();
+  await openFriends(page);
+  await friendsPage(page).locator('.view-head').getByRole('button', { name: 'Add a Friend' }).click();
   await page.getByPlaceholder('@username').fill(username);
   await page.getByRole('button', { name: 'Send Request' }).click();
 }
@@ -45,13 +52,14 @@ test('adding a friend by username, and accepting', async ({ page: ana, browser }
   await test.step('Ana asks Ben; it shows as asked', async () => {
     await addFriend(ana, '@Ben');
     await expect(ana.locator('.toast', { hasText: 'Friend request sent to @ben' })).toBeVisible();
-    await expect(friendsList(ana)).toContainText('Ben Ito');
-    await expect(friendsList(ana)).toContainText('Asked');
+    await expect(friendsPage(ana)).toContainText('Ben Ito');
+    await expect(friendsPage(ana)).toContainText('Asked');
   });
 
   await test.step('Ben gets the request, live, and accepts', async () => {
     await expect(ben.locator('.toast', { hasText: 'Ana Lima wants to be friends' })).toBeVisible(LIVE);
-    await expect(ben.locator('.sidebar .section-title', { hasText: 'Friends' }).locator('.badge')).toHaveText('1');
+    await expect(ben.locator('.sidebar .nav-row', { hasText: 'Friends' }).locator('.count'), 'the sidebar counts what waits').toHaveText('1');
+    await openFriends(ben);
     await ben.getByRole('button', { name: 'Accept Ana Lima' }).click();
     await expect(ben.locator('.toast', { hasText: "You're now friends with Ana Lima" })).toBeVisible();
   });
@@ -61,19 +69,20 @@ test('adding a friend by username, and accepting', async ({ page: ana, browser }
       [ana, 'Ben Ito'],
       [ben, 'Ana Lima'],
     ] as const) {
-      await expect(friendsList(page)).toContainText(other, LIVE);
-      await expect(friendsList(page)).not.toContainText('Asked', LIVE);
-      await expect(friendsList(page).locator('.online')).toHaveCount(1, LIVE);
+      await expect(friendsPage(page)).toContainText(other, LIVE);
+      await expect(friendsPage(page)).not.toContainText('Asked', LIVE);
+      await expect(friendsPage(page).locator('.online')).toHaveCount(1, LIVE);
+      await expect(friendsPage(page)).toContainText('Here now');
     }
     expect(cloud.friendships).toEqual([expect.objectContaining({ status: 'accepted' })]);
   });
 
   await test.step('Ben removes Ana', async () => {
-    await friendsList(ben).getByRole('button', { name: 'Ana Lima' }).click();
+    await ben.getByRole('button', { name: 'More for Ana Lima' }).click();
     await ben.getByRole('menuitem', { name: 'Remove Friend' }).click();
     await ben.getByRole('button', { name: 'Remove', exact: true }).click();
-    await expect(friendsList(ben)).not.toContainText('Ana Lima');
-    await expect(friendsList(ana)).not.toContainText('Ben Ito', LIVE);
+    await expect(friendsPage(ben)).not.toContainText('Ana Lima');
+    await expect(friendsPage(ana)).not.toContainText('Ben Ito', LIVE);
     expect(cloud.friendships).toEqual([]);
   });
 
@@ -89,23 +98,26 @@ test('declining a request, and cancelling one', async ({ page: ana, browser }) =
   const cat = await person(browser, cloud, 'cat@example.com', 'Cat Ng', 'cat');
 
   await addFriend(cat, 'ana');
-  await expect(friendsList(ana)).toContainText('Cat Ng', LIVE);
+  await openFriends(ana);
+  await expect(friendsPage(ana)).toContainText('Cat Ng', LIVE);
   await ana.getByRole('button', { name: 'Decline Cat Ng' }).click();
-  await expect(friendsList(cat)).not.toContainText('Ana Lima', LIVE);
+  await expect(friendsPage(cat)).not.toContainText('Ana Lima', LIVE);
   expect(cloud.friendships).toEqual([]);
 
   await addFriend(ana, 'cat');
-  await expect(friendsList(cat)).toContainText('Ana Lima', LIVE);
+  await expect(friendsPage(cat)).toContainText('Ana Lima', LIVE);
   await ana.getByRole('button', { name: 'Cancel request to Cat Ng' }).click();
-  await expect(friendsList(cat)).not.toContainText('Ana Lima', LIVE);
+  await expect(friendsPage(cat)).not.toContainText('Ana Lima', LIVE);
 
   await cat.context().close();
 });
 
-test('signed out, the section offers to sign in', async ({ page }) => {
+test('signed out, the Friends page offers to sign in', async ({ page }) => {
   const cloud = new FakeCloud();
   await cloud.attach(page.context());
   await open(page);
-  await friendsList(page).getByRole('button', { name: 'Sign in to add friends' }).click();
+  await openFriends(page);
+  await expect(page.locator('.titlebar')).toContainText('Friends');
+  await friendsPage(page).getByRole('button', { name: 'Sign In…' }).click();
   await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
 });

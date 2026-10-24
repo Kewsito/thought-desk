@@ -123,6 +123,7 @@
     { title: 'Study Flashcards', icon: 'cards', keywords: 'review due cards learn', run: () => void cards.study(null, 'All Decks') },
     { title: 'Import Calendar', icon: 'download', keywords: 'ics canvas google outlook schedule timetable', run: () => void importCalendar() },
     { title: 'Files', icon: 'files', keywords: 'library attachments documents', run: () => store.go('files') },
+    { title: 'Friends', icon: 'users', keywords: 'people account requests invites write together live', run: () => store.go('friends') },
     { title: 'Account', icon: 'user', keywords: 'sign in log in profile username google github email', run: () => (ui.accountSheet = true) },
     { title: 'New Tab', icon: 'plus', keywords: 'tab open another window', run: () => void tabs.newTab() },
     { title: 'Export All Notes as Markdown', icon: 'download', keywords: 'export backup markdown md obsidian folder save all notes csv', run: () => void exportWorkspace() },

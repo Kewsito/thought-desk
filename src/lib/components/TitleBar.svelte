@@ -41,6 +41,7 @@
     calendar: { label: 'Calendar', icon: 'calendar' },
     files: { label: 'Files', icon: 'files' },
     cards: { label: 'Flashcards', icon: 'cards' },
+    friends: { label: 'Friends', icon: 'users' },
   };
   const viewCrumb = $derived(
     store.view === 'tag'
