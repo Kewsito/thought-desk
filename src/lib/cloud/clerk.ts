@@ -19,9 +19,12 @@ import { api } from '../api';
 import { isDesktop } from '../platform';
 import type { CloudUser, Provider } from './types';
 
-/** Which Clerk instance: the development one until thoughtdesk.org's is set
- *  up (supabase/SETUP.md). Publishable keys are public by design. */
-const CLERK_KEY = (import.meta.env.VITE_CLERK_KEY as string | undefined) ?? 'pk_test_c21pbGluZy1zdW5iaXJkLTM1NzEuY2xlcmsuYWNjb3VudHMuZGV2JA';
+/** Which Clerk instance: thoughtdesk.org's in releases, the development one
+ *  while developing (supabase/SETUP.md), or VITE_CLERK_KEY's. Publishable
+ *  keys are public by design. */
+const CLERK_KEY =
+  (import.meta.env.VITE_CLERK_KEY as string | undefined) ??
+  (import.meta.env.DEV ? 'pk_test_c21pbGluZy1zdW5iaXJkLTM1NzEuY2xlcmsuYWNjb3VudHMuZGV2JA' : 'pk_live_Y2xlcmsudGhvdWdodGRlc2sub3JnJA');
 
 /** Where the client token is kept (see secrets.rs). */
 const KEY = 'thoughtdesk.clerk';
