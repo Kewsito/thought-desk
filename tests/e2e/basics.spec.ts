@@ -113,6 +113,33 @@ test('Home, capture, tags and backlinks', async ({ page }) => {
   });
 });
 
+test('keys typed straight after Enter land in order', async ({ page }) => {
+  await open(page, '?fresh');
+  await page.keyboard.press('Control+n');
+  await expect(page.locator('h1.title')).toBeFocused();
+  await page.keyboard.type('Quick typing');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.ProseMirror')).toBeFocused();
+  // Enter and the keys after it in one go, before the new line is drawn
+  // (a busy machine): each key still goes after the one before.
+  const enterThenType = () =>
+    page.evaluate(() => {
+      const ed = (window as any).__editor;
+      ed.commands.enter();
+      for (const ch of 'abc') document.execCommand('insertText', false, ch);
+    });
+  const last = () => page.evaluate(() => (window as any).__editor.state.doc.lastChild.textContent);
+
+  await page.keyboard.type('First line');
+  await enterThenType();
+  await expect.poll(last).toBe('abc');
+
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('- one');
+  await enterThenType();
+  await expect(page.locator('.prose ul > li').nth(1)).toHaveText('abc');
+});
+
 test('new page, slash menu, events and history', async ({ page }) => {
   const wait = (ms = 300) => page.waitForTimeout(ms);
   await open(page);
