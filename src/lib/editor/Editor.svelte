@@ -9,6 +9,7 @@
   import type { Page, PagePatch } from '../types';
   import { blockMenuItems } from './blocks';
   import { buildExtensions } from './extensions';
+  import { cowork, type Session } from '../cowork.svelte';
   import BubbleMenu from './BubbleMenu.svelte';
   import TableMenu from './TableMenu.svelte';
 
@@ -108,42 +109,66 @@
   }
 
   onMount(() => {
-    const { content, legacy } = parseContent(page.content);
-    const ed = new Editor({
-      element: host,
-      content,
-      extensions: buildExtensions({
-        onMenu: (target, anchor) => {
+    let ed: Editor | null = null;
+    let session: Session | null = null;
+    let unwatch: (() => void) | null = null;
+    let gone = false;
+
+    /** Builds the editor: on the shared document for a shared page, else on the stored body. */
+    function mount() {
+      const { content, legacy } = session ? { content: undefined, legacy: false } : parseContent(page.content);
+      const handle = {
+        onMenu: (target: Parameters<typeof blockMenuItems>[1], anchor: HTMLElement) => {
           const rect = anchor.getBoundingClientRect();
-          ui.openMenu({ x: rect.left, y: rect.bottom + 4, items: blockMenuItems(ed, target) });
+          if (ed) ui.openMenu({ x: rect.left, y: rect.bottom + 4, items: blockMenuItems(ed, target) });
         },
-      }),
-      editorProps: {
-        attributes: {
-          class: 'prose',
-          spellcheck: String(prefs.spellcheck),
-          'aria-label': 'Page content',
+      };
+      const made = new Editor({
+        element: host,
+        content,
+        extensions: buildExtensions(handle, session ? { doc: session.doc, provider: { awareness: session.awareness }, user: session.user } : undefined),
+        editorProps: {
+          attributes: {
+            class: 'prose',
+            spellcheck: String(prefs.spellcheck),
+            'aria-label': 'Page content',
+          },
         },
-      },
-      onUpdate: () => {
-        onempty?.(ed.isEmpty);
+        // A shared page renders its document while the editor is still being made.
+        onUpdate: ({ editor: e }) => {
+          onempty?.(e.isEmpty);
+          dirty = true;
+          clearTimeout(timer);
+          timer = setTimeout(() => {
+            save();
+            stats();
+          }, SAVE_DELAY);
+        },
+      });
+      ed = made;
+      editor = made;
+      if (import.meta.env.DEV) (window as any).__editor = made;
+      onempty?.(made.isEmpty);
+      stats();
+      if (legacy) {
+        // Convert seeded HTML into stored JSON right away.
         dirty = true;
-        clearTimeout(timer);
-        timer = setTimeout(() => {
-          save();
-          stats();
-        }, SAVE_DELAY);
-      },
-    });
-    editor = ed;
-    if (import.meta.env.DEV) (window as any).__editor = ed;
-    onempty?.(ed.isEmpty);
-    stats();
-    if (legacy) {
-      // Convert seeded HTML into stored JSON right away.
-      dirty = true;
-      save();
+        save();
+      }
     }
+
+    if (page.sharedRoom && cowork.isLive(page.id)) {
+      void cowork.open(page.id, page.sharedRoom).then(
+        (s) => {
+          if (gone) return cowork.release(page.id);
+          session = s;
+          mount();
+          // Being at the page keeps the session connected (or reconnects it).
+          unwatch = s.watch(host);
+        },
+        (e) => ui.error(e),
+      );
+    } else mount();
 
     const flushOnHide = () => document.visibilityState === 'hidden' && save();
     document.addEventListener('visibilitychange', flushOnHide);
@@ -151,17 +176,20 @@
     // Quick Capture adding a to-do to this page while it's open.
     const appendTodo = (e: Event) => {
       const { pageId, text } = (e as CustomEvent<{ pageId: string; text: string }>).detail;
-      if (pageId !== page.id || ed.isDestroyed) return;
+      if (pageId !== page.id || !ed || ed.isDestroyed) return;
       const item = { type: 'taskItem', attrs: { checked: false }, content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] };
       ed.chain().insertContentAt(ed.state.doc.content.size, { type: 'taskList', content: [item] }).run();
     };
     window.addEventListener('td:append-todo', appendTodo);
     return () => {
+      gone = true;
       document.removeEventListener('visibilitychange', flushOnHide);
       window.removeEventListener('td:flush', save);
       window.removeEventListener('td:append-todo', appendTodo);
       save();
-      ed.destroy();
+      ed?.destroy();
+      unwatch?.();
+      if (session) cowork.release(page.id);
     };
   });
 

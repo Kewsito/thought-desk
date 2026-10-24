@@ -23,6 +23,10 @@ export type ShortcutId =
   | 'split'
   | 'back'
   | 'forward'
+  | 'newTab'
+  | 'closeTab'
+  | 'nextTab'
+  | 'prevTab'
   | 'calendarPrev'
   | 'calendarNext'
   | 'calendarToday'
@@ -33,7 +37,7 @@ export type ShortcutId =
 export interface ShortcutDef {
   id: ShortcutId;
   label: string;
-  group: 'General' | 'Go To' | 'Calendar';
+  group: 'General' | 'Tabs' | 'Go To' | 'Calendar';
   defaults: string[];
   /** May be a single key with no modifier (only where typing can't happen). */
   bare?: boolean;
@@ -55,6 +59,10 @@ export const SHORTCUTS: ShortcutDef[] = [
   { id: 'zoomIn', label: 'Zoom in', group: 'General', defaults: ['Mod+Equal', 'Mod+Shift+Equal', 'Mod+NumpadAdd'] },
   { id: 'zoomOut', label: 'Zoom out', group: 'General', defaults: ['Mod+Minus', 'Mod+NumpadSubtract'] },
   { id: 'zoomReset', label: 'Actual size', group: 'General', defaults: ['Mod+Digit0', 'Mod+Numpad0'] },
+  { id: 'newTab', label: 'New tab', group: 'Tabs', defaults: ['Mod+KeyT'] },
+  { id: 'closeTab', label: 'Close tab', group: 'Tabs', defaults: ['Mod+KeyW'] },
+  { id: 'nextTab', label: 'Next tab', group: 'Tabs', defaults: ['Mod+Tab', 'Mod+PageDown'] },
+  { id: 'prevTab', label: 'Previous tab', group: 'Tabs', defaults: ['Mod+Shift+Tab', 'Mod+PageUp'] },
   { id: 'goHome', label: 'Home', group: 'Go To', defaults: ['Mod+Digit1'] },
   { id: 'goAssignments', label: 'Assignments', group: 'Go To', defaults: ['Mod+Digit2'] },
   { id: 'goCalendar', label: 'Calendar', group: 'Go To', defaults: ['Mod+Digit3'] },

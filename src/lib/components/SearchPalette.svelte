@@ -4,6 +4,7 @@
   import { colorVar } from '../colors';
   import { importCalendar } from '../ics-import.svelte';
   import { exportWorkspace } from '../export-workspace';
+  import { tabs } from '../tabs.svelte';
   import { cards } from '../cards.svelte';
   import { databases } from '../databases.svelte';
   import { onMount } from 'svelte';
@@ -122,6 +123,8 @@
     { title: 'Study Flashcards', icon: 'cards', keywords: 'review due cards learn', run: () => void cards.study(null, 'All Decks') },
     { title: 'Import Calendar', icon: 'download', keywords: 'ics canvas google outlook schedule timetable', run: () => void importCalendar() },
     { title: 'Files', icon: 'files', keywords: 'library attachments documents', run: () => store.go('files') },
+    { title: 'Account', icon: 'user', keywords: 'sign in log in profile username google github email', run: () => (ui.accountSheet = true) },
+    { title: 'New Tab', icon: 'plus', keywords: 'tab open another window', run: () => void tabs.newTab() },
     { title: 'Export All Notes as Markdown', icon: 'download', keywords: 'export backup markdown md obsidian folder save all notes csv', run: () => void exportWorkspace() },
     { title: 'New Database', icon: 'database', keywords: 'table board tracker spreadsheet template kanban list', run: () => (ui.newDatabase = { parentId: null }) },
     { title: 'Import a Spreadsheet', icon: 'upload', keywords: 'csv excel sheets database table import', run: () => (ui.newDatabase = { parentId: null }) },

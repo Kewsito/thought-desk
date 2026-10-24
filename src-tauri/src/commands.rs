@@ -14,6 +14,7 @@ use crate::location::{FolderState, Location};
 use crate::organize::{Tag, Todo};
 use crate::planner::{Assignment, AssignmentPatch, Course, CoursePatch, Event, EventPatch, OccurrencePage};
 use crate::reminders::{Reminder, Reminders};
+use crate::secrets::Secrets;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use tauri::{ipc::InvokeBody, AppHandle, Manager, State};
@@ -417,6 +418,63 @@ pub fn export_write(db: State<Db>, export: State<Export>, entries: Vec<ExportEnt
 #[tauri::command(async)]
 pub fn export_reveal(app: AppHandle, export: State<Export>) -> Result<()> {
     app.opener().reveal_item_in_dir(export.dir()?).map_err(|e| Error(e.to_string()))
+}
+
+// ---------------------------------------------------------------- account
+
+/// Starts the one-time listener the browser comes back to after signing in
+/// with Google or GitHub (see auth.rs); returns its port.
+#[tauri::command(async)]
+pub fn auth_listen(app: AppHandle) -> Result<u16> {
+    Ok(crate::auth::listen(app)?)
+}
+
+/// The sign-in, kept encrypted on this computer (see secrets.rs).
+#[tauri::command(async)]
+pub fn secret_get(secrets: State<Secrets>, name: String) -> Result<Option<String>> {
+    secrets.get(&name)
+}
+
+#[tauri::command(async)]
+pub fn secret_set(secrets: State<Secrets>, name: String, value: String) -> Result<()> {
+    secrets.set(&name, &value)
+}
+
+#[tauri::command(async)]
+pub fn secret_remove(secrets: State<Secrets>, name: String) -> Result<()> {
+    secrets.remove(&name)
+}
+
+/// A system notification (a friend request or invite while the window is in the background).
+#[tauri::command(async)]
+pub fn notify(app: AppHandle, title: String, body: String) -> Result<()> {
+    use tauri_plugin_notification::NotificationExt;
+    app.notification().builder().title(title).body(body).show().map_err(|e| Error(e.to_string()))
+}
+
+// ---------------------------------------------------------------- cowork
+
+/// Shares a page live in `room` (its invite code), or stops sharing it here.
+#[tauri::command(async)]
+pub fn set_page_shared(db: State<Db>, id: String, room: Option<String>) -> Result<()> {
+    db.set_shared_room(&id, room.as_deref())
+}
+
+/// A shared page's Yjs state, as raw bytes (empty when none is kept yet).
+#[tauri::command(async)]
+pub fn get_page_yjs(db: State<Db>, id: String) -> Result<tauri::ipc::Response> {
+    Ok(tauri::ipc::Response::new(db.page_yjs(&id)?))
+}
+
+/// Keeps a shared page's Yjs state (raw request body; the page id comes in
+/// the `x-id` header).
+#[tauri::command(async)]
+pub fn save_page_yjs(db: State<Db>, request: tauri::ipc::Request<'_>) -> Result<()> {
+    let InvokeBody::Raw(bytes) = request.body() else {
+        return Err(Error("Expected raw bytes".into()));
+    };
+    let id = request.headers().get("x-id").and_then(|v| v.to_str().ok()).unwrap_or_default();
+    db.save_page_yjs(id, bytes)
 }
 
 // ---------------------------------------------------------------- flashcards

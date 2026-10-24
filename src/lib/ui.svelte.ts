@@ -108,6 +108,12 @@ class UI {
   /** A database formula being written. */
   formula = $state<{ dbId: string; propId: string } | null>(null);
   /** Choosing how to start a new database (inside `parentId`, or on its own). */
+  /** The sign-in and profile sheet. */
+  accountSheet = $state(false);
+  /** The page whose live session panel is open. */
+  liveSheet = $state<string | null>(null);
+  /** The page a friend is being invited to. */
+  inviteSheet = $state<string | null>(null);
   newDatabase = $state<{ parentId: string | null; onCreated?: (id: string) => void } | null>(null);
   toasts = $state<Toast[]>([]);
   /** Page whose title should take focus once shown (new page, "Rename"). */
@@ -128,6 +134,9 @@ class UI {
       this.study !== null ||
       this.formula !== null ||
       this.newDatabase !== null ||
+      this.liveSheet !== null ||
+      this.inviteSheet !== null ||
+      this.accountSheet ||
       this.capture !== null
     );
   }

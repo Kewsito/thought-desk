@@ -27,7 +27,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: http://tdfile.localhost tdfile:; media-src 'self' blob: http://tdfile.localhost tdfile:; frame-src http://tdfile.localhost tdfile:; object-src 'none'; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost http://tdfile.localhost tdfile:",
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: http://tdfile.localhost tdfile:; media-src 'self' blob: http://tdfile.localhost tdfile:; frame-src http://tdfile.localhost tdfile:; object-src 'none'; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost http://tdfile.localhost tdfile: wss://relay.thoughtdesk.org https://nbzojbfkkpeisitbkwpg.supabase.co wss://nbzojbfkkpeisitbkwpg.supabase.co",
       "devCsp": null
     }
   },

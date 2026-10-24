@@ -15,6 +15,8 @@
   import { prefs, type Font, type TextSize, type RemindAssignments, type RemindEvents, type Theme, type WeekStart } from '../prefs.svelte';
   import { importCalendar } from '../ics-import.svelte';
   import { exportWorkspace } from '../export-workspace';
+  import { account } from '../account.svelte';
+  import Avatar from './Avatar.svelte';
   import { chooseDataFolder, useDefaultDataFolder } from '../data-folder';
   import { SIDEBAR_ITEMS, setShownInSidebar, shownInSidebar } from '../sidebar-items';
   import { changeLook } from '../look-transition';
@@ -109,6 +111,12 @@
     { label: 'Mint', hue: 175, tint: 0.5 },
   ];
 
+  /** The account sheet replaces Settings (Escape then closes just that). */
+  function openAccount() {
+    ui.settingsOpen = false;
+    ui.accountSheet = true;
+  }
+
   async function copyPath() {
     if (!info) return;
     try {
@@ -175,6 +183,30 @@
           onkeydown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
         />
       </div>
+    </div>
+
+    <h3 class="group-title">Account</h3>
+    <div class="group">
+      {#if account.user}
+        <div class="group-row">
+          <div class="account-row">
+            <Avatar name={account.name} url={account.profile?.avatarUrl} seed={account.user.id} size={32} />
+            <div class="row-label">
+              {account.name}
+              <small>{account.profile?.username ? `@${account.profile.username}` : 'No username yet'}{account.user.email ? ` · ${account.user.email}` : ''}</small>
+            </div>
+          </div>
+          <button class="btn small raised" onclick={openAccount}>Edit Profile…</button>
+        </div>
+      {:else}
+        <div class="group-row">
+          <div class="row-label">
+            Not signed in
+            <small>Sign in to add friends and write together. Your notes stay on this computer.</small>
+          </div>
+          <button class="btn small raised" disabled={!account.ready} onclick={openAccount}>Sign In…</button>
+        </div>
+      {/if}
     </div>
 
     <h3 class="group-title">Appearance</h3>
@@ -821,6 +853,13 @@
   }
   .course + :global(.course)::before {
     left: 52px;
+  }
+
+  .account-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
   }
 
   /* Storage */

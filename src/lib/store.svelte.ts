@@ -13,10 +13,17 @@ export type View = 'page' | 'tag' | 'course' | 'home' | 'assignments' | 'calenda
 export type AppView = Exclude<View, 'page' | 'tag' | 'course'>;
 export const VIEWS: AppView[] = ['home', 'assignments', 'calendar', 'files', 'cards'];
 
-interface Entry {
+/** A place in the app (one step of back/forward history). */
+export interface Entry {
   view: View;
   /** The page id, tag name or course id. */
   id: string | null;
+}
+
+/** A tab's place and history (see tabs.svelte.ts). */
+export interface Nav {
+  history: Entry[];
+  index: number;
 }
 
 /** The page fields a patch changes (null when it only touches the body). */
@@ -71,7 +78,7 @@ class Store {
   #history = $state<Entry[]>([]);
   #historyIndex = $state(-1);
   /** How the current view was reached, so it can animate in from that side. */
-  navDirection = $state<'push' | 'back' | 'forward'>('push');
+  navDirection = $state<'push' | 'back' | 'forward' | 'tab'>('push');
 
   /** Pages by id. Reading it follows every change. */
   get byId(): Map<string, PageMeta> {
@@ -400,32 +407,56 @@ class Store {
 
   #step(dir: 1 | -1) {
     this.navDirection = dir < 0 ? 'back' : 'forward';
-    let i = this.#historyIndex + dir;
-    while (i >= 0 && i < this.#history.length) {
-      const entry = this.#history[i];
-      if (entry.view === 'tag') {
+    for (let i = this.#historyIndex + dir; i >= 0 && i < this.#history.length; i += dir) {
+      if (this.#usable(this.#history[i])) {
         this.#historyIndex = i;
-        this.openTag(entry.id ?? '', { push: false });
+        this.#show(this.#history[i]);
         return;
       }
-      if (entry.view === 'course') {
-        this.#historyIndex = i;
-        this.openCourse(entry.id ?? '', { push: false });
-        return;
-      }
-      if (entry.view !== 'page') {
-        this.#historyIndex = i;
-        this.go(entry.view, { push: false });
-        return;
-      }
-      const p = entry.id ? this.byId.get(entry.id) : undefined;
-      if (p && !p.deletedAt) {
-        this.#historyIndex = i;
-        this.open(p.id, { push: false });
-        return;
-      }
-      i += dir;
     }
+  }
+
+  /** Whether a history entry can still be shown (its page wasn't deleted). */
+  #usable(entry: Entry | undefined): entry is Entry {
+    if (!entry) return false;
+    if (entry.view !== 'page') return true;
+    const p = entry.id ? this.byId.get(entry.id) : undefined;
+    return !!p && !p.deletedAt;
+  }
+
+  /** Shows a history entry without adding to history. */
+  #show(entry: Entry) {
+    if (entry.view === 'tag') this.openTag(entry.id ?? '', { push: false });
+    else if (entry.view === 'course') this.openCourse(entry.id ?? '', { push: false });
+    else if (entry.view === 'page') this.open(entry.id ?? '', { push: false });
+    else this.go(entry.view, { push: false });
+  }
+
+  /** The place showing now. */
+  get place(): Entry {
+    return { view: this.view, id: this.view === 'page' ? this.currentId : this.view === 'tag' ? this.tag : this.view === 'course' ? this.courseId : null };
+  }
+
+  /** The active tab's history, to keep while another tab is showing. */
+  saveNav(): Nav {
+    return { history: this.#history.slice(), index: this.#historyIndex };
+  }
+
+  /** Shows another tab: its history, at its place (or the nearest earlier
+   *  one that still exists, or Home). */
+  loadNav(nav: Nav) {
+    this.navDirection = 'tab';
+    this.#history = nav.history.slice();
+    let i = Math.min(nav.index, this.#history.length - 1);
+    while (i >= 0 && !this.#usable(this.#history[i])) i--;
+    if (i < 0) {
+      this.#history = [{ view: 'home', id: null }];
+      this.#historyIndex = 0;
+      this.go('home', { push: false });
+      return;
+    }
+    this.#historyIndex = i;
+    this.#show(this.#history[i]);
   }
 
   /** After the current page disappears, land somewhere sensible. */

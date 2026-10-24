@@ -1170,6 +1170,35 @@ html.printing .prose > :is(ul, ol) > li {
   box-decoration-break: clone;
 }
 
+/* Other people's cursors on a shared page (Cowork): a thin line in their
+   colour, with their name above it. */
+.collaboration-carets__caret {
+  position: relative;
+  margin: 0 -1px;
+  border-left: 1px solid;
+  border-right: 1px solid;
+  word-break: normal;
+  pointer-events: none;
+}
+.collaboration-carets__label {
+  position: absolute;
+  top: -1.35em;
+  left: -1px;
+  padding: 0.1em 0.4em;
+  border-radius: 4px 4px 4px 0;
+  font-family: var(--font-ui, inherit);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 600;
+  line-height: normal;
+  color: white;
+  white-space: nowrap;
+  user-select: none;
+}
+.collaboration-carets__selection {
+  opacity: 0.25;
+}
+
 /* Coloured text and highlights (editor/text-color.ts): a palette colour,
    darkened for text on light pages, lightened on dark ones, and a tint of it
    behind highlighted text. */
@@ -1659,6 +1688,26 @@ html.printing .prose > :is(ul, ol) > li {
 .prose [data-resize-container]:hover [data-resize-handle],
 .prose [data-resize-state='true'] [data-resize-handle] {
   opacity: 1;
+}
+/* A picture from the web in a page written together, until it's shown. */
+.prose .remote-image {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 10px 0;
+  padding: 10px 12px 10px 16px;
+  border-radius: var(--r-md);
+  corner-shape: var(--corner);
+  background: var(--fill);
+  color: var(--text-2);
+  font-family: var(--font-ui);
+  font-size: var(--fs-body-ui);
+}
+.prose .remote-image.shown {
+  display: block;
+  padding: 0;
+  background: none;
 }
 .prose .ProseMirror-selectednode img,
 .prose img.ProseMirror-selectednode {

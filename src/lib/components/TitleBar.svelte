@@ -16,6 +16,9 @@
   import { library } from '../library.svelte';
   import { shortcuts } from '../shortcuts.svelte';
   import { databases } from '../databases.svelte';
+  import { cowork } from '../cowork.svelte';
+  import { tabs } from '../tabs.svelte';
+  import TabStrip from './TabStrip.svelte';
 
   let { words = 0, scrolled = false }: { words?: number; scrolled?: boolean } = $props();
 
@@ -26,6 +29,11 @@
   });
 
   const page = $derived(store.view === 'page' ? store.current : null);
+  /** The open page's live session, while it's on. */
+  const live = $derived(page && cowork.isLive(page.id) ? cowork.sessions[page.id] : undefined);
+  const liveRow = $derived(page && live ? cowork.liveFor(page.id) : undefined);
+  /** Whether the other person is here now. */
+  const together = $derived(!!live && live.people.some((p) => !p.me));
   const deck = $derived(page ? cards.deck(page.id) : undefined);
   const VIEW_CRUMBS: Record<string, { label: string; icon: string }> = {
     home: { label: 'Home', icon: 'home' },
@@ -102,7 +110,7 @@
   }
 </script>
 
-<header class="titlebar" class:scrolled data-tauri-drag-region>
+<header class="titlebar" class:scrolled class:tabbed={tabs.list.length > 1} data-tauri-drag-region>
   <div class="nav">
     {#if !prefs.sidebarOpen}
       <button class="icon-btn" onclick={() => (prefs.sidebarOpen = true)} data-tip="Show sidebar" data-tip-key={shortcuts.label('sidebar')}>
@@ -117,6 +125,9 @@
     </button>
   </div>
 
+  {#if tabs.list.length > 1}
+    <TabStrip />
+  {:else}
   <nav class="crumbs" data-tauri-drag-region aria-label="Breadcrumb">
     {#if viewCrumb}
       <span class="crumb current view-crumb" data-tauri-drag-region>
@@ -148,11 +159,20 @@
       {/if}
     {/each}
   </nav>
-
-  <div class="spacer" data-tauri-drag-region></div>
+    <button class="icon-btn new-tab" onclick={() => tabs.newTab()} aria-label="New tab" data-tip="New tab" data-tip-key={shortcuts.label('newTab')}>
+      <Icon name="plus" size={15} />
+    </button>
+    <div class="spacer" data-tauri-drag-region></div>
+  {/if}
 
   {#if page}
     <div class="actions">
+      {#if live}
+        <button class="live-chip" class:offline={live.status === 'offline'} class:alone={(live.status === 'live' && !together) || live.status === 'paused'} onclick={() => (ui.liveSheet = page.id)} data-tip="Writing together: who's here, and End Session">
+          <span class="live-dot"></span>
+          {live.status === 'offline' ? 'Offline' : live.status === 'connecting' ? 'Connecting…' : `Live with ${liveRow ? cowork.otherName(liveRow) : 'a friend'}${live.status === 'paused' ? ' · paused' : together ? '' : ' · away'}`}
+        </button>
+      {/if}
       <span class="status" data-tauri-drag-region>
         {store.saving ? 'Saving…' : status}
       </span>
@@ -312,6 +332,41 @@
     color: var(--text-3);
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
+  }
+  /* With tabs, their names matter more than "Edited just now". */
+  @media (max-width: 1200px) {
+    .tabbed .status {
+      display: none;
+    }
+  }
+  .live-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 24px;
+    margin-right: 8px;
+    padding: 0 9px;
+    border-radius: 12px;
+    background: var(--fill);
+    font-size: var(--fs-footnote);
+    color: var(--text-2);
+    white-space: nowrap;
+  }
+  .live-chip:hover {
+    background: var(--fill-2);
+    color: var(--text);
+  }
+  .live-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--c-green);
+  }
+  .live-chip.alone .live-dot {
+    background: var(--text-3);
+  }
+  .live-chip.offline .live-dot {
+    background: var(--c-orange);
   }
   .study {
     gap: 6px;

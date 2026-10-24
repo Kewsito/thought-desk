@@ -29,10 +29,14 @@
   const file = $derived(kind === 'file' ? library.byId.get(id) : undefined);
   const item = $derived(page ?? assignment ?? event ?? file);
   const missing = $derived(!item || !!item.deletedAt);
+  // In the trash, it's deleted. Not here at all: someone else's (a page
+  // written together links to the other person's pages) or gone for good.
   const title = $derived(
-    missing
-      ? `Deleted ${kind}`
-      : (page?.title ?? assignment?.title ?? event?.title ?? file?.name) || 'Untitled',
+    !item
+      ? `${kind[0].toUpperCase()}${kind.slice(1)} not here`
+      : item.deletedAt
+        ? `Deleted ${kind}`
+        : (page?.title ?? assignment?.title ?? event?.title ?? file?.name) || 'Untitled',
   );
   const urgency = $derived(assignment ? dueState(assignment, clock.today, clock.time) : 'none');
 

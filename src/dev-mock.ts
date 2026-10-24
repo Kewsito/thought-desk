@@ -13,6 +13,8 @@ type Row = PageMeta & { content: string; text: string };
 const KEY = 'thoughtdesk.devmock.v2';
 // `?fresh` in the address: start like a new install (just the welcome page,
 // no sample courses, assignments or databases) to see the first run.
+// Marks the browser stand-in (see platform.ts).
+(window as any).__TD_MOCK__ = true;
 const FRESH = new URLSearchParams(location.search).has('fresh');
 if (FRESH) for (const k of Object.keys(localStorage)) if (k.startsWith('thoughtdesk.')) localStorage.removeItem(k);
 // The welcome screen only shows in the preview with `?welcome` (so test runs,
@@ -28,6 +30,8 @@ const load = (): Row[] => {
 // Data saved by older previews has no tags yet.
 let rows: Row[] = load().map((r) => ({ ...r, tags: r.tags ?? [], kind: r.kind ?? '' }));
 const persist = () => localStorage.setItem(KEY, JSON.stringify(rows));
+/** Shared pages' Yjs state (kept in SQLite by the real backend). */
+const yjs = new Map<string, Uint8Array>();
 
 function make(parentId: string | null, title = '', icon = '', content = ''): Row {
   const ts = Date.now();
@@ -44,6 +48,7 @@ function make(parentId: string | null, title = '', icon = '', content = ''): Row
     deletedAt: null,
     tags: [],
     kind: '',
+    sharedRoom: null,
     content,
     text: '',
   };
@@ -849,6 +854,15 @@ mockIPC((cmd, payload) => {
       case 'data_folder_reset':
         (window as any).__folderMoves = [...((window as any).__folderMoves ?? []), { cmd, ...a }];
         return null;
+      case 'set_page_shared': {
+        const r = find(a.id);
+        if (a.room && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(a.room)) throw "That isn't a session";
+        r.sharedRoom = a.room ?? null;
+        if (!a.room) yjs.delete(a.id);
+        return null;
+      }
+      case 'get_page_yjs':
+        return (yjs.get(a.id) ?? new Uint8Array()).slice().buffer;
       case 'page_contents':
         return (a.ids ?? []).flatMap((id: string) => rows.filter((r) => r.id === id).map((r) => ({ id, content: r.content })));
       case 'export_begin':
@@ -857,6 +871,11 @@ mockIPC((cmd, payload) => {
         return `C:\\Downloads\\${a.name}`;
       case 'export_write':
         for (const e of a.entries ?? []) (window as any).__workspaceExport[e.path] = e.text ?? { copied: e.stored };
+        return null;
+      case 'auth_listen':
+        return 0;
+      case 'notify':
+        (window as any).__notifications = [...((window as any).__notifications ?? []), { title: a.title, body: a.body }];
         return null;
       case 'export_reveal':
         return null;
@@ -888,6 +907,12 @@ mockIPC((cmd, payload) => {
   const internals = (window as any).__TAURI_INTERNALS__;
   const invoke = internals.invoke;
   internals.invoke = async (cmd: string, args: unknown, options?: { headers?: Record<string, string> }) => {
+    if (cmd === 'save_page_yjs') {
+      const id = options?.headers?.['x-id'] ?? '';
+      if (!rows.find((r) => r.id === id)?.sharedRoom) throw "That page isn't shared";
+      yjs.set(id, new Uint8Array(args as Uint8Array));
+      return null;
+    }
     if (cmd === 'export_document') {
       const name = decodeURIComponent(options?.headers?.['x-name'] ?? 'Untitled');
       const ext = options?.headers?.['x-ext'] ?? 'bin';

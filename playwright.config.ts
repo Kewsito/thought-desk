@@ -25,10 +25,21 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 820 } } }],
-  webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:1420',
-    reuseExistingServer: !CI,
-    timeout: 60_000,
-  },
+  webServer: [
+    {
+      command: 'npm run dev',
+      url: 'http://localhost:1420',
+      reuseExistingServer: !CI,
+      timeout: 60_000,
+    },
+    {
+      // The live-session relay (server/) in test mode: it lets the fake cloud's
+      // sign-ins in, on localhost only. Port 8788, apart from one you run by hand.
+      command: 'npm --prefix server run test-relay',
+      url: 'http://localhost:8788',
+      reuseExistingServer: !CI,
+      timeout: 90_000,
+      env: { WRANGLER_SEND_METRICS: 'false' },
+    },
+  ],
 });

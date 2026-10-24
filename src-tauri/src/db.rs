@@ -92,6 +92,8 @@ pub struct PageMeta {
     pub tags: Vec<String>,
     /// "database" for a database page (its sub-pages are its rows), else "".
     pub kind: String,
+    /// The Cowork room (invite code) of a page shared live, else None.
+    pub shared_room: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -133,7 +135,7 @@ pub struct SearchHit {
 }
 
 const META_COLS: &str =
-    "id, parent_id, title, icon, position, favorite, full_width, created_at, updated_at, deleted_at, tags, kind";
+    "id, parent_id, title, icon, position, favorite, full_width, created_at, updated_at, deleted_at, tags, kind, shared_room";
 
 fn meta_from_row(r: &rusqlite::Row) -> rusqlite::Result<PageMeta> {
     Ok(PageMeta {
@@ -149,6 +151,7 @@ fn meta_from_row(r: &rusqlite::Row) -> rusqlite::Result<PageMeta> {
         deleted_at: r.get(9)?,
         tags: crate::organize::parse_tags(&r.get::<_, String>(10)?),
         kind: r.get(11)?,
+        shared_room: r.get(12)?,
     })
 }
 
@@ -602,6 +605,12 @@ impl Db {
             tx.execute_batch("PRAGMA user_version = 10;")?;
             tx.commit()?;
         }
+        if version < 11 {
+            let tx = conn.transaction()?;
+            tx.execute_batch(crate::cowork::SCHEMA_V11)?;
+            tx.execute_batch("PRAGMA user_version = 11;")?;
+            tx.commit()?;
+        }
         Ok(())
     }
 
@@ -623,7 +632,7 @@ impl Db {
                 |r| {
                     Ok(Page {
                         meta: meta_from_row(r)?,
-                        content: r.get(12)?,
+                        content: r.get(13)?,
                     })
                 },
             )

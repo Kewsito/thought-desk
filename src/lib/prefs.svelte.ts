@@ -33,6 +33,14 @@ export type RemindAssignments = 'off' | 'evening' | 'morning';
 /** Minutes before a timed event (0 = off). */
 export type RemindEvents = 0 | 5 | 10 | 15 | 30;
 
+/** A tab as remembered between runs: where it is, and the live session it's in. */
+export interface SavedTab {
+  id: string;
+  view: string;
+  target: string | null;
+  live: string | null;
+}
+
 interface Stored {
   theme: Theme;
   palette: Palette;
@@ -83,6 +91,11 @@ interface Stored {
   zoom: number;
   /** Databases opened lately, newest first: their rows are read soon after start-up. */
   recentDbs: string[];
+  /** Open tabs: each one's place (and live session), oldest first. */
+  tabs: SavedTab[];
+  activeTab: string | null;
+  /** Your page for each live-session invite (or accepted request) until it goes live. */
+  coworkPages: Record<string, string>;
 }
 
 /** Monday in most of the world, Sunday where the locale says so. */
@@ -135,6 +148,9 @@ const defaults: Stored = {
   customAccent: { hue: 265, chroma: 0.2, lightness: 0.58 },
   dbViews: {},
   recentDbs: [],
+  tabs: [],
+  activeTab: null,
+  coworkPages: {},
   zoom: 1,
 };
 
@@ -149,6 +165,8 @@ function read(): Stored {
       if (!ACCENTS.some((a) => a.key === stored.accent) && stored.accent !== 'custom') stored.accent = 'graphite';
       if (!PALETTES.some((p) => p.key === stored.palette) && stored.palette !== 'custom') stored.palette = 'default';
       if (!Array.isArray(stored.recentDbs)) stored.recentDbs = [];
+      if (!Array.isArray(stored.tabs)) stored.tabs = [];
+      if (!stored.coworkPages || typeof stored.coworkPages !== 'object') stored.coworkPages = {};
       if (!stored.sidebarHidden || typeof stored.sidebarHidden !== 'object') stored.sidebarHidden = {};
       // "Small text" was a switch before there were sizes.
       if (!('textSize' in parsed)) stored.textSize = parsed.smallText ? 'small' : 'default';
@@ -178,6 +196,9 @@ class Prefs {
   expanded = $state<Record<string, boolean>>(this.#initial.expanded);
   dbViews = $state<Record<string, string>>(this.#initial.dbViews);
   recentDbs = $state<string[]>(this.#initial.recentDbs);
+  tabs = $state.raw<SavedTab[]>(this.#initial.tabs);
+  activeTab = $state<string | null>(this.#initial.activeTab);
+  coworkPages = $state.raw<Record<string, string>>(this.#initial.coworkPages);
   zoom = $state(this.#initial.zoom);
   sections = $state<Record<string, boolean>>(this.#initial.sections);
   sidebarHidden = $state<Record<string, boolean>>(this.#initial.sidebarHidden);
@@ -248,6 +269,9 @@ class Prefs {
       customAccent: $state.snapshot(this.customAccent),
       dbViews: $state.snapshot(this.dbViews),
       recentDbs: $state.snapshot(this.recentDbs),
+      tabs: this.tabs,
+      activeTab: this.activeTab,
+      coworkPages: this.coworkPages,
       zoom: this.zoom,
     };
   }

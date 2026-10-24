@@ -94,6 +94,9 @@ test('someone who used the app before never sees it', async ({ page }) => {
   await open(page);
   const welcomedFrom = (saved: object | null) =>
     page.evaluate(async (saved) => {
+      // The copy loaded last saves itself a moment after loading: let it, so
+      // it can't overwrite what this check sets up.
+      await new Promise((r) => setTimeout(r, 400));
       if (saved) localStorage.setItem('thoughtdesk.prefs.v1', JSON.stringify(saved));
       else localStorage.removeItem('thoughtdesk.prefs.v1');
       // A timestamp query (the one Vite itself uses for reloads) gives a new copy.

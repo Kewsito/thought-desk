@@ -40,3 +40,6 @@ strip = true
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.39.1"
 windows-core = "0.62.2"
+# DPAPI, to keep the sign-in encrypted on disk (secrets.rs). Already in the
+# build through other crates; this only turns on its cryptography functions.
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography"] }

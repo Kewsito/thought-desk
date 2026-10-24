@@ -48,6 +48,14 @@
     titleEl.textContent = page.title;
   });
 
+  // A title changed elsewhere (someone on a shared page) shows here, unless
+  // it's being typed in this one.
+  $effect(() => {
+    const title = meta?.title;
+    if (title === undefined || !titleEl || document.activeElement === titleEl) return;
+    if ((titleEl.textContent ?? '') !== title) titleEl.textContent = title;
+  });
+
   // Focus the title when a page is created or "Rename" is chosen.
   $effect(() => {
     if (ui.focusTitle !== page.id) return;

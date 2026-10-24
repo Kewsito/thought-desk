@@ -1,0 +1,24 @@
+// The relay for live sessions (see README.md). `npm run dev` runs it on
+// localhost:8787; `npm run deploy` puts it on your Cloudflare account, at
+// relay.thoughtdesk.org (the only relay the app's content security policy
+// allows).
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "thought-desk-cowork",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "routes": [{ "pattern": "relay.thoughtdesk.org", "custom_domain": true }],
+  // Only the address above: no second one on workers.dev.
+  "workers_dev": false,
+  "durable_objects": {
+    "bindings": [{ "name": "Page", "class_name": "Page" }]
+  },
+  // SQLite-backed Durable Objects are on the free plan.
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Page"] }],
+  // The Supabase project people sign in to. Its publishable key is public by
+  // design: row-level security protects the data.
+  "vars": {
+    "SUPABASE_URL": "https://nbzojbfkkpeisitbkwpg.supabase.co",
+    "SUPABASE_KEY": "sb_publishable_6W6p3hj5pIszsSA36NWUbQ_TXB4YwLD"
+  }
+}

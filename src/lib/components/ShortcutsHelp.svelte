@@ -8,7 +8,7 @@
   import { EDITOR_KEYS, MARKDOWN_KEYS, SHORTCUTS, comboKeys, shortcuts } from '../shortcuts.svelte';
   import { ui } from '../ui.svelte';
 
-  const groups = (['General', 'Go To', 'Calendar'] as const).map((g) => ({ name: g, items: SHORTCUTS.filter((s) => s.group === g) }));
+  const groups = (['General', 'Tabs', 'Go To', 'Calendar'] as const).map((g) => ({ name: g, items: SHORTCUTS.filter((s) => s.group === g) }));
   const TABLE_KEYS: { label: string; keys: string[][] }[] = [
     { label: 'Save the cell', keys: [['Enter']] },
     { label: 'Next cell', keys: [['Tab']] },

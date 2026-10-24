@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { cowork } from '../cowork.svelte';
   /**
    * The side of split view: one page or database next to the main one,
    * with its own header (swap sides, open it full, close). Empty, it offers
@@ -30,10 +31,12 @@
   // Its id and kind, not the page object: that's new on every edit.
   const showingId = $derived(showing?.id);
   const showingKind = $derived(showing?.kind);
+  const showingRoom = $derived(showing?.sharedRoom ?? null);
 
   // Load the page (with its body) whenever what the pane shows changes.
   $effect(() => {
     const id = showingId;
+    void showingRoom;
     if (!id || showingKind === 'database') {
       page = null;
       return;
@@ -116,7 +119,7 @@
         {#key showing.id}<DatabaseView id={showing.id} />{/key}
       {/if}
     {:else if showing && page && page.id === showing.id}
-      {#key page.id}<PageView {page} />{/key}
+      {#key `${page.id}:${page.sharedRoom ?? ''}:${cowork.isLive(page.id)}`}<PageView {page} />{/key}
     {:else if split.duplicate}
       <div class="picker">
         <p class="hint">This page is open on the left.</p>

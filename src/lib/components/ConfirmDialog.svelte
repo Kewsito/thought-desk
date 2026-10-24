@@ -14,8 +14,13 @@
   let value = $state(dialog.input?.value ?? '');
   let color = $state(dialog.color ?? '');
 
+  let finished = false;
+
   function done(ok: boolean) {
-    ui.confirmState = null;
+    // While fading out it can still be clicked: that mustn't close the next dialog.
+    if (finished) return;
+    finished = true;
+    if (ui.confirmState === dialog) ui.confirmState = null;
     dialog.resolve(ok, value, color);
   }
 

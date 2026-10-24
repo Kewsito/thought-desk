@@ -47,6 +47,11 @@ export const api = {
   emptyTrash: () => invoke<void>('empty_trash'),
   search: (query: string, limit = 30) => invoke<SearchHit[]>('search', { query, limit }),
   /** Bodies of many pages at once (gone ones left out), for the workspace export. */
+  /** Shares a page live in `room` (its invite code), or (null) stops sharing it here. */
+  setPageShared: (id: string, room: string | null) => invoke<void>('set_page_shared', { id, room }),
+  /** A shared page's Yjs state (empty when none is kept yet). */
+  getPageYjs: (id: string) => invoke<ArrayBuffer>('get_page_yjs', { id }),
+  savePageYjs: (id: string, state: Uint8Array) => invoke<void>('save_page_yjs', state, { headers: { 'x-id': id } }),
   pageContents: (ids: string[]) => invoke<{ id: string; content: string }[]>('page_contents', { ids }),
   /** Makes a new folder in Downloads for the workspace export; returns its path. */
   exportBegin: (name: string) => invoke<string>('export_begin', { name }),
@@ -56,6 +61,14 @@ export const api = {
   exportMarkdown: (title: string, markdown: string) =>
     invoke<string>('export_markdown', { title, markdown }),
   dataInfo: () => invoke<DataInfo>('data_info'),
+  /** Starts the one-time listener a Google or GitHub sign-in comes back to; returns its port. */
+  authListen: () => invoke<number>('auth_listen'),
+  /** A system notification, for news while the window is in the background. */
+  notify: (title: string, body: string) => invoke<void>('notify', { title, body }),
+  /** The sign-in, kept encrypted by Windows in the app's own folder (secrets.rs). */
+  secretGet: (name: string) => invoke<string | null>('secret_get', { name }),
+  secretSet: (name: string, value: string) => invoke<void>('secret_set', { name, value }),
+  secretRemove: (name: string) => invoke<void>('secret_remove', { name }),
   /** What a folder holds before keeping notes there. */
   dataFolderCheck: (dir: string) => invoke<{ hasNotes: boolean; modified: number | null }>('data_folder_check', { dir }),
   /** Keeps notes in `dir` from the next start: a copy of these, or the notes it has. */

@@ -1,8 +1,10 @@
 // Hide the console window on Windows in release builds.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod auth;
 mod cards;
 mod commands;
+mod cowork;
 mod databases;
 mod db;
 mod export;
@@ -14,6 +16,7 @@ mod organize;
 mod pdf;
 mod planner;
 mod reminders;
+mod secrets;
 mod sync;
 #[cfg(test)]
 mod stress;
@@ -91,6 +94,8 @@ fn main() {
             let db = db::Db::open(&place.dir).map_err(|e| e.0)?;
             app.manage(db);
             app.manage(place);
+            // The sign-in: in the app's own folder, never the notes folder.
+            app.manage(secrets::Secrets::new(app.path().app_local_data_dir()?.join("secrets")));
 
             reminders::start(app.handle().clone());
 
@@ -172,10 +177,18 @@ fn main() {
             commands::delete_item,
             commands::export_markdown,
             commands::page_contents,
+            commands::set_page_shared,
+            commands::get_page_yjs,
+            commands::save_page_yjs,
             commands::export_begin,
             commands::export_write,
             commands::export_reveal,
             commands::data_info,
+            commands::auth_listen,
+            commands::secret_get,
+            commands::secret_set,
+            commands::secret_remove,
+            commands::notify,
             commands::data_folder_check,
             commands::data_folder_move,
             commands::data_folder_reset,

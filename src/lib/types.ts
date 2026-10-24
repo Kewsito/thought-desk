@@ -13,6 +13,8 @@ export interface PageMeta {
   tags: string[];
   /** "database" for a database (its sub-pages are its rows), else "". */
   kind: string;
+  /** The Cowork room (invite code) of a page shared live, else null. */
+  sharedRoom: string | null;
 }
 
 /** A file the workspace export writes: its text, or a library file to copy. */

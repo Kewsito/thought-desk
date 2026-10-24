@@ -10,6 +10,7 @@ export const SIDEBAR_ITEMS: { key: string; label: string }[] = [
   { key: 'files', label: 'Files' },
   { key: 'cards', label: 'Flashcards' },
   { key: 'favorites', label: 'Favorites' },
+  { key: 'friends', label: 'Friends' },
   { key: 'courses', label: 'Courses' },
   { key: 'databases', label: 'Databases' },
   { key: 'tags', label: 'Tags' },

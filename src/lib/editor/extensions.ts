@@ -22,6 +22,10 @@ import { Flashcard, FlashcardBack, FlashcardFront } from './flashcard';
 import { InlineMath, MathBlock } from './math';
 import { MathPaste } from './math-paste';
 import { ColorHighlight, TextColor } from './text-color';
+import Collaboration from '@tiptap/extension-collaboration';
+import CollaborationCaret from '@tiptap/extension-collaboration-caret';
+import type { Doc as YDoc } from 'yjs';
+import { storedName } from '../api';
 import { ui } from '../ui.svelte';
 
 /** Editor-wide shortcuts that don't belong to a single node type. */
@@ -106,9 +110,74 @@ const LinkOpener = Extension.create({
   },
 });
 
-export function buildExtensions(handle: BlockHandleOptions): AnyExtension[] {
+/** Pictures from the web shown here since the app started (see SharedImage). */
+const shownRemote = new Set<string>();
+
+/** In a page written together, a picture from a web address waits for a
+ *  click: the other person may have put it there, and loading it tells that
+ *  site your IP address. Pictures from the library load as usual. */
+const SharedImage = Image.extend({
+  addNodeView() {
+    const parent = this.parent?.();
+    return (props) => {
+      const src = String(props.node.attrs.src ?? '');
+      if (!/^https?:\/\//i.test(src) || storedName(src) || shownRemote.has(src)) {
+        if (parent) return parent(props);
+        const img = document.createElement('img');
+        img.src = src;
+        return { dom: img };
+      }
+      let host = src;
+      try {
+        host = new URL(src).host;
+      } catch {
+        /* shown as written */
+      }
+      const dom = document.createElement('div');
+      dom.className = 'remote-image';
+      dom.contentEditable = 'false';
+      const label = document.createElement('span');
+      label.textContent = `Picture from ${host}`;
+      const show = document.createElement('button');
+      show.type = 'button';
+      show.className = 'btn small';
+      show.textContent = 'Show';
+      show.addEventListener('click', () => {
+        shownRemote.add(src);
+        const img = document.createElement('img');
+        img.src = src;
+        img.alt = String(props.node.attrs.alt ?? '');
+        img.decoding = 'async';
+        dom.replaceChildren(img);
+        dom.classList.add('shown');
+      });
+      dom.append(label, show);
+      return {
+        dom,
+        // The same picture keeps what's showing; another one is drawn afresh.
+        update: (node) => node.type === props.node.type && node.attrs.src === src,
+        ignoreMutation: () => true,
+        stopEvent: (e) => e.target === show,
+      };
+    };
+  },
+});
+
+/** A shared page's editor (see cowork.svelte.ts): its document, connection and who's typing. */
+export interface CollabSetup {
+  doc: YDoc;
+  provider: unknown;
+  user: { name: string; color: string };
+}
+
+export function buildExtensions(handle: BlockHandleOptions, collab?: CollabSetup): AnyExtension[] {
   return [
+    ...(collab
+      ? [Collaboration.configure({ document: collab.doc }), CollaborationCaret.configure({ provider: collab.provider, user: collab.user })]
+      : []),
     StarterKit.configure({
+      // A shared page's undo comes with Collaboration (and undoes only your own edits).
+      ...(collab ? { undoRedo: false as const } : {}),
       heading: { levels: [1, 2, 3] },
       dropcursor: { color: 'var(--text)', width: 2 },
       codeBlock: { enableTabIndentation: true, tabSize: 2, HTMLAttributes: { spellcheck: 'false' } },
@@ -127,7 +196,7 @@ export function buildExtensions(handle: BlockHandleOptions): AnyExtension[] {
     DetailsContent,
     ToggleEnter,
     TableKit.configure({ table: { resizable: true, cellMinWidth: 80 } }),
-    Image.configure({
+    (collab ? SharedImage : Image).configure({
       inline: false,
       allowBase64: false,
       // A page of hundreds of photos only loads and decodes what's on screen.

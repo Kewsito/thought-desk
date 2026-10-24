@@ -1,4 +1,5 @@
 <script lang="ts" module>
+  import { tabs } from '../tabs.svelte';
   import { renderIcon } from '../page-icon';
   /**
    * The page being dragged (shared by every row): from the sidebar, or from
@@ -163,7 +164,9 @@
   aria-expanded={kids.length ? expanded : undefined}
   tabindex="0"
   draggable={!favorite}
-  onclick={(e) => (e.altKey ? split.show(page.id) : store.open(page.id))}
+  onclick={(e) => (e.altKey ? split.show(page.id) : e.ctrlKey || e.metaKey ? tabs.openPage(page.id, { focus: false }) : store.open(page.id))}
+  onmousedown={(e) => e.button === 1 && e.preventDefault()}
+  onauxclick={(e) => e.button === 1 && (e.preventDefault(), tabs.openPage(page.id, { focus: false }))}
   onkeydown={(e) => e.key === 'Enter' && (e.altKey ? split.show(page.id) : store.open(page.id))}
   oncontextmenu={menu}
   ondragstart={onDragStart}

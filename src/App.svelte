@@ -6,6 +6,7 @@
   import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
   import { onMount } from 'svelte';
   import { warnIfFolderMissing } from './lib/data-folder';
+  import { tabs } from './lib/tabs.svelte';
   import { api } from './lib/api';
   import { cssToRgb } from './lib/color-math';
   import { sidebarSlide } from './lib/motion';
@@ -34,6 +35,12 @@
   import Menu from './lib/components/Menu.svelte';
   import IconPicker from './lib/components/IconPicker.svelte';
   import ConfirmDialog from './lib/components/ConfirmDialog.svelte';
+  import LiveSheet from './lib/components/LiveSheet.svelte';
+  import InviteSheet from './lib/components/InviteSheet.svelte';
+  import AccountSheet from './lib/components/AccountSheet.svelte';
+  import { account } from './lib/account.svelte';
+  import { friends } from './lib/friends.svelte';
+  import { cowork } from './lib/cowork.svelte';
   import Toasts from './lib/components/Toasts.svelte';
   import Icon from './lib/components/Icon.svelte';
   import Tooltip from './lib/components/Tooltip.svelte';
@@ -108,6 +115,10 @@
     split: () => split.toggle(),
     back: () => store.back(),
     forward: () => store.forward(),
+    newTab: () => tabs.newTab(),
+    closeTab: () => tabs.close(tabs.activeId),
+    nextTab: () => tabs.step(1),
+    prevTab: () => tabs.step(-1),
     goHome: () => store.go('home'),
     goAssignments: () => store.go('assignments'),
     goCalendar: () => store.go('calendar'),
@@ -169,10 +180,13 @@
   // Only the kind: `store.current` is a new object on every edit (a title
   // keystroke, a save's new timestamp), which mustn't reload the page.
   const currentKind = $derived(store.current?.kind);
+  // Sharing a page (or stopping) reloads it: its editor works differently.
+  const currentRoom = $derived(store.current?.sharedRoom ?? null);
 
   // Load the full page (with content) whenever the selection changes.
   $effect(() => {
     const id = store.currentId;
+    void currentRoom;
     // A database shows its rows, not a body.
     if (!id || currentKind === 'database') {
       page = null;
@@ -204,6 +218,10 @@
       try {
         // Pages decide where to start, so the planner and files load alongside.
         await Promise.all([planner.load(), library.load(), tags.load(), databases.load(), store.load()]);
+        tabs.init();
+        void account.init();
+        friends.init();
+        cowork.init();
         void cards.load();
         void warnIfFolderMissing();
       } catch (e) {
@@ -361,7 +379,7 @@
           {#key store.currentId}<DatabaseView id={store.current.id} />{/key}
         {/if}
       {:else if page && store.currentId === page.id}
-        {#key page.id}
+        {#key `${page.id}:${page.sharedRoom ?? ''}:${cowork.isLive(page.id)}`}
           <PageView {page} onstats={(w) => (words = w)} />
         {/key}
       {:else if store.loaded && !store.currentId}
@@ -426,6 +444,9 @@
 {#if ui.study}
   {#key ui.study}<StudySheet title={ui.study.title} deck={ui.study.cards} />{/key}
 {/if}
+{#if ui.liveSheet}<LiveSheet pageId={ui.liveSheet} />{/if}
+{#if ui.inviteSheet}<InviteSheet pageId={ui.inviteSheet} />{/if}
+{#if ui.accountSheet}<AccountSheet />{/if}
 {#if ui.newDatabase}<NewDatabaseSheet parentId={ui.newDatabase.parentId} onCreated={ui.newDatabase.onCreated} />{/if}
 {#if ui.formula}
   {@const f = ui.formula}
@@ -464,6 +485,14 @@
   }
   .scroller[data-nav='forward'] > :global(*) {
     animation-name: route-forward;
+  }
+  .scroller[data-nav='tab'] > :global(*) {
+    animation: route-tab 160ms var(--ease-out) backwards;
+  }
+  @keyframes route-tab {
+    from {
+      opacity: 0;
+    }
   }
   @keyframes route-in {
     from {

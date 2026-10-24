@@ -5,6 +5,14 @@
   import TreeItem, { drag, pageDragImage } from './TreeItem.svelte';
   import { prefs } from '../prefs.svelte';
   import { shownInSidebar, sidebarItemMenu } from '../sidebar-items';
+  import { tabs } from '../tabs.svelte';
+  import Avatar from './Avatar.svelte';
+  import { account } from '../account.svelte';
+  import { friends, nameOf } from '../friends.svelte';
+  import type { Friend, LiveSession } from '../cloud';
+  import { cowork } from '../cowork.svelte';
+  import { choosePage, friendLiveItems } from '../live-actions';
+  import type { MenuItem } from '../ui.svelte';
   import { store, type AppView } from '../store.svelte';
   import { tags } from '../tags.svelte';
   import { planner } from '../planner.svelte';
@@ -120,6 +128,82 @@
     else ui.openMenu({ x: e.clientX, y: e.clientY, items, onClose });
   }
 
+  async function addFriend() {
+    if (!account.signedIn || account.needsUsername) {
+      ui.accountSheet = true;
+      return;
+    }
+    const answer = await ui.prompt({
+      title: 'Add a friend',
+      message: "Type their username. You're friends once they accept.",
+      placeholder: '@username',
+      confirmLabel: 'Send Request',
+      icon: 'user',
+    });
+    if (!answer) return;
+    const name = answer.value.trim().replace(/^@/, '').toLowerCase();
+    try {
+      const done = await friends.add(name);
+      ui.toast(done === 'accepted' ? `You're now friends with @${name}` : `Friend request sent to @${name}`);
+    } catch (e) {
+      // Usually a typo or someone who isn't there: say so, it's not a fault.
+      ui.toast(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  function acceptFriend(f: Friend) {
+    friends.accept(f.profile.id).then(
+      () => ui.toast(`You're now friends with ${nameOf(f)}`),
+      (e) => ui.error(e),
+    );
+  }
+
+  /** Declines their request, or cancels yours. */
+  function dropFriend(f: Friend) {
+    friends.remove(f.profile.id).catch((e) => ui.error(e));
+  }
+
+  function joinSession(row: LiveSession) {
+    cowork.join(row).catch((e) => ui.error(e));
+  }
+
+  function declineSession(row: LiveSession) {
+    cowork.decline(row).catch((e) => ui.error(e));
+  }
+
+  function withdrawSession(row: LiveSession) {
+    cowork.withdraw(row).catch((e) => ui.error(e));
+  }
+
+  function friendMenu(e: MouseEvent, f: Friend, anchor?: Element) {
+    e.preventDefault();
+    e.stopPropagation();
+    const items: MenuItem[] = [
+      { header: `@${f.profile.username}${f.online ? ' · here now' : ''}` },
+      ...friendLiveItems(f),
+      { separator: true },
+      {
+        label: 'Remove Friend',
+        icon: 'trash',
+        danger: true,
+        action: async () => {
+          const ok = await ui.confirm({
+            title: `Remove ${nameOf(f)}?`,
+            message: "You won't be friends any more. They aren't told, and you can add each other again later.",
+            confirmLabel: 'Remove',
+            danger: true,
+          });
+          if (!ok) return;
+          // Writing together ends with the friendship.
+          for (const row of cowork.rows) if (row.status === 'active' && cowork.other(row)?.profile.id === f.profile.id) await cowork.end(row.id);
+          dropFriend(f);
+        },
+      },
+    ];
+    if (anchor) ui.openMenuAt(anchor, items);
+    else ui.openMenu({ x: e.clientX, y: e.clientY, items });
+  }
+
   async function addCourse() {
     const c = await planner.promptCourse();
     if (c) store.openCourse(c.id);
@@ -153,7 +237,7 @@
   <nav class="views" aria-label="Views">
     {#each shownNav as n (n.view)}
       <div class="nav-row" class:active={store.view === n.view}>
-        <button class="nav-main" onclick={() => store.go(n.view)} oncontextmenu={(e) => sidebarItemMenu(e, n.view)} aria-current={store.view === n.view ? 'page' : undefined} data-tip={n.label} data-tip-key={shortcuts.label(n.key)}>
+        <button class="nav-main" onclick={(e) => (e.ctrlKey || e.metaKey ? tabs.open({ view: n.view, id: null }, { focus: false }) : store.go(n.view))} onmousedown={(e) => e.button === 1 && e.preventDefault()} onauxclick={(e) => e.button === 1 && (e.preventDefault(), tabs.open({ view: n.view, id: null }, { focus: false }))} oncontextmenu={(e) => sidebarItemMenu(e, n.view)} aria-current={store.view === n.view ? 'page' : undefined} data-tip={n.label} data-tip-key={shortcuts.label(n.key)}>
           <span class="lead tinted"><Icon name={n.icon} /></span>
           <span class="label">{n.label}</span>
         </button>
@@ -179,6 +263,89 @@
             {#each store.favorites as p (p.id)}
               <TreeItem page={p} favorite />
             {/each}
+          </div>
+        {/if}
+      </section>
+    {/if}
+
+    {#if shownInSidebar('friends')}
+      <section>
+        <div class="section-head">
+          <button class="section-title" onclick={() => toggleSection('friends')} oncontextmenu={(e) => sidebarItemMenu(e, 'friends')} aria-expanded={!prefs.sections.friends}>
+            Friends
+            {#if friends.incoming.length + cowork.incoming.length}<span class="badge" data-tip="Waiting for you">{friends.incoming.length + cowork.incoming.length}</span>{/if}
+            <span class="caret" class:closed={prefs.sections.friends}><Icon name="chevron-down" size={11} stroke={2.4} /></span>
+          </button>
+          <button class="section-add" onclick={addFriend} data-tip="Add a friend"><Icon name="plus" size={14} stroke={2} /></button>
+        </div>
+        {#if !prefs.sections.friends}
+          <div class="tag-list" role="list" aria-label="Friends">
+            {#if !account.ready}
+              <!-- Reading the sign-in state. -->
+            {:else if !account.signedIn || account.needsUsername}
+              <button class="row-btn muted" onclick={() => (ui.accountSheet = true)}>
+                <span class="lead"><Icon name="user" /></span>
+                <span class="label">{account.signedIn ? 'Pick a username to add friends' : 'Sign in to add friends'}</span>
+              </button>
+            {:else}
+              {#each cowork.incoming as row (row.id)}
+                {@const who = cowork.other(row)}
+                <div class="nav-row friend-row live-row" role="listitem">
+                  <span class="lead"><Avatar name={cowork.otherName(row)} url={who?.profile.avatarUrl} seed={who?.profile.id ?? row.id} size={20} /></span>
+                  {#if row.kind === 'invite'}
+                    <span class="label" data-tip="{cowork.otherName(row)} invites you to write “{row.title || 'Untitled'}” together">“{row.title || 'Untitled'}”</span>
+                    <button class="row-act join" onclick={() => joinSession(row)} aria-label="Join {cowork.otherName(row)}" data-tip="Join"><Icon name="check" size={14} stroke={2.2} /></button>
+                  {:else}
+                    <span class="label" data-tip="{cowork.otherName(row)} wants to write together">{cowork.otherName(row)} wants to write</span>
+                    <button class="row-act join" onclick={(e) => choosePage(row, e.currentTarget as Element)} aria-label="Choose a page for {cowork.otherName(row)}" data-tip="Choose a page"><Icon name="page" size={14} /></button>
+                  {/if}
+                  <button class="row-act" onclick={() => declineSession(row)} aria-label="Decline {cowork.otherName(row)}" data-tip="Decline"><Icon name="x" size={14} stroke={2.2} /></button>
+                </div>
+              {/each}
+              {#each cowork.outgoing as row (row.id)}
+                <div class="nav-row friend-row pending" role="listitem">
+                  <span class="lead"><Icon name="user" /></span>
+                  <span class="label" data-tip="Waiting for {cowork.otherName(row)}">{row.kind === 'invite' ? `“${row.title || 'Untitled'}”` : 'Asked to write'}</span>
+                  <span class="count">{cowork.otherName(row)}</span>
+                  <button class="row-act" onclick={() => withdrawSession(row)} aria-label="Withdraw invite to {cowork.otherName(row)}" data-tip="Withdraw"><Icon name="x" size={14} stroke={2.2} /></button>
+                </div>
+              {/each}
+              <!-- Someone not yet a friend shows initials, never a picture: loading
+                   one would tell its server you're here. -->
+              {#each friends.incoming as f (f.profile.id)}
+                <div class="nav-row friend-row" role="listitem">
+                  <span class="lead"><Avatar name={nameOf(f)} seed={f.profile.id} size={20} /></span>
+                  <span class="label" data-tip="@{f.profile.username} wants to be friends">{nameOf(f)}</span>
+                  <button class="row-act" onclick={() => acceptFriend(f)} aria-label="Accept {nameOf(f)}" data-tip="Accept"><Icon name="check" size={14} stroke={2.2} /></button>
+                  <button class="row-act" onclick={() => dropFriend(f)} aria-label="Decline {nameOf(f)}" data-tip="Decline"><Icon name="x" size={14} stroke={2.2} /></button>
+                </div>
+              {/each}
+              {#each friends.accepted as f (f.profile.id)}
+                <div class="nav-row friend-row" role="listitem" oncontextmenu={(e) => friendMenu(e, f)}>
+                  <button class="nav-main" onclick={(e) => friendMenu(e, f, e.currentTarget)} data-tip="@{f.profile.username}{f.online ? ' · here now' : ''}">
+                    <span class="lead avatar-lead">
+                      <Avatar name={nameOf(f)} url={f.profile.avatarUrl} seed={f.profile.id} size={20} />
+                      {#if f.online}<span class="online" aria-label="Online"></span>{/if}
+                    </span>
+                    <span class="label">{nameOf(f)}</span>
+                  </button>
+                </div>
+              {/each}
+              {#each friends.outgoing as f (f.profile.id)}
+                <div class="nav-row friend-row pending" role="listitem">
+                  <span class="lead"><Avatar name={nameOf(f)} seed={f.profile.id} size={20} /></span>
+                  <span class="label" data-tip="Waiting for @{f.profile.username} to accept">{nameOf(f)}</span>
+                  <span class="count">Asked</span>
+                  <button class="row-act" onclick={() => dropFriend(f)} aria-label="Cancel request to {nameOf(f)}" data-tip="Cancel request"><Icon name="x" size={14} stroke={2.2} /></button>
+                </div>
+              {/each}
+              {#if friends.loaded && !friends.list.length}
+                <button class="row-btn muted" onclick={addFriend}>
+                  <span class="lead"><Icon name="plus" /></span>
+                  <span class="label">Add a friend</span>
+                </button>
+              {/if}
+            {/if}
           </div>
         {/if}
       </section>
@@ -430,6 +597,63 @@
   }
   section + section {
     margin-top: 16px;
+  }
+
+  /* Friends */
+  .friend-row {
+    gap: 2px;
+  }
+  .friend-row > .label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .live-row .label {
+    color: var(--text);
+  }
+  .row-act.join {
+    color: var(--accent);
+  }
+  .friend-row.pending {
+    color: var(--text-3);
+  }
+  .avatar-lead {
+    position: relative;
+  }
+  .online {
+    position: absolute;
+    right: -1px;
+    bottom: -1px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--c-green);
+    box-shadow: 0 0 0 2px var(--sidebar-bg, var(--bg-2, var(--bg)));
+  }
+  .row-act {
+    display: inline-grid;
+    place-items: center;
+    flex: none;
+    width: 24px;
+    height: 24px;
+    border-radius: var(--r-xs);
+    color: var(--text-3);
+  }
+  .row-act:hover {
+    background: var(--fill-2);
+    color: var(--text);
+  }
+  .badge {
+    margin-left: 6px;
+    padding: 0 6px;
+    border-radius: 8px;
+    background: var(--accent);
+    color: var(--on-accent, white);
+    font-size: 10.5px;
+    font-weight: 600;
+    line-height: 16px;
   }
 
   /* Section headers */

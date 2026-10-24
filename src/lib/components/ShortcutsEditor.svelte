@@ -11,7 +11,7 @@
   /** A note under the row just changed (a clash, or what moved). */
   let note = $state<{ id: ShortcutId; text: string; error?: boolean } | null>(null);
 
-  const groups = (['General', 'Go To', 'Calendar'] as const).map((g) => ({ name: g, items: SHORTCUTS.filter((s) => s.group === g) }));
+  const groups = (['General', 'Tabs', 'Go To', 'Calendar'] as const).map((g) => ({ name: g, items: SHORTCUTS.filter((s) => s.group === g) }));
   const anyCustom = $derived(Object.keys(prefs.shortcuts).length > 0);
 
   function start(id: ShortcutId) {
