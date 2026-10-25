@@ -70,7 +70,9 @@ fn bind(port: u16) -> Result<TcpListener, String> {
 }
 
 /// Answers one browser request. The callback gets a page saying how sign-in
-/// went, and its query string is returned; anything else (a favicon) gets a 404.
+/// went, and its query string is returned (empty when the browser brought
+/// nothing back, which the app reports as not finished rather than waiting
+/// on); anything else (a favicon) gets a 404.
 fn answer(mut stream: TcpStream) -> Option<String> {
     let _ = stream.set_nonblocking(false);
     let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
@@ -79,7 +81,7 @@ fn answer(mut stream: TcpStream) -> Option<String> {
     let request = String::from_utf8_lossy(&buf[..n]);
     let query = callback_query(&request).map(str::to_string);
     let reply = match &query {
-        Some(query) => page(!failed(query)),
+        Some(query) => page(!query.is_empty() && !failed(query)),
         None => "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_string(),
     };
     let _ = stream.write_all(reply.as_bytes());
@@ -90,14 +92,15 @@ fn answer(mut stream: TcpStream) -> Option<String> {
     query
 }
 
-/// The query string of a `GET /auth/callback?…` request line.
+/// The query string of a `GET /auth/callback[?…]` request line ("" without one).
 fn callback_query(request: &str) -> Option<&str> {
     let mut parts = request.lines().next()?.split_whitespace();
     if parts.next()? != "GET" {
         return None;
     }
-    let (path, query) = parts.next()?.split_once('?').unwrap_or((PATH, ""));
-    (path == PATH && !query.is_empty()).then_some(query)
+    let target = parts.next()?;
+    let (path, query) = target.split_once('?').unwrap_or((target, ""));
+    (path == PATH).then_some(query)
 }
 
 /// Whether the sign-in came back failed (not merely "new here").
@@ -136,7 +139,8 @@ mod tests {
     fn reads_only_the_callback() {
         assert_eq!(callback_query("GET /auth/callback?rotating_token_nonce=abc HTTP/1.1\r\nHost: x\r\n"), Some("rotating_token_nonce=abc"));
         assert_eq!(callback_query("GET /auth/callback?__clerk_status=failed HTTP/1.1"), Some("__clerk_status=failed"));
-        for other in ["GET /favicon.ico HTTP/1.1", "POST /auth/callback?code=abc HTTP/1.1", "GET /auth/callback HTTP/1.1", ""] {
+        assert_eq!(callback_query("GET /auth/callback HTTP/1.1"), Some(""), "back with nothing: still the callback");
+        for other in ["GET /favicon.ico HTTP/1.1", "GET /favicon.ico?x=1 HTTP/1.1", "POST /auth/callback?code=abc HTTP/1.1", ""] {
             assert_eq!(callback_query(other), None, "{other}");
         }
     }
@@ -188,5 +192,15 @@ mod tests {
         // browser that didn't hang up.
         assert!(sign_in(port, "__clerk_status=failed&__clerk_error_code=oauth_access_denied", true).contains("Sign-in didn't finish"));
         assert!(sign_in(port, "rotating_token_nonce=abc", false).contains("You're signed in"));
+    }
+
+    #[test]
+    fn coming_back_with_nothing_says_it_didnt_finish() {
+        let port = bind(0).unwrap().local_addr().unwrap().port();
+        let listener = bind(port).unwrap();
+        let browser = std::thread::spawn(move || browse(port, PATH, false));
+        let (stream, _) = listener.accept().unwrap();
+        assert_eq!(answer(stream).as_deref(), Some(""), "the app hears about it, so it stops waiting");
+        assert!(browser.join().unwrap().contains("Sign-in didn't finish"));
     }
 }
