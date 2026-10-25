@@ -46,7 +46,7 @@ Clerk's development instance is for development: it's marked as such, and anyone
 4. **GitHub:** an OAuth app has only one callback, so make a second one for production, with the callback `https://clerk.thoughtdesk.org/v1/oauth_callback`, and put its ID and secret in Clerk production's GitHub settings.
 5. **Supabase:** add Clerk again under **Third-Party Auth**, with the domain `https://clerk.thoughtdesk.org`. Once nobody uses development any more, remove its domain there, from `private.me()` (in a new migration) and from the relay's `CLERK_ISSUERS`.
 6. **The app:** done. Release builds (`npm run build`, `npm run bundle`) use the production key (`pk_live_…`), and development builds (`npm run dev`, `npm run app`) the development one; `VITE_CLERK_KEY` overrides either (`src/lib/cloud/clerk.ts`).
-7. **How long a sign-in lasts:** a week on Clerk's free plan, then people sign in again. Clerk Pro ($25 a month) can make it longer.
+7. **How long a sign-in lasts:** done. Production is on Clerk Pro, and a sign-in lasts 90 days (**Configure** → **Sessions** → maximum lifetime), then people sign in again; signing out ends it at once. Development keeps a week.
 
 ## 6. The relay for writing together (Cloudflare)
 
