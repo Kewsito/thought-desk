@@ -41,6 +41,45 @@ jobs:
         run: cargo test
         working-directory: src-tauri
 
+  # The app on macOS and Linux: it builds, and the storage tests pass there too.
+  platforms:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: src-tauri
+
+      # WebKitGTK and what Tauri builds on, and D-Bus for the keyring (secrets.rs).
+      - name: Linux libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev librsvg2-dev libdbus-1-dev
+
+      - run: npm ci
+
+      - name: Build the interface
+        run: npm run build
+
+      - name: Storage tests
+        run: cargo test
+        working-directory: src-tauri
+
   # Drives the interface in Chromium against the fake backend (tests/e2e).
   interface:
     runs-on: ubuntu-latest

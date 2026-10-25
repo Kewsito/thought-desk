@@ -1,10 +1,11 @@
-# Builds the Windows installer when a version tag is pushed (git tag v0.7.0
-# && git push origin v0.7.0) and attaches it, with the update files, to a
-# draft GitHub release, to check and publish by hand. Run by hand (Actions →
-# Release → Run workflow), it builds and signs the same way and keeps the
-# files with the run instead.
+# Builds Thought Desk for Windows, macOS and Linux when a version tag is
+# pushed (git tag v0.8.0 && git push origin v0.8.0), and attaches the
+# installers and update files to a draft GitHub release, to check and publish
+# by hand. Run by hand (Actions → Release → Run workflow), it builds and signs
+# the same way and keeps the files with the run instead. The publish job then
+# writes latest.json, which tells installed copies on every system about it.
 #
-# Code signing is SignPath's, free for open source (the policy is at
+# Windows code signing is SignPath's, free for open source (the policy is at
 # thoughtdesk.org/code-signing). It takes two rounds, because the installer
 # carries signed files inside it:
 #   1. Build the app and the installer. A signing hook
@@ -12,11 +13,10 @@
 #   2. SignPath signs those two once the request is approved there.
 #   3. Build the installer again, around the signed two.
 #   4. SignPath signs the installer, after a second approval.
-#   5. Sign the update with the key installed copies trust, and write
-#      latest.json, which tells them about it.
+#   5. Sign the update with the key installed copies trust.
 # SignPath checks that what it signs was built by this workflow, from this
-# repository. Until it's set up, rounds 2 and 4 are skipped and the release
-# is unsigned, as before. To set it up, in this repository's settings:
+# repository. Until it's set up, rounds 2 and 4 are skipped and the Windows
+# installer is unsigned, as before. To set it up, in this repository's settings:
 #   - variable SIGNPATH_ORGANIZATION_ID: the SignPath organization's id;
 #   - secret SIGNPATH_API_TOKEN (in the "release" environment): the token of
 #     a SignPath user who may submit signing requests;
@@ -25,8 +25,19 @@
 # The SignPath project needs the GitHub.com trusted build system and two
 # artifact configurations, "binaries" and "installer" (.github/signpath/).
 #
-# This job holds the key that signs updates, which every installed copy
-# trusts. So it waits for approval (the "release" environment's required
+# The Mac app is signed with the Apple Developer account and notarized by
+# Apple, from these secrets in the "release" environment (until they're set,
+# it's unsigned):
+#   - APPLE_CERTIFICATE: the "Developer ID Application" certificate with its
+#     private key, exported from Keychain Access as a .p12, in base64;
+#   - APPLE_CERTIFICATE_PASSWORD: the password the .p12 was exported with;
+#   - APPLE_SIGNING_IDENTITY: the certificate's name, as
+#     "Developer ID Application: Your Name (TEAMID)";
+#   - APPLE_ID, APPLE_PASSWORD (an app-specific password from
+#     account.apple.com) and APPLE_TEAM_ID: for notarizing.
+#
+# These jobs hold the key that signs updates, which every installed copy
+# trusts. So they wait for approval (the "release" environment's required
 # reviewer), and every action is pinned to a commit: a tag can be moved to
 # other code, a commit can't. Update a pin by looking up the new release's
 # commit, and say which release it is in the comment.
@@ -148,13 +159,157 @@ jobs:
           New-Item -ItemType Directory signing/installer | Out-Null
           Copy-Item src-tauri/target/release/bundle/nsis/*-setup.exe signing/installer/
 
-      - name: Sign the update and write latest.json
-        run: node .github/scripts/release-files.mjs (Get-ChildItem signing/installer/*-setup.exe).FullName release "$env:RUNNER_TEMP/notes.md"
+      - name: Sign the update
+        run: node .github/scripts/release-files.mjs windows (Get-ChildItem signing/installer/*-setup.exe).FullName release
         env:
-          SIGNED: ${{ env.SIGNING }}
           # Installed copies take only updates signed with this key.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-windows
+          path: release/
+          if-no-files-found: error
+          retention-days: 1
+
+  # One app for Apple silicon and Intel Macs, signed with the Apple Developer
+  # account and notarized by Apple once its secrets are set (see the top).
+  macos:
+    runs-on: macos-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      # Tauri signs and notarizes when these are set, and builds an unsigned
+      # app when they aren't (macOS then asks people to right-click → Open).
+      - name: Apple signing, once it's set up
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -z "$APPLE_CERTIFICATE" ]; then
+            echo "::warning::The Mac app isn't signed: add the Apple secrets (see the top of release.yml)."
+            exit 0
+          fi
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            echo "$name=${!name}" >> "$GITHUB_ENV"
+          done
+
+      - name: Build the app
+        run: npx tauri build --target universal-apple-darwin --bundles app,dmg --config '{"bundle":{"createUpdaterArtifacts":true}}'
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+      - name: Gather the files
+        run: |
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          bundle=src-tauri/target/universal-apple-darwin/release/bundle
+          mkdir release
+          cp "$bundle"/dmg/*.dmg "release/Thought.Desk_${version}_universal.dmg"
+          cp "$bundle"/macos/*.app.tar.gz "release/Thought.Desk_${version}_universal.app.tar.gz"
+          cp "$bundle"/macos/*.app.tar.gz.sig "release/Thought.Desk_${version}_universal.app.tar.gz.sig"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-macos
+          path: release/
+          if-no-files-found: error
+          retention-days: 1
+
+  # An AppImage, which runs on most Linux systems, and a .deb for Debian and
+  # Ubuntu. Built on the oldest Ubuntu GitHub offers, so they run on older
+  # systems too.
+  linux:
+    runs-on: ubuntu-22.04
+    environment: release
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: src-tauri
+
+      # WebKitGTK and what Tauri builds on, D-Bus for the keyring (secrets.rs),
+      # and FUSE, which the AppImage tools run with.
+      - name: Linux libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev librsvg2-dev libdbus-1-dev libfuse2 file
+
+      - run: npm ci
+
+      - name: Build the app
+        run: npx tauri build --bundles appimage,deb --config '{"bundle":{"createUpdaterArtifacts":true}}'
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+      - name: Gather the files
+        run: |
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          bundle=src-tauri/target/release/bundle
+          mkdir release
+          cp "$bundle"/appimage/*.AppImage "release/Thought.Desk_${version}_amd64.AppImage"
+          cp "$bundle"/appimage/*.AppImage.sig "release/Thought.Desk_${version}_amd64.AppImage.sig"
+          cp "$bundle"/deb/*.deb "release/Thought.Desk_${version}_amd64.deb"
+          # Tauri signs the .deb for updates too, in versions that can update one.
+          for sig in "$bundle"/deb/*.deb.sig; do [ -f "$sig" ] && cp "$sig" "release/Thought.Desk_${version}_amd64.deb.sig"; done
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-linux
+          path: release/
+          if-no-files-found: error
+          retention-days: 1
+
+  # Everything together: latest.json for every system, and the draft release.
+  publish:
+    needs: [windows, macos, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: release-*
+          path: release
+          merge-multiple: true
+
+      - name: Write latest.json and the notes
+        run: node .github/scripts/release-files.mjs publish release "$RUNNER_TEMP/notes.md"
+        env:
+          SIGNED: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
 
       # With the run as well: a run by hand makes no release.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -169,11 +324,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $files = (Get-ChildItem release).FullName
           # Run again for the same tag: replace the files, keep the notes.
-          gh release view $env:GITHUB_REF_NAME *> $null
-          if ($LASTEXITCODE -eq 0) {
-            gh release upload $env:GITHUB_REF_NAME $files --clobber
-          } else {
-            gh release create $env:GITHUB_REF_NAME $files --draft --title "Thought Desk $env:GITHUB_REF_NAME" --notes-file "$env:RUNNER_TEMP/notes.md"
-          }
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" release/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" release/* --draft --title "Thought Desk $GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/notes.md"
+          fi
