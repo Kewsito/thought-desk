@@ -2,9 +2,9 @@
  * thoughtdesk.org. The pages are the files in public/; this Worker runs in
  * front of them to send www.thoughtdesk.org to thoughtdesk.org, to answer
  * /download (the latest release's installer for the visitor's system),
- * /download/<system> (a given one's) and /api/release (the version, date,
- * and each installer's address and size), and to add security headers to
- * every page.
+ * /download/<system> (a given one's), /api/release (the version, date, and
+ * each installer's address and size) and /api/stars (the repository's
+ * GitHub stars), and to add security headers to every page.
  */
 
 const REPO = 'kusule1351-hue/thought-desk';
@@ -81,6 +81,20 @@ async function latest(ctx: ExecutionContext): Promise<Release | null> {
   return release;
 }
 
+/** The repository's stars, asked of GitHub at most every 10 minutes too. */
+async function stars(ctx: ExecutionContext): Promise<number | null> {
+  const key = new Request('https://thoughtdesk.org/api/stars');
+  const cached = await caches.default.match(key);
+  if (cached) return ((await cached.json()) as { stars: number }).stars;
+  const res = await fetch(`https://api.github.com/repos/${REPO}`, {
+    headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'thoughtdesk.org' },
+  });
+  if (!res.ok) return null;
+  const count = ((await res.json()) as { stargazers_count: number }).stargazers_count;
+  ctx.waitUntil(caches.default.put(key, Response.json({ stars: count }, { headers: { 'Cache-Control': 'max-age=600' } })));
+  return count;
+}
+
 function secure(res: Response): Response {
   const out = new Response(res.body, res);
   for (const [name, value] of Object.entries(HEADERS)) out.headers.set(name, value);
@@ -108,6 +122,11 @@ export default {
       const system = asked[1] ? (Object.hasOwn(SYSTEMS, asked[1]) ? (asked[1] as System) : null) : systemOf(request.headers.get('User-Agent') ?? '');
       const release = system && (await latest(ctx).catch(() => null));
       return Response.redirect((release && release.installers[system!]?.url) || RELEASES, 302);
+    }
+    if (url.pathname === '/api/stars') {
+      const count = await stars(ctx).catch(() => null);
+      if (count === null) return Response.json({ error: 'GitHub is unavailable' }, { status: 503 });
+      return Response.json({ stars: count }, { headers: { 'Cache-Control': 'public, max-age=600' } });
     }
     if (url.pathname === '/api/release') {
       const release = await latest(ctx).catch(() => null);

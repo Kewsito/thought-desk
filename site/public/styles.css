@@ -176,6 +176,30 @@ code {
   stroke-linejoin: round;
   flex: none;
 }
+/* A system's logo on its download button: a solid shape, not a line drawing. */
+.os-icon {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+  flex: none;
+}
+
+/* The GitHub link's live star count (site.js). */
+.stars {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.stars[hidden] {
+  display: none;
+}
+.star {
+  width: 13px;
+  height: 13px;
+  fill: currentColor;
+}
 
 /* --------------------------------------------------------------- buttons */
 

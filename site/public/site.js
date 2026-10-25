@@ -20,7 +20,19 @@ fetch('/api/release')
   .then((res) => (res.ok ? res.json() : null))
   .then((release) => {
     if (!release) return;
-    for (const el of document.querySelectorAll('[data-release]')) el.textContent = `Version ${release.version} · free`;
+    for (const el of document.querySelectorAll('[data-version]')) el.textContent = `Version ${release.version} · free`;
+  })
+  .catch(() => {});
+
+// The repository's stars on GitHub, from the Worker (it asks GitHub every 10
+// minutes): beside the top bar's GitHub link, and under the download buttons.
+fetch('/api/stars')
+  .then((res) => (res.ok ? res.json() : null))
+  .then((repo) => {
+    if (typeof repo?.stars !== 'number') return;
+    const count = repo.stars < 1000 ? String(repo.stars) : `${(repo.stars / 1000).toFixed(1).replace(/\.0$/, '')}k`;
+    for (const el of document.querySelectorAll('[data-star-count]')) el.textContent = count;
+    for (const el of document.querySelectorAll('[data-stars], [data-stars-line]')) el.hidden = false;
   })
   .catch(() => {});
 
