@@ -20,6 +20,15 @@ async function person(browser: Browser, cloud: FakeCloud, email: string, name: s
 
 const friendsPage = (page: Page) => page.locator('.friends-view');
 
+/** Switches to another window, as far as the app can tell. */
+const away = (page: Page) => page.evaluate(() => void (document.hasFocus = () => false));
+/** Comes back to the app's window. */
+const back = (page: Page) =>
+  page.evaluate(() => {
+    delete (document as { hasFocus?: unknown }).hasFocus;
+    window.dispatchEvent(new Event('focus'));
+  });
+
 /** Opens the Friends page from the sidebar. */
 async function openFriends(page: Page) {
   await page.locator('.sidebar .views').getByRole('button', { name: 'Friends' }).click();
@@ -59,9 +68,20 @@ test('adding a friend by username, and accepting', async ({ page: ana, browser }
   await test.step('Ben gets the request, live, and accepts', async () => {
     await expect(ben.locator('.toast', { hasText: 'Ana Lima wants to be friends' })).toBeVisible(LIVE);
     await expect(ben.locator('.sidebar .nav-row', { hasText: 'Friends' }).locator('.count'), 'the sidebar counts what waits').toHaveText('1');
+    await away(ana);
     await openFriends(ben);
     await ben.getByRole('button', { name: 'Accept Ana Lima' }).click();
     await expect(ben.locator('.toast', { hasText: "You're now friends with Ana Lima" })).toBeVisible();
+  });
+
+  await test.step('Ana, in another window, hears it from the system, and the news waits for her', async () => {
+    const news = ana.locator('.toast', { hasText: 'Ben Ito accepted your friend request' });
+    await expect(news).toBeVisible(LIVE);
+    await expect.poll(() => ana.evaluate(() => (window as { __notifications?: unknown[] }).__notifications)).toEqual([{ title: 'Ben Ito accepted your friend request', body: '@ben' }]);
+    await ana.waitForTimeout(9000);
+    await expect(news, 'still there past its time, while she is away').toBeVisible();
+    await back(ana);
+    await expect(news, 'gone a while after she is back').toHaveCount(0, { timeout: 10_000 });
   });
 
   await test.step('both are friends, and online', async () => {
@@ -102,12 +122,16 @@ test('declining a request, and cancelling one', async ({ page: ana, browser }) =
   await expect(friendsPage(ana)).toContainText('Cat Ng', LIVE);
   await ana.getByRole('button', { name: 'Decline Cat Ng' }).click();
   await expect(friendsPage(cat)).not.toContainText('Ana Lima', LIVE);
+  await expect(cat.locator('.toast', { hasText: 'Ana Lima declined your friend request.' })).toBeVisible();
+  expect(await cat.evaluate(() => (window as { __notifications?: unknown[] }).__notifications), 'only in the app').toBeUndefined();
   expect(cloud.friendships).toEqual([]);
 
   await addFriend(ana, 'cat');
   await expect(friendsPage(cat)).toContainText('Ana Lima', LIVE);
   await ana.getByRole('button', { name: 'Cancel request to Cat Ng' }).click();
+  await expect(friendsPage(ana)).not.toContainText('Cat Ng');
   await expect(friendsPage(cat)).not.toContainText('Ana Lima', LIVE);
+  await expect(ana.locator('.toast', { hasText: 'declined' }), 'taking a request back is no news').toHaveCount(0);
 
   await cat.context().close();
 });

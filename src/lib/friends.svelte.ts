@@ -18,9 +18,27 @@ const byName = (a: Friend, b: Friend) => (a.profile.displayName || a.profile.use
 export const nameOf = (f: Friend) => f.profile.displayName || `@${f.profile.username ?? '?'}`;
 
 /** News for you: in the app, and as a system notification when it's in the background. */
-export function announce(title: string, body: string, action?: { label: string; run: () => void }) {
-  ui.toast(`${title}: ${body}`, action, 8000);
+export function announce(title: string, body = '', action?: { label: string; run: () => void }) {
+  ui.toast(body ? `${title}: ${body}` : title, action, 8000);
   if (document.hidden || !document.hasFocus()) void api.notify(title, body).catch(() => {});
+}
+
+/** A refresh that runs one at a time. Asked for while one is under way, it
+ *  runs once more after that one, for everyone who asked meanwhile: two at
+ *  once would compare with the same "before" and tell the same news twice. */
+export function oneAtATime(run: () => Promise<void>): () => Promise<void> {
+  let current: Promise<void> | null = null;
+  let next: Promise<void> | null = null;
+  const go = (): Promise<void> => {
+    if (!current) return (current = run().finally(() => (current = null)));
+    return (next ??= current
+      .catch(() => {})
+      .then(() => {
+        next = null;
+        return go();
+      }));
+  };
+  return go;
 }
 
 class Friends {
@@ -37,6 +55,9 @@ class Friends {
   #stop: (() => void) | null = null;
   #timer: ReturnType<typeof setInterval> | undefined;
   #following: string | null = null;
+  /** People you took a request back from (or declined, or unfriended): that
+   *  it's gone is your doing, not news. */
+  #withdrawn = new Set<string>();
 
   /** Follows whoever is signed in: starts on sign-in, clears on sign-out. */
   init() {
@@ -57,6 +78,7 @@ class Friends {
     clearInterval(this.#timer);
     this.list = [];
     this.loaded = false;
+    this.#withdrawn.clear();
     if (!id) return;
     const c = await cloud();
     if (this.#following !== id) return;
@@ -69,19 +91,35 @@ class Friends {
     this.#timer = setInterval(tick, EVERY);
   }
 
-  async refresh() {
-    const known = this.loaded ? new Set(this.incoming.map((f) => f.profile.id)) : null;
+  /** Reads your friends again, and tells you what changed on their side. */
+  refresh = oneAtATime(() => this.#refresh());
+
+  async #refresh() {
+    const following = this.#following;
+    // As at the last look (none yet: what's there at start-up isn't news).
+    const before = this.loaded ? new Map(this.list.map((f) => [f.profile.id, f])) : null;
+    let list: Friend[];
     try {
-      this.list = await (await cloud()).friends();
-      this.loaded = true;
+      list = await (await cloud()).friends();
     } catch (e) {
       console.warn('Friends: could not refresh', e);
       return;
     }
-    // A new request since the last look (not the ones there at start-up).
-    if (known)
-      for (const f of this.incoming)
-        if (!known.has(f.profile.id)) announce(`${nameOf(f)} wants to be friends`, `@${f.profile.username}`, { label: 'Accept', run: () => void this.accept(f.profile.id) });
+    // Signed out, or someone else signed in, meanwhile.
+    if (this.#following !== following) return;
+    this.list = list;
+    this.loaded = true;
+    if (!before) return;
+    for (const f of list) {
+      const was = before.get(f.profile.id)?.status;
+      if (f.status === 'incoming' && was !== 'incoming') announce(`${nameOf(f)} wants to be friends`, `@${f.profile.username}`, { label: 'Accept', run: () => void this.accept(f.profile.id) });
+      if (f.status === 'accepted' && was === 'outgoing') announce(`${nameOf(f)} accepted your friend request`, `@${f.profile.username}`);
+    }
+    // A request of yours that's gone, and you didn't take it back: they
+    // declined. Said in the app only, with no system notification.
+    const now = new Set(list.map((f) => f.profile.id));
+    for (const [id, f] of before)
+      if (f.status === 'outgoing' && !now.has(id) && !this.#withdrawn.has(id)) ui.toast(`${nameOf(f)} declined your friend request.`, undefined, 8000);
   }
 
   /** Sends a friend request by username (or accepts theirs). */
@@ -99,6 +137,7 @@ class Friends {
       await this.accept(person.id);
       return 'accepted';
     }
+    this.#withdrawn.delete(person.id);
     await c.requestFriend(person.id);
     await this.refresh();
     return 'sent';
@@ -111,7 +150,13 @@ class Friends {
 
   /** Declines, cancels or unfriends. */
   async remove(id: string) {
-    await (await cloud()).removeFriend(id);
+    this.#withdrawn.add(id);
+    try {
+      await (await cloud()).removeFriend(id);
+    } catch (e) {
+      this.#withdrawn.delete(id);
+      throw e;
+    }
     await this.refresh();
   }
 }

@@ -221,7 +221,10 @@ class UI {
     const id = ++this.#toastId;
     this.toasts.push({ id, message, actionLabel: action?.label, action: action?.run });
     if (this.toasts.length > 3) this.toasts.shift();
-    setTimeout(() => this.dismissToast(id), ms);
+    // In another window: the toast waits, and its time starts when you're back.
+    const time = () => setTimeout(() => this.dismissToast(id), ms);
+    if (document.hasFocus()) time();
+    else window.addEventListener('focus', time, { once: true });
     return id;
   }
 

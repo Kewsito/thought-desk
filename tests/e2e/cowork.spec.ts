@@ -235,6 +235,7 @@ test('asking to write together: the host picks the page, and closing the tab end
   await ana.getByRole('button', { name: 'Choose a page for Ben Ito' }).click();
   await ana.getByRole('menuitem', { name: 'A New Page' }).click();
 
+  await expect(ben.locator('.toast', { hasText: 'Ana Lima shared “With Ben Ito” with you' })).toBeVisible(LIVE);
   for (const page of [ana, ben]) {
     await expect(liveTab(page)).toHaveCount(1, LIVE);
     await expect(title(page)).toHaveText('With Ben Ito', LIVE);

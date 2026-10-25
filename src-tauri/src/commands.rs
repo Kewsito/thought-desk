@@ -445,11 +445,16 @@ pub fn secret_remove(secrets: State<Secrets>, name: String) -> Result<()> {
     secrets.remove(&name)
 }
 
-/// A system notification (a friend request or invite while the window is in the background).
+/// A system notification (news from friends while the window is in the background).
+/// An empty body leaves out the second line.
 #[tauri::command(async)]
 pub fn notify(app: AppHandle, title: String, body: String) -> Result<()> {
     use tauri_plugin_notification::NotificationExt;
-    app.notification().builder().title(title).body(body).show().map_err(|e| Error(e.to_string()))
+    let mut note = app.notification().builder().title(title);
+    if !body.is_empty() {
+        note = note.body(body);
+    }
+    note.show().map_err(|e| Error(e.to_string()))
 }
 
 // ---------------------------------------------------------------- cowork

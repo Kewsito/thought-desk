@@ -25,7 +25,7 @@ import { account } from './account.svelte';
 import { api } from './api';
 import { cloud, type Friend, type LiveSession } from './cloud';
 import { buildExtensions } from './editor/extensions';
-import { announce, friends } from './friends.svelte';
+import { announce, friends, oneAtATime } from './friends.svelte';
 import type { JNode } from './markdown';
 import { docOf } from './page-actions';
 import { prefs } from './prefs.svelte';
@@ -457,16 +457,23 @@ class Cowork {
 
   /** Reads your sessions and catches up: starts the ones that became live,
    *  finishes the ones that ended, and tells you what's new. */
-  async refresh() {
+  refresh = oneAtATime(() => this.#refresh());
+
+  async #refresh() {
+    const following = this.#following;
     const before = new Map(this.rows.map((r) => [r.id, r]));
     const first = !this.#loaded;
+    let rows: LiveSession[];
     try {
-      this.rows = await (await cloud()).sessions();
-      this.#loaded = true;
+      rows = await (await cloud()).sessions();
     } catch (e) {
       console.warn('Live sessions: could not refresh', e);
       return;
     }
+    // Signed out, or someone else signed in, meanwhile.
+    if (this.#following !== following) return;
+    this.rows = rows;
+    this.#loaded = true;
     const me = account.user?.id;
     for (const row of this.rows) {
       const was = before.get(row.id);
@@ -478,7 +485,11 @@ class Cowork {
       }
       if (row.status === 'active' && !this.#held.has(row.id)) {
         const fresh = !first && was?.status !== 'active';
-        if (fresh && was && mine && row.kind === 'invite') ui.toast(`${this.otherName(row)} joined “${row.title || 'Untitled'}”`);
+        // They said yes: to your invite, or to your request, with a page of theirs.
+        if (fresh && was && mine) {
+          const page = `“${row.title || 'Untitled'}”`;
+          announce(row.kind === 'invite' ? `${this.otherName(row)} joined ${page}` : `${this.otherName(row)} shared ${page} with you`);
+        }
         void this.#start(row, fresh);
       }
       if ((row.status === 'ended' || row.status === 'declined' || row.status === 'cancelled') && (this.#held.has(row.id) || this.#pageOf(row.id) || prefs.coworkPages[row.id])) {
