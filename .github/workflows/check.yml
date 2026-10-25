@@ -81,8 +81,10 @@ jobs:
         working-directory: src-tauri
 
   # Drives the interface in Chromium against the fake backend (tests/e2e).
+  # A named Ubuntu: Playwright supports a new one only some time after GitHub
+  # makes it "latest".
   interface:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
