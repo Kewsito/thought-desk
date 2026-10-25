@@ -1,21 +1,29 @@
-// thoughtdesk.org: the download line's version, the tour's tabs, and the
-// header's hairline once the page scrolls.
+// thoughtdesk.org: the download buttons for the visitor's system, the tour's
+// tabs, and the header's hairline once the page scrolls.
 
-// The latest release, from the Worker (src/index.ts).
-fetch('/api/release')
-  .then((res) => (res.ok ? res.json() : null))
-  .then((release) => {
-    if (!release) return;
-    const size = `${(release.size / 1e6).toFixed(1)} MB`;
-    for (const el of document.querySelectorAll('[data-release]')) el.textContent = `Version ${release.version} · ${size} · Windows 10 and 11`;
-  })
-  .catch(() => {});
+// The system this computer runs, as the Worker's /download tells them apart
+// (src/index.ts: systemOf). An iPad says it's a Mac, but has a touch screen.
+const ua = navigator.userAgent;
+const system = /iPhone|iPad|Android|CrOS/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)
+  ? null
+  : /Macintosh|Mac OS X/.test(ua) ? 'mac' : /Linux/.test(ua) ? 'linux' : 'windows';
+const NAMES = { windows: 'Windows', mac: 'Mac', linux: 'Linux' };
+const FOR = { windows: 'Windows 10 and 11', mac: 'macOS, Apple silicon and Intel', linux: 'AppImage, for most Linux systems' };
 
-// Not on Windows: say so beside the download buttons.
-const platform = navigator.userAgentData?.platform ?? navigator.platform ?? '';
-if (!/^win/i.test(platform) && !/Windows/.test(navigator.userAgent)) {
-  for (const el of document.querySelectorAll('[data-os-note]')) el.hidden = false;
-}
+if (system) for (const el of document.querySelectorAll('[data-download-label]')) el.textContent = `Download for ${NAMES[system]}`;
+// A phone or a tablet: there's no app for it.
+else for (const el of document.querySelectorAll('[data-os-note]')) el.hidden = false;
+
+// The version and the size of this system's installer, from the Worker.
+if (system)
+  fetch('/api/release')
+    .then((res) => (res.ok ? res.json() : null))
+    .then((release) => {
+      const file = release?.installers?.[system];
+      if (!file) return;
+      for (const el of document.querySelectorAll('[data-release]')) el.textContent = `Version ${release.version} · ${(file.size / 1e6).toFixed(1)} MB · ${FOR[system]}`;
+    })
+    .catch(() => {});
 
 // Tabs, with arrow keys, Home and End as the ARIA pattern has them.
 for (const list of document.querySelectorAll('[role="tablist"]')) {
