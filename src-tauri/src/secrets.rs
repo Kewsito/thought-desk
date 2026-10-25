@@ -1,8 +1,10 @@
-//! Small secrets kept for the person on this computer: the sign-in. They live
-//! in the app's own folder, never the notes folder (which may be synced), one
-//! file each. On Windows each file is encrypted with DPAPI, tied to this
-//! Windows account: a copy taken to another computer or account is useless,
-//! and the WebView's storage never holds the sign-in in plain text.
+//! Small secrets kept for the person on this computer: the sign-in. On
+//! Windows they live in the app's own folder, never the notes folder (which
+//! may be synced), one file each, encrypted with DPAPI, tied to this Windows
+//! account: a copy taken to another computer or account is useless. macOS
+//! keeps them in the Keychain, and Linux in the Secret Service (GNOME
+//! Keyring, KWallet); where Linux has none running, they go in a file only
+//! this user can read. The WebView's storage never holds the sign-in.
 
 use crate::db::{Error, Result};
 use std::fs;
@@ -39,6 +41,10 @@ impl Secrets {
 
     pub fn get(&self, name: &str) -> Result<Option<String>> {
         let path = self.path(name)?;
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        if let Some(value) = keystore::get(name) {
+            return Ok(Some(value));
+        }
         let sealed = match fs::read(&path) {
             Ok(bytes) => bytes,
             Err(e) if e.kind() == ErrorKind::NotFound => return Ok(None),
@@ -56,15 +62,29 @@ impl Secrets {
 
     pub fn set(&self, name: &str, value: &str) -> Result<()> {
         let path = self.path(name)?;
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        if keystore::set(name, value) {
+            // A copy left from a time without a keystore goes.
+            let _ = fs::remove_file(&path);
+            return Ok(());
+        }
         fs::create_dir_all(&self.dir).map_err(|e| Error(e.to_string()))?;
         let sealed = seal(value.as_bytes()).ok_or_else(|| Error("Windows couldn't encrypt the sign-in".into()))?;
         // Written whole, then moved into place, so a crash never leaves half a file.
         let tmp = path.with_extension("tmp");
         fs::write(&tmp, sealed).map_err(|e| Error(e.to_string()))?;
+        // Only this user may read it (on Windows, the encryption does that).
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&tmp, fs::Permissions::from_mode(0o600)).map_err(|e| Error(e.to_string()))?;
+        }
         fs::rename(&tmp, &path).map_err(|e| Error(e.to_string()))
     }
 
     pub fn remove(&self, name: &str) -> Result<()> {
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        keystore::remove(name);
         match fs::remove_file(self.path(name)?) {
             Err(e) if e.kind() != ErrorKind::NotFound => Err(Error(e.to_string())),
             _ => Ok(()),
@@ -109,8 +129,31 @@ fn dpapi(input: &[u8], protect: bool) -> Option<Vec<u8>> {
     Some(bytes)
 }
 
-// Only Windows builds are shipped. Elsewhere (tests, a future build) the file
-// holds the value as it is, until that system's own keystore is wired in.
+/// The system's own keystore: the Keychain on macOS, the Secret Service on
+/// Linux. When it has nothing, or there's no keystore to use, the file is
+/// looked at instead.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod keystore {
+    use keyring::Entry;
+
+    /// Who the entries belong to in the keystore, as the app's identifier.
+    const SERVICE: &str = "app.thoughtdesk.desktop";
+
+    pub fn get(name: &str) -> Option<String> {
+        Entry::new(SERVICE, name).and_then(|e| e.get_password()).ok()
+    }
+
+    pub fn set(name: &str, value: &str) -> bool {
+        Entry::new(SERVICE, name).and_then(|e| e.set_password(value)).is_ok()
+    }
+
+    pub fn remove(name: &str) {
+        let _ = Entry::new(SERVICE, name).and_then(|e| e.delete_credential());
+    }
+}
+
+/// Outside Windows the file is the fallback, kept as it is: it's readable by
+/// this user only.
 #[cfg(not(windows))]
 fn seal(plain: &[u8]) -> Option<Vec<u8>> {
     Some(plain.to_vec())
@@ -134,14 +177,14 @@ mod tests {
     #[test]
     fn keeps_replaces_and_forgets_a_secret() {
         let (secrets, dir) = fresh();
-        assert_eq!(secrets.get("thoughtdesk.auth").unwrap(), None);
-        secrets.set("thoughtdesk.auth", r#"{"refresh_token":"r1"}"#).unwrap();
-        assert_eq!(secrets.get("thoughtdesk.auth").unwrap().as_deref(), Some(r#"{"refresh_token":"r1"}"#));
-        secrets.set("thoughtdesk.auth", "second").unwrap();
-        assert_eq!(secrets.get("thoughtdesk.auth").unwrap().as_deref(), Some("second"));
-        secrets.remove("thoughtdesk.auth").unwrap();
-        assert_eq!(secrets.get("thoughtdesk.auth").unwrap(), None);
-        secrets.remove("thoughtdesk.auth").unwrap();
+        assert_eq!(secrets.get("td-test.auth").unwrap(), None);
+        secrets.set("td-test.auth", r#"{"refresh_token":"r1"}"#).unwrap();
+        assert_eq!(secrets.get("td-test.auth").unwrap().as_deref(), Some(r#"{"refresh_token":"r1"}"#));
+        secrets.set("td-test.auth", "second").unwrap();
+        assert_eq!(secrets.get("td-test.auth").unwrap().as_deref(), Some("second"));
+        secrets.remove("td-test.auth").unwrap();
+        assert_eq!(secrets.get("td-test.auth").unwrap(), None);
+        secrets.remove("td-test.auth").unwrap();
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -149,12 +192,12 @@ mod tests {
     #[test]
     fn the_file_is_encrypted_and_a_damaged_one_is_forgotten() {
         let (secrets, dir) = fresh();
-        secrets.set("thoughtdesk.auth", "refresh-token-in-plain-sight").unwrap();
-        let file = dir.join("thoughtdesk.auth.bin");
+        secrets.set("td-test.auth", "refresh-token-in-plain-sight").unwrap();
+        let file = dir.join("td-test.auth.bin");
         let raw = fs::read(&file).unwrap();
         assert!(!raw.windows(13).any(|w| w == b"refresh-token"), "not stored in plain text");
         fs::write(&file, b"not something DPAPI made").unwrap();
-        assert_eq!(secrets.get("thoughtdesk.auth").unwrap(), None);
+        assert_eq!(secrets.get("td-test.auth").unwrap(), None);
         assert!(!file.exists(), "a file that can't be read is removed");
         let _ = fs::remove_dir_all(dir);
     }
