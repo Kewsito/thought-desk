@@ -33,12 +33,12 @@
 
     <main id="main" class="prose">
       <h1>Privacy Policy</h1>
-      <p class="updated">Last updated October 24, 2026</p>
+      <p class="updated">Last updated October 25, 2026</p>
 
       <div class="summary">
         <h2>In short</h2>
         <ul>
-          <li>Your notes are stored on your computer. We never receive them.</li>
+          <li>Your notes are stored on your computer. We never receive them, except the title of a page you invite a friend to write with you.</li>
           <li>The app has no analytics or ads. It only goes online to check for updates, and for online features you choose to use.</li>
           <li>If you make an account, we keep only what those features need: your sign-in, profile, friends and invitations.</li>
           <li>We don't sell your information.</li>
@@ -46,60 +46,80 @@
       </div>
 
       <h2>Who we are</h2>
-      <p>Thought Desk ("we") makes the Thought Desk app and runs thoughtdesk.org. This policy covers the app, this website and the optional online features. You can reach us at <a href="mailto:support@thoughtdesk.org">support@thoughtdesk.org</a>.</p>
+      <p>Thought Desk is made and run by Kusule, an individual developer ("we"). Kusule decides how the information described here is used, and is its controller. Email: <a href="mailto:support@thoughtdesk.org">support@thoughtdesk.org</a>.</p>
+      <p>This policy covers the Thought Desk app, thoughtdesk.org and the optional online features: accounts, friends and writing together.</p>
 
       <h2>Your notes</h2>
       <p>Your pages, databases, assignments, events, flashcards and files are stored on your computer, in a folder you choose. They aren't uploaded to us or to anyone else, so we can't see, analyse or sell them. Keeping them backed up is in your hands; you can export everything as Markdown at any time.</p>
+      <p>There's one exception. When you invite a friend to write a page with you, the invitation includes the page's title, so they know what it's about, and it's stored with the invitation. While you write together, the page passes between your computers through our relay, which doesn't keep it (see below).</p>
 
       <h2>What the app sends</h2>
       <ul>
         <li><strong>Update checks.</strong> When it starts, the app asks GitHub whether there's a new version, and downloads it if you choose to install it. GitHub sees your IP address, as with any download.</li>
         <li><strong>Pictures from the web.</strong> A picture you add from a web address is loaded from that website.</li>
+        <li><strong>Online features</strong>, if you use them, as described next.</li>
       </ul>
       <p>Nothing else. The app has no analytics, crash reporting, ads or trackers.</p>
 
       <h2>Accounts and writing together</h2>
-      <p>Friends and writing together, which are coming soon, need an account. Making one is optional. If you do:</p>
+      <p>Friends and writing together need an account. Making one is optional. If you do:</p>
       <ul>
-        <li><strong>Signing in</strong> is handled by Clerk. It keeps your email address, plus your name and profile picture if you sign in with Google or GitHub. It also records sign-in details such as your IP address and browser, to keep your account secure.</li>
-        <li><strong>Your profile, friends and invitations</strong> are stored with Supabase, in Frankfurt, Germany: your display name, @username and picture; your friends and friend requests; when you were last in the app; and your invitations to write together, including the title of the page.</li>
-        <li><strong>Writing together.</strong> While you and a friend write a page, its text passes between your computers through our relay on Cloudflare. The relay doesn't store it. The page is kept on both of your computers.</li>
+        <li><strong>Signing in</strong> is handled by Clerk. It keeps your email address, and your name and profile picture if you sign in with Google or GitHub. It also records sign-in details such as your IP address and browser, to keep your account secure. If you sign in with Google or GitHub, that service learns that you signed in to Thought Desk. That sign-in happens in your web browser, on Clerk's sign-in pages, which use cookies to complete it.</li>
+        <li><strong>Your profile, friends and invitations</strong> are stored with Supabase, in Frankfurt, Germany: your display name, @username and a link to your profile picture (the picture itself stays with Clerk; we don't copy it); your friends and friend requests; when you were last in the app; and your invitations to write together, including the title of the page.</li>
+        <li><strong>Writing together.</strong> While you and a friend write a page, its text passes between your computers through our relay on Cloudflare. The relay doesn't store it. Like any server, it sees your IP address and when you connect. The page is kept on both of your computers.</li>
       </ul>
-      <p>Your friends can see your profile and whether you're in the app. Someone who types your exact @username can see your name and picture, to send you a friend request. Nobody else can look you up or see your friends.</p>
+      <p>Your friends can see your profile, and whether you're in the app while you're signed in. There's no setting to hide that yet; signing out stops it. Someone who types your exact @username can see your name and picture, to send you a friend request. Nobody else can look you up or see your friends.</p>
 
       <h2>Buying Thought Desk</h2>
-      <p>If we offer paid plans, Polar (polar.sh) sells them for us as the merchant of record: Polar handles the payment, taxes and receipts. Polar and its payment provider, Stripe, receive your payment details; we never see your card number. We receive your name, email address, country and what you bought, so we can provide it and help with any problems.</p>
+      <p>If we offer paid plans, Polar (polar.sh) sells them for us as the merchant of record: Polar handles the payment, taxes and receipts, under its own <a href="https://polar.sh/legal/terms">terms</a> and <a href="https://polar.sh/legal/privacy">privacy policy</a>. Polar and its payment provider, Stripe (<a href="https://stripe.com/privacy">privacy policy</a>), receive your payment details; we never see your card number. We receive your name, email address, country and what you bought, so we can provide it and help with any problems.</p>
 
       <h2>This website</h2>
-      <p>thoughtdesk.org uses no cookies, analytics or trackers. It's hosted on Cloudflare, which processes your IP address and the pages you request in order to deliver the site and protect it from attacks. Downloads come from GitHub.</p>
+      <p>The pages of thoughtdesk.org use no cookies, analytics or trackers. The site is hosted on Cloudflare, which processes your IP address and the pages you request in order to deliver the site and protect it from attacks. Downloads come from GitHub.</p>
 
       <h2>Email</h2>
-      <p>If you write to us, we use your email address and message to reply, and keep them as long as we need to help you.</p>
+      <p>If you write to us, we use your email address and message to reply, and keep them for two years after our last exchange, unless we need them longer for a legal claim.</p>
 
       <h2>Who else handles your information</h2>
       <ul>
-        <li><strong>Clerk:</strong> signing in (United States).</li>
-        <li><strong>Supabase:</strong> profiles, friends and invitations (Germany).</li>
-        <li><strong>Cloudflare:</strong> this website and the relay for writing together (worldwide).</li>
-        <li><strong>GitHub:</strong> downloads and updates (United States).</li>
-        <li><strong>Polar and Stripe:</strong> payments, if you buy something.</li>
+        <li><strong>Clerk:</strong> signing in (United States). <a href="https://clerk.com/legal/privacy">Privacy policy</a></li>
+        <li><strong>Supabase:</strong> profiles, friends and invitations (stored in Germany). <a href="https://supabase.com/privacy">Privacy policy</a></li>
+        <li><strong>Cloudflare:</strong> this website, email to support@thoughtdesk.org and the relay for writing together (worldwide). <a href="https://www.cloudflare.com/privacypolicy/">Privacy policy</a></li>
+        <li><strong>GitHub:</strong> downloads and updates (United States). <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">Privacy statement</a></li>
+        <li><strong>Polar and Stripe:</strong> payments, if you buy something. <a href="https://polar.sh/legal/privacy">Polar</a>, <a href="https://stripe.com/privacy">Stripe</a></li>
       </ul>
-      <p>Each handles your information to provide its part of Thought Desk, under its own privacy policy. Some are in the United States and protect information sent there under their own data protection agreements. We don't sell your information or share it for advertising.</p>
+      <p>Each handles your information to provide its part of Thought Desk, under its own privacy policy and its data processing terms with us. We don't sell your information or share it for advertising.</p>
+
+      <h2>International transfers</h2>
+      <p>Some of these services are in the United States or work worldwide. When your information goes from the EU, the EEA or the UK to a country the European Commission (or the UK) hasn't recognised as protecting it adequately, it's protected by the EU-US Data Privacy Framework where the service is certified under it, and otherwise by the European Commission's Standard Contractual Clauses in that service's data processing terms, with the UK International Data Transfer Addendum for people in the UK.</p>
 
       <h2>Why we use it</h2>
-      <p>We use account information to provide the features you ask for. We use website and security logs because we have a legitimate interest in keeping Thought Desk running safely. If you buy something, we use your purchase details to provide it and to meet tax and accounting rules.</p>
+      <ul>
+        <li><strong>Your account, profile, friends, invitations and when you were last here,</strong> and passing pages between you and a friend: to provide the features you ask for (performance of a contract).</li>
+        <li><strong>Sign-in records, website and relay logs:</strong> to keep Thought Desk secure and working (our legitimate interest).</li>
+        <li><strong>Purchase records:</strong> to provide what you bought (performance of a contract) and to meet tax and accounting rules (legal obligation).</li>
+        <li><strong>Your emails:</strong> to answer you (our legitimate interest in helping you).</li>
+      </ul>
+
+      <h2>Security</h2>
+      <p>Everything the app and this website exchange with us and the services above travels encrypted (HTTPS and secure WebSockets). Your profile, friends and invitations are stored in Germany, and each person can read only their own and their friends' information. The relay checks that you're one of the two people in a session before it passes anything on. If a breach affects your information, we'll tell you, and the authorities where the law requires it.</p>
 
       <h2>How long we keep it</h2>
-      <p>Account information is kept while you have an account. To delete your account, email us from the address you sign in with, and we'll delete your profile, friends and invitations within 30 days. Purchase records are kept as long as tax law requires.</p>
+      <ul>
+        <li><strong>Your account</strong> is kept while you have it. To delete it, email us from the address you sign in with; within 30 days we delete your profile, friends and invitations (you disappear from your friends' lists), and your Clerk account with its sign-in records, except anything Clerk must keep by law under its own policy. Pages you wrote with friends stay on their computers. Deleting your account from inside the app is coming.</li>
+        <li><strong>When you were last in the app</strong> is overwritten each time you use it.</li>
+        <li><strong>Emails</strong> are kept for two years after our last exchange.</li>
+        <li><strong>Purchase records</strong> are kept as long as tax law requires.</li>
+        <li><strong>Website and relay logs</strong> are kept by Cloudflare for a short time, under its policy.</li>
+      </ul>
 
       <h2>Your rights</h2>
-      <p>You can ask for a copy of your information, ask us to correct or delete it, or object to how we use it, by emailing <a href="mailto:support@thoughtdesk.org">support@thoughtdesk.org</a>. If you're in the EU or the UK, you can also complain to your data protection authority.</p>
+      <p>You can ask us for a copy of your information, to correct it, to delete it, to restrict how we use it, to receive it in a portable format, or object to how we use it. Where we rely on your consent, you can withdraw it at any time. Email <a href="mailto:support@thoughtdesk.org">support@thoughtdesk.org</a>; we reply within one month. If you're in the EU, you can also complain to your data protection authority, and in the UK to the <a href="https://ico.org.uk/make-a-complaint/">Information Commissioner's Office</a>.</p>
 
       <h2>Children</h2>
-      <p>Accounts are for people aged 13 or older.</p>
+      <p>Accounts are for people aged 13 or older, or older where your country's law requires it (up to 16 in some EU countries). If we learn that an account belongs to someone younger, we delete it.</p>
 
       <h2>Changes</h2>
-      <p>If this policy changes, we'll update the date at the top. For important changes, we'll also tell you in the app.</p>
+      <p>If this policy changes, we'll update the date at the top. For important changes, we'll tell you in the app or by email at least 30 days before they take effect. Earlier versions are in the <a href="https://github.com/kusule1351-hue/thought-desk/commits/main/site/public/privacy.html">page's history</a>.</p>
     </main>
 
     <footer class="footer">
