@@ -1,6 +1,29 @@
-# Builds the Windows installer when a version tag is pushed (git tag v0.1.0
-# && git push origin v0.1.0) and attaches it to a draft GitHub release, to
-# check and publish by hand.
+# Builds the Windows installer when a version tag is pushed (git tag v0.7.0
+# && git push origin v0.7.0) and attaches it, with the update files, to a
+# draft GitHub release, to check and publish by hand. Run by hand (Actions →
+# Release → Run workflow), it builds and signs the same way and keeps the
+# files with the run instead.
+#
+# Code signing is SignPath's, free for open source (the policy is at
+# thoughtdesk.org/code-signing). It takes two rounds, because the installer
+# carries signed files inside it:
+#   1. Build the app and the installer. A signing hook
+#      (.github/scripts/sign-hook.mjs) hands out the app and the uninstaller.
+#   2. SignPath signs those two once the request is approved there.
+#   3. Build the installer again, around the signed two.
+#   4. SignPath signs the installer, after a second approval.
+#   5. Sign the update with the key installed copies trust, and write
+#      latest.json, which tells them about it.
+# SignPath checks that what it signs was built by this workflow, from this
+# repository. Until it's set up, rounds 2 and 4 are skipped and the release
+# is unsigned, as before. To set it up, in this repository's settings:
+#   - variable SIGNPATH_ORGANIZATION_ID: the SignPath organization's id;
+#   - secret SIGNPATH_API_TOKEN (in the "release" environment): the token of
+#     a SignPath user who may submit signing requests;
+#   - variables SIGNPATH_PROJECT_SLUG and SIGNPATH_POLICY_SLUG, if they
+#     aren't "thought-desk" and "release-signing".
+# The SignPath project needs the GitHub.com trusted build system and two
+# artifact configurations, "binaries" and "installer" (.github/signpath/).
 #
 # This job holds the key that signs updates, which every installed copy
 # trusts. So it waits for approval (the "release" environment's required
@@ -16,11 +39,16 @@ on:
 
 permissions:
   contents: write
+  # SignPath reads this run's artifacts, to check where they came from.
+  actions: read
 
 jobs:
   windows:
     runs-on: windows-latest
     environment: release
+    env:
+      SIGNING: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+      SIGN_HOOK_DIR: ${{ github.workspace }}\signing
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
@@ -39,22 +67,113 @@ jobs:
 
       - run: npm ci
 
-      - uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
+      - name: Read the version
+        run: |
+          $version = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          "VERSION=$version" >> $env:GITHUB_ENV
+
+      # Tauri runs the hook on each file it would sign. Its path goes in whole,
+      # since NSIS runs it from a folder of its own.
+      - name: Set up the signing hook
+        run: |
+          $hook = "$env:GITHUB_WORKSPACE/.github/scripts/sign-hook.mjs" -replace '\\', '/'
+          @{ bundle = @{ windows = @{ signCommand = @{ cmd = 'node'; args = @($hook, '%1') } } } } |
+            ConvertTo-Json -Depth 5 | Set-Content "$env:RUNNER_TEMP/signing.conf.json"
+
+      - name: Build the app and the installer
+        run: npx tauri build --bundles nsis --config "$env:RUNNER_TEMP/signing.conf.json"
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Signs the update, so installed apps only take real releases.
+          SIGN_HOOK: out
+
+      - name: Upload the app and the uninstaller for signing
+        id: binaries
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: unsigned-binaries
+          path: signing/out/
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Sign the app and the uninstaller (approve it in SignPath)
+        if: env.SIGNING == 'true'
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'thought-desk' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_POLICY_SLUG || 'release-signing' }}
+          artifact-configuration-slug: binaries
+          github-artifact-id: ${{ steps.binaries.outputs.artifact-id }}
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: signing/in
+          parameters: |
+            version: ${{ toJSON(env.VERSION) }}
+
+      - name: Keep them unsigned (SignPath isn't set up)
+        if: env.SIGNING != 'true'
+        run: Copy-Item signing/out signing/in -Recurse
+
+      - name: Build the installer again, around the signed app and uninstaller
+        run: npx tauri bundle --bundles nsis --config "$env:RUNNER_TEMP/signing.conf.json"
+        env:
+          SIGN_HOOK: in
+
+      - name: Upload the installer for signing
+        id: installer
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: unsigned-installer
+          path: src-tauri/target/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Sign the installer (approve it in SignPath)
+        if: env.SIGNING == 'true'
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'thought-desk' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_POLICY_SLUG || 'release-signing' }}
+          artifact-configuration-slug: installer
+          github-artifact-id: ${{ steps.installer.outputs.artifact-id }}
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: signing/installer
+          parameters: |
+            version: ${{ toJSON(env.VERSION) }}
+
+      - name: Keep it unsigned (SignPath isn't set up)
+        if: env.SIGNING != 'true'
+        run: |
+          New-Item -ItemType Directory signing/installer | Out-Null
+          Copy-Item src-tauri/target/release/bundle/nsis/*-setup.exe signing/installer/
+
+      - name: Sign the update and write latest.json
+        run: node .github/scripts/release-files.mjs (Get-ChildItem signing/installer/*-setup.exe).FullName release "$env:RUNNER_TEMP/notes.md"
+        env:
+          SIGNED: ${{ env.SIGNING }}
+          # Installed copies take only updates signed with this key.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        with:
-          # Also makes the signed update and latest.json, which installed apps check.
-          args: --config src-tauri/tauri.release.conf.json
-          includeUpdaterJson: true
-          updaterJsonPreferNsis: true
-          tagName: ${{ github.ref_name }}
-          releaseName: Thought Desk ${{ github.ref_name }}
-          releaseBody: |
-            **Download:** the `_x64-setup.exe` file below (Windows 10 and 11, 64-bit).
 
-            The installer isn't code-signed yet, so Windows may show "Windows protected your PC". Click **More info**, then **Run anyway**.
-          releaseDraft: true
-          prerelease: false
+      # With the run as well: a run by hand makes no release.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release
+          path: release/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Draft the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $files = (Get-ChildItem release).FullName
+          # Run again for the same tag: replace the files, keep the notes.
+          gh release view $env:GITHUB_REF_NAME *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $env:GITHUB_REF_NAME $files --clobber
+          } else {
+            gh release create $env:GITHUB_REF_NAME $files --draft --title "Thought Desk $env:GITHUB_REF_NAME" --notes-file "$env:RUNNER_TEMP/notes.md"
+          }
