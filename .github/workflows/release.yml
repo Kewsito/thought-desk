@@ -25,9 +25,10 @@
 # The SignPath project needs the GitHub.com trusted build system and two
 # artifact configurations, "binaries" and "installer" (.github/signpath/).
 #
-# The Mac app is signed with the Apple Developer account and notarized by
-# Apple, from these secrets in the "release" environment (until they're set,
-# it's unsigned):
+# The Mac app is signed with the Apple Developer account, then notarized by
+# Apple (its check can take hours the first times; the job waits it out),
+# from these secrets in the "release" environment (until they're set, it's
+# unsigned):
 #   - APPLE_CERTIFICATE: the "Developer ID Application" certificate with its
 #     private key, exported from Keychain Access as a .p12, in base64;
 #   - APPLE_CERTIFICATE_PASSWORD: the password the .p12 was exported with;
@@ -178,6 +179,8 @@ jobs:
   macos:
     runs-on: macos-latest
     environment: release
+    # Apple's check can take hours the first times (see Notarize below).
+    timeout-minutes: 330
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
@@ -197,22 +200,20 @@ jobs:
 
       - run: npm ci
 
-      # Tauri signs and notarizes when these are set, and builds an unsigned
-      # app when they aren't (macOS then asks people to right-click → Open).
+      # Tauri signs when these are set, and builds an unsigned app when they
+      # aren't (macOS then won't open it without extra steps). It's given only
+      # the certificate: Apple's check comes after, in a step of its own.
       - name: Apple signing, once it's set up
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           if [ -z "$APPLE_CERTIFICATE" ]; then
             echo "::warning::The Mac app isn't signed: add the Apple secrets (see the top of release.yml)."
             exit 0
           fi
-          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY; do
             echo "$name=${!name}" >> "$GITHUB_ENV"
           done
 
@@ -221,6 +222,42 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+      # Apple checks ("notarizes") the disk image and the signed app in it
+      # before Macs will open them. That takes minutes, or hours for a new
+      # developer account, so the wait outlasts a dropped connection: it picks
+      # the same submission up again. Its approval is then stapled to the disk
+      # image, so it opens even offline.
+      - name: Notarize the disk image
+        if: env.APPLE_SIGNING_IDENTITY != ''
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          dmgs=(src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg)
+          dmg="${dmgs[0]}"
+          auth=(--apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID")
+          id=""
+          for attempt in 1 2 3; do
+            id=$(xcrun notarytool submit "$dmg" "${auth[@]}" --output-format json | jq -r '.id // empty') && [ -n "$id" ] && break
+            echo "Sending to Apple didn't work (try $attempt), trying again"
+            sleep 60
+          done
+          [ -n "$id" ] || exit 1
+          echo "Apple's submission: $id"
+          for attempt in $(seq 1 8); do
+            xcrun notarytool wait "$id" "${auth[@]}" --timeout 30m && break
+            echo "No answer yet, or the connection dropped (try $attempt): asking again"
+            sleep 30
+          done
+          status=$(xcrun notarytool info "$id" "${auth[@]}" --output-format json | jq -r .status)
+          echo "Apple's answer: $status"
+          if [ "$status" != "Accepted" ]; then
+            xcrun notarytool log "$id" "${auth[@]}" || true
+            exit 1
+          fi
+          xcrun stapler staple "$dmg"
 
       - name: Gather the files
         run: |
