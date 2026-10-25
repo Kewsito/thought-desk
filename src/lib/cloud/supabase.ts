@@ -1,7 +1,8 @@
 /**
  * The real cloud: Supabase, for profiles, friends, sessions and live updates.
  * Signing in is Clerk's (clerk.ts): Supabase trusts the session tokens Clerk
- * issues, and every request carries one.
+ * issues, and every request carries one. Live updates come as signals over
+ * Realtime, which carries no sign-in (see signals).
  */
 
 import { createClient, type PostgrestError } from '@supabase/supabase-js';
@@ -63,19 +64,20 @@ function sessionError(e: PostgrestError): Error {
   return friendly(e);
 }
 
-/** How often Realtime renews its sign-in. A Clerk token lasts a minute and
- *  Realtime closes a channel the moment its token runs out, so it renews
- *  often, always to a token with time to spare (see clerk.sessionToken). */
-const HEARTBEAT = 10_000;
-
-type Channel = ReturnType<SupabaseCloud['client']['channel']>;
+type Channel = ReturnType<SupabaseCloud['signals']['channel']>;
 
 class SupabaseCloud implements Cloud {
-  readonly client = createClient(SUPABASE_URL, SUPABASE_KEY, {
-    accessToken: () => clerk.sessionToken(),
-    realtime: { heartbeatIntervalMs: HEARTBEAT },
-  });
-  #listeners = 0;
+  /** Requests, each with the Clerk session token. */
+  readonly client = createClient(SUPABASE_URL, SUPABASE_KEY, { accessToken: () => clerk.sessionToken() });
+  /** Realtime, with no sign-in at all: Realtime can't check sign-ins from
+   *  Clerk on a domain of its own (clerk.thoughtdesk.org,
+   *  supabase/realtime#1791), and what goes through it here needs none:
+   *  empty signals to an inbox only its owner knows the name of, and
+   *  wake-ups between the two people in a session. */
+  readonly signals = createClient(SUPABASE_URL, SUPABASE_KEY, { accessToken: async () => null });
+  /** Who's listening for changes, and the inbox they share. */
+  #listeners = new Set<(change: CloudChange) => void>();
+  #inbox: { user: string; stop: () => void } | null = null;
 
   /** In a browser (development): finishes a Google or GitHub sign-in that came back to this page. */
   finishRedirect = clerk.finishRedirect;
@@ -204,33 +206,39 @@ class SupabaseCloud implements Cloud {
   }
 
   subscribe(cb: (change: CloudChange) => void) {
-    let stop: (() => void) | null = null;
-    let stopped = false;
-    void this.user().then((me) => {
-      if (!me || stopped) return;
-      // New and changed rows that concern you (row-level security filters
-      // them again on the server). Not deletes: those reach every listener
-      // unfiltered, so a declined request or a removed friend shows within
-      // the minute instead (the lists refresh every minute anyway). Each
-      // listener gets a channel of its own: Realtime hands back an existing
-      // channel of the same name, which takes no new callbacks once joined.
-      stop = this.#keep(`mine:${me.id}:${++this.#listeners}`, (ch) => {
-        for (const [table, change, column] of [
-          ['friendships', 'friends', 'addressee'],
-          ['friendships', 'friends', 'requester'],
-          ['cowork_sessions', 'sessions', 'host'],
-          ['cowork_sessions', 'sessions', 'guest'],
-        ] as const) {
-          for (const event of ['INSERT', 'UPDATE'] as const)
-            ch.on('postgres_changes', { event, schema: 'public', table, filter: column + '=eq.' + me.id }, () => cb(change));
-        }
-        return ch;
-      }).stop;
-    });
+    this.#listeners.add(cb);
+    void this.#listen();
     return () => {
-      stopped = true;
-      stop?.();
+      this.#listeners.delete(cb);
+      if (this.#listeners.size) return;
+      this.#inbox?.stop();
+      this.#inbox = null;
     };
+  }
+
+  /** Listens on the signed-in person's inbox. Whenever a friendship or a
+   *  session of theirs changes, the database sends it an empty "friends" or
+   *  "sessions" signal (supabase/README.md), and the listeners fetch what
+   *  changed. Everyone listening shares one channel: Realtime hands back an
+   *  existing channel of the same name, which takes no new callbacks. */
+  async #listen() {
+    const me = await this.user();
+    if (!me || !this.#listeners.size || this.#inbox?.user === me.id) return;
+    this.#inbox?.stop();
+    const inbox = { user: me.id, stop: () => {} };
+    this.#inbox = inbox;
+    const { data: box, error } = await this.client.rpc('my_inbox');
+    if (this.#inbox !== inbox) return;
+    if (error || typeof box !== 'string') {
+      // No live updates this time: the lists still refresh every minute.
+      console.warn('Live updates: no inbox', error);
+      this.#inbox = null;
+      return;
+    }
+    const tell = (change: CloudChange) => () => {
+      for (const cb of this.#listeners) cb(change);
+    };
+    inbox.stop = this.#keep('inbox:' + box, (ch) => ch.on('broadcast', { event: 'friends' }, tell('friends')).on('broadcast', { event: 'sessions' }, tell('sessions'))).stop;
   }
 
   nudges(sessionId: string, onNudge: () => void) {
@@ -252,23 +260,18 @@ class SupabaseCloud implements Cloud {
   }
 
   /** A Realtime channel that comes back if it closes on its own, or if the
-   *  server turns down what it listens for (Realtime rejoins neither: one
-   *  whose sign-in ran out, say), sooner or later depending on how often it
-   *  has failed. */
-  #keep(name: string, setup: (ch: Channel) => Channel, params?: Parameters<SupabaseCloud['client']['channel']>[1]) {
+   *  server turns it down (Realtime rejoins neither), sooner or later
+   *  depending on how often it has failed. */
+  #keep(name: string, setup: (ch: Channel) => Channel, params?: Parameters<SupabaseCloud['signals']['channel']>[1]) {
     let current: Channel | null = null;
     let stopped = false;
     let wait = 1000;
     /** When the current channel joined (0: it hasn't). */
     let since = 0;
     let retry: ReturnType<typeof setTimeout> | undefined;
-    const open = async () => {
-      // A join carries whatever sign-in Realtime last had, which may be none
-      // (it asks when the app starts, before anyone signs in): bring it up
-      // to date first, or the server checks the channel as signed out.
-      await this.client.realtime.setAuth().catch(() => {});
+    const open = () => {
       if (stopped) return;
-      const ch = setup(this.client.channel(name, params));
+      const ch = setup(this.signals.channel(name, params));
       current = ch;
       ch.on('system', {}, (message: { status?: string }) => message.status === 'error' && retire(ch));
       ch.subscribe((status) => {
@@ -283,18 +286,18 @@ class SupabaseCloud implements Cloud {
       // Up for a while before this: start the waiting over.
       if (since && Date.now() - since > 60_000) wait = 1000;
       since = 0;
-      void this.client.removeChannel(ch).finally(() => {
+      void this.signals.removeChannel(ch).finally(() => {
         if (!stopped) retry = setTimeout(open, wait);
         wait = Math.min(wait * 2, 60_000);
       });
     };
-    void open();
+    open();
     return {
       current: () => current,
       stop: () => {
         stopped = true;
         clearTimeout(retry);
-        if (current) void this.client.removeChannel(current);
+        if (current) void this.signals.removeChannel(current);
         current = null;
       },
     };

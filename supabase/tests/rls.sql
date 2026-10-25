@@ -1,5 +1,5 @@
 -- Row-level security tests for the accounts, friends and sessions schema
--- (supabase/migrations/, as of *_accounts_on_clerk.sql).
+-- (supabase/migrations/, as of *_signal_changes_to_inboxes.sql).
 --
 -- Run the whole file as one script against a database that has the
 -- migrations: the Supabase SQL editor, psql, or the Supabase MCP execute_sql
@@ -76,6 +76,13 @@ $$;
 create function pg_temp.sid(label text) returns uuid
 language sql stable as $$
   select current_setting('rls_test.' || label)::uuid;
+$$;
+
+-- How many `kind` signals ('friends' or 'sessions') reached someone's inbox.
+create function pg_temp.signals(who text, kind text) returns bigint
+language sql stable as $$
+  select count(*) from realtime.messages m
+  where m.topic = 'inbox:' || current_setting('rls_test.inbox_' || who) and m.event = kind;
 $$;
 
 
@@ -162,6 +169,31 @@ $$;
 update public.profiles set username = 'ana' where id = 'user_ana';
 update public.profiles set username = 'ben', display_name = 'Ben Okafor' where id = 'user_ben';
 insert into public.presence (user_id) values ('user_ben'), ('user_cat');
+
+
+-- Inboxes: each person's own, for the signals that changes send -------------
+
+set local role authenticated;
+
+do $$
+declare
+  who text;
+  box uuid;
+begin
+  foreach who in array array['ana', 'ben', 'cat'] loop
+    perform set_config('request.jwt.claims', pg_temp.token(who), true);
+    box := public.my_inbox();
+    perform pg_temp.ok(box = public.my_inbox(), who || '''s inbox stays the same');
+    perform set_config('rls_test.inbox_' || who, box::text, true);
+  end loop;
+  perform pg_temp.ok(
+    (select count(distinct v) from unnest(array[current_setting('rls_test.inbox_ana'), current_setting('rls_test.inbox_ben'), current_setting('rls_test.inbox_cat')]) v) = 3,
+    'everyone has an inbox of their own');
+  perform pg_temp.fails('select count(*) from private.inboxes', '42501', 'nobody can read the inboxes, so nobody learns another''s');
+  perform set_config('request.jwt.claims', pg_temp.token('ana', '{"iss": "https://nbzojbfkkpeisitbkwpg.supabase.co/auth/v1"}'), true);
+  perform pg_temp.fails('select public.my_inbox()', '42501', 'a token Clerk didn''t issue gets no inbox');
+end;
+$$;
 
 
 -- Tokens Clerk didn't issue get nothing ---------------------------------------
@@ -622,15 +654,39 @@ end;
 $$;
 
 
+-- Every change above signalled the inboxes of its two people ----------------
+
+reset role;
+
+do $$
+begin
+  perform pg_temp.ok(pg_temp.signals('ben', 'friends') = 3,
+    'Ben heard of Ana''s request, his own acceptance and his unfriending (deletes included)');
+  perform pg_temp.ok(pg_temp.signals('ana', 'friends') >= 3, 'so did Ana, and of her other requests');
+  perform pg_temp.ok(pg_temp.signals('ana', 'sessions') > 0 and pg_temp.signals('ben', 'sessions') > 0,
+    'both hear of their invites, requests and how they ended');
+  perform pg_temp.ok(pg_temp.signals('cat', 'friends') + pg_temp.signals('cat', 'sessions') = 0,
+    'nothing reaches someone a change doesn''t concern');
+  perform pg_temp.ok(
+    (select bool_and(m.payload - 'id' = '{}'::jsonb and not m.private) from realtime.messages m where m.topic like 'inbox:%'),
+    'a signal carries nothing but its name, on a public channel');
+  perform pg_temp.ok(
+    not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename in ('friendships', 'cowork_sessions')),
+    'postgres_changes no longer sends these tables'' rows to every listener');
+end;
+$$;
+
+
 -- Deleting an account ----------------------------------------------------------
 
 -- Done by hand on request (see the privacy policy): deleting the profile
--- takes their friendships, presence and sessions with it.
+-- takes their friendships, presence, sessions and inbox with it.
 reset role;
 delete from public.profiles where id = 'user_ben';
 
 do $$
 begin
+  perform pg_temp.ok(not exists (select 1 from private.inboxes where user_id = 'user_ben'), 'their inbox goes');
   perform pg_temp.ok(not exists (select 1 from public.presence where user_id = 'user_ben'), 'their presence goes');
   perform pg_temp.ok(not exists (select 1 from public.cowork_sessions where 'user_ben' in (host, guest)), 'their sessions go');
   perform pg_temp.ok(not exists (select 1 from public.friendships where 'user_ben' in (requester, addressee)), 'their friendships go');
@@ -661,6 +717,7 @@ begin
   perform pg_temp.fails($q$select public.end_session(pg_temp.sid('after_unfriend'))$q$,
     '42501', 'anon cannot call end_session');
   perform pg_temp.fails('select private.me()', '42501', 'anon cannot call private.me');
+  perform pg_temp.fails('select public.my_inbox()', '42501', 'anon cannot call my_inbox');
   perform pg_temp.fails('select public.rls_auto_enable()', '42501', 'anon cannot call rls_auto_enable');
 end;
 $$;

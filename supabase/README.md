@@ -39,6 +39,7 @@ Signed-out callers (`anon`) can't read or write any of these tables, or call any
 | `find_profile(name)` | Finds someone by their exact username. Case, surrounding spaces and one leading `@` don't matter. Returns `id, username, display_name, avatar_url`, and never returns you. At most 100 lookups an hour per person. |
 | `are_friends(a, b)` | True when `a` and `b` are accepted friends. It answers only for pairs that include you; for anyone else's pair it says false. |
 | `touch_presence()` | Sets your `seen_at` to now. Call it every so often while the app is open. |
+| `my_inbox()` | Your inbox's id, made the first time you ask: the Realtime channel `inbox:<id>` gets a signal whenever one of your friendships or sessions changes (see [Realtime](#realtime)). Nobody else can read it. |
 | `respond_session(session_id, accept, page_title)` | Accepts or declines a pending session. The guest answers an invite and the host answers a request. Accepting a request needs `page_title`, which becomes the session's `title`, and accepting either kind needs the two to still be friends. Returns the updated row. |
 | `end_session(session_id)` | Either person ends an `active` session (`ended`). Whoever sent a `pending` one cancels it (`cancelled`). Returns the updated row. |
 
@@ -58,11 +59,15 @@ A pending session expires after an hour. `respond_session` refuses a stale one w
 
 ### Realtime
 
-`friendships` and `cowork_sessions` are in the `supabase_realtime` publication. Inserts and updates reach only the people in the row. Deletes don't: Realtime can't check RLS for a row that is gone, so a DELETE on `friendships` goes to every signed-in subscriber of that table, carrying the row's primary key. That key is an opaque `id` (migration `friendships_opaque_key`), so it says nothing about who; `tests/rls.sql` checks that it stays that way. The app listens only for inserts and updates, and refreshes its lists every minute, which is when a decline or an unfriending shows up on the other side.
+Live updates are signals, not rows. Whenever a friendship or a session changes (insert, update or delete), a trigger sends an empty broadcast named `friends` or `sessions` to the inbox of each of the two people in it: a public Realtime channel called `inbox:<uuid>`, where the uuid is random and only its owner can read it (`my_inbox()`, kept in `private.inboxes`). The app listens on its inbox with no sign-in and fetches what changed with its own token, as it would anyway; it also refreshes its lists every minute.
+
+Why not `postgres_changes`: it checks each listener's sign-in, and Realtime can't check sign-ins from Clerk on a domain of its own ([supabase/realtime#1791](https://github.com/supabase/realtime/issues/1791)), so in production the updates never came. It also sent a deleted row's key to every listener. Neither table is in the `supabase_realtime` publication any more (`tests/rls.sql` checks that). The wake-ups between the two people in a live session (`nudge:<session id>`) are public broadcasts too, sent by the apps.
+
+Only the database can send these signals: `realtime.messages` has no policies, so signed-in users can't write to it, and `private.signal_change()` runs as its owner. Someone who learned an inbox's name could listen to it, or send it signals of their own; they would learn only when that person's friends or sessions changed, and could make their app refresh its lists.
 
 ## Apply migrations
 
-All five migrations in `migrations/` are applied to `thought-desk-europe`: `accounts_friends_sessions` (the schema), `friendships_opaque_key` (an opaque key for friendships, see [Realtime](#realtime)), `harden_avatars_requests_lookups` (avatars set by sign-up alone, from known picture hosts; at most 20 friend requests waiting and 50 sent a day; at most 100 username lookups an hour), `limit_logs_primary_keys` (keys for the two logs those limits keep) and `accounts_on_clerk` (accounts move to Clerk: the tables rebuilt with Clerk's text ids, `private.me()` and `ensure_profile()` in place of `auth.uid()` and the sign-up trigger, with the same rules and limits). To change the schema, add a new migration; never edit one that has been applied.
+The migrations in `migrations/` are applied to `thought-desk-europe`: `accounts_friends_sessions` (the schema), `friendships_opaque_key` (an opaque key for friendships, see [Realtime](#realtime)), `harden_avatars_requests_lookups` (avatars set by sign-up alone, from known picture hosts; at most 20 friend requests waiting and 50 sent a day; at most 100 username lookups an hour), `limit_logs_primary_keys` (keys for the two logs those limits keep) and `accounts_on_clerk` (accounts move to Clerk: the tables rebuilt with Clerk's text ids, `private.me()` and `ensure_profile()` in place of `auth.uid()` and the sign-up trigger, with the same rules and limits) and `signal_changes_to_inboxes` (live updates as signals to private inboxes, see [Realtime](#realtime)). To change the schema, add a new migration; never edit one that has been applied.
 
 With the [Supabase CLI](https://supabase.com/docs/guides/cli):
 
@@ -97,10 +102,11 @@ It isn't a pgTAP file, so `supabase test db` won't run it.
 
 ## Security advisor
 
-The performance advisor flags only indexes no query has used yet. The security advisor flags five functions with *Signed-In Users Can Execute SECURITY DEFINER Function* (lint 0029), and the two logs the limits keep for having no policies (on purpose: only the functions use them). The five are the RPCs the app calls, and each needs to bypass RLS on purpose:
+The performance advisor flags only indexes no query has used yet. The security advisor flags six functions with *Signed-In Users Can Execute SECURITY DEFINER Function* (lint 0029), and the two logs the limits keep and `private.inboxes` for having no policies (on purpose: only the functions use them). The six are the RPCs the app calls, and each needs to bypass RLS on purpose:
 
 - `ensure_profile` makes the caller's own profile, which nobody can insert directly, from the caller's token alone.
-- `find_profile` has to find a stranger whose profile RLS hides. It returns four columns for one exact username, never the caller, and nothing when signed out.
+- `find_profile` has to find a stranger whose profile RLS hides.
+- `my_inbox` makes and reads the caller's own inbox, in a table nobody can read. It returns four columns for one exact username, never the caller, and nothing when signed out.
 - `touch_presence` writes `presence`, which has no write policies so nobody can set their own `seen_at`. It writes only the caller's row, with the server's time.
 - `respond_session` and `end_session` are the only way a session changes, since `cowork_sessions` has no update policy. They check who may make each change.
 
@@ -112,7 +118,6 @@ On request (the privacy policy says how): delete the user in the Clerk dashboard
 
 ## Known limits
 
-- **Realtime deletes on `friendships` reach every listener**, carrying only the opaque `id` key (see [Realtime](#realtime)): they reveal that some friendship ended, not whose.
 - **Unfriending doesn't end sessions.** It stops new invites and requests, and a pending one can no longer be accepted, but an active session runs until someone ends it.
 - **Clerk's development instance is trusted alongside production** until the release. Remove it then, from Third-Party Auth and from `private.me()` with a new migration (see [SETUP.md](SETUP.md)): anyone can sign up there with Clerk's test addresses, which need no real email.
 - **`service_role` can't read or write these tables.** This project's default privileges don't give `service_role` select, insert, update or delete on new tables, and the migration doesn't add them, because nothing needs them: the app and the relay use each user's own token. If a server ever needs the service key here, grant it explicitly in a new migration.
