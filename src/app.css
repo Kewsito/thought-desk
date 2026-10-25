@@ -51,6 +51,8 @@
 :root {
   /* Layout */
   --titlebar-h: 48px;
+  /* Room for the window buttons macOS draws at the top left (none elsewhere). */
+  --traffic-lights: 0px;
   --page-width: 708px;
   --page-pad: clamp(48px, 9vw, 112px);
 
@@ -2151,4 +2153,10 @@ select.pop-input {
   outline: 2px solid var(--focus);
   outline-offset: 4px;
   border-radius: var(--r-md);
+}
+
+/* On a Mac the window's buttons are macOS's own, over the top-left corner
+   (tauri.macos.conf.json places them in the middle of the title bar). */
+:root.mac {
+  --traffic-lights: 72px;
 }

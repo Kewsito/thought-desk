@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { MOD } from '../platform';
   import type { Editor } from '@tiptap/core';
   import { BubbleMenuPlugin } from '@tiptap/extension-bubble-menu';
   import { NodeSelection } from '@tiptap/pm/state';
@@ -139,18 +140,18 @@
       <Icon name="chevron-down" size={12} stroke={2.2} />
     </button>
     <span class="sep"></span>
-    <button class="fmt" class:on={active.bold} onmousedown={keep} onclick={() => editor.chain().focus().toggleBold().run()} data-tip="Bold" data-tip-key="Ctrl+B"><Icon name="bold" stroke={2.3} /></button>
-    <button class="fmt" class:on={active.italic} onmousedown={keep} onclick={() => editor.chain().focus().toggleItalic().run()} data-tip="Italic" data-tip-key="Ctrl+I"><Icon name="italic" stroke={2.1} /></button>
-    <button class="fmt" class:on={active.underline} onmousedown={keep} onclick={() => editor.chain().focus().toggleUnderline().run()} data-tip="Underline" data-tip-key="Ctrl+U"><Icon name="underline" stroke={2.1} /></button>
-    <button class="fmt" class:on={active.strike} onmousedown={keep} onclick={() => editor.chain().focus().toggleStrike().run()} data-tip="Strikethrough" data-tip-key="Ctrl+Shift+S"><Icon name="strike" stroke={2.1} /></button>
-    <button class="fmt" class:on={active.code} onmousedown={keep} onclick={() => editor.chain().focus().toggleCode().run()} data-tip="Inline code" data-tip-key="Ctrl+E"><Icon name="code" stroke={2.1} /></button>
-    <button class="fmt" onmousedown={keep} onclick={() => editor.chain().focus().insertInlineMath().run()} data-tip="Math" data-tip-key="Ctrl+Shift+E"><Icon name="function" stroke={2.1} /></button>
-    <button class="fmt" class:on={active.highlight} onmousedown={keep} onclick={() => editor.chain().focus().toggleHighlight().run()} data-tip="Highlight" data-tip-key="Ctrl+Shift+H"><Icon name="highlight" stroke={2} /></button>
+    <button class="fmt" class:on={active.bold} onmousedown={keep} onclick={() => editor.chain().focus().toggleBold().run()} data-tip="Bold" data-tip-key="{MOD}+B"><Icon name="bold" stroke={2.3} /></button>
+    <button class="fmt" class:on={active.italic} onmousedown={keep} onclick={() => editor.chain().focus().toggleItalic().run()} data-tip="Italic" data-tip-key="{MOD}+I"><Icon name="italic" stroke={2.1} /></button>
+    <button class="fmt" class:on={active.underline} onmousedown={keep} onclick={() => editor.chain().focus().toggleUnderline().run()} data-tip="Underline" data-tip-key="{MOD}+U"><Icon name="underline" stroke={2.1} /></button>
+    <button class="fmt" class:on={active.strike} onmousedown={keep} onclick={() => editor.chain().focus().toggleStrike().run()} data-tip="Strikethrough" data-tip-key="{MOD}+Shift+S"><Icon name="strike" stroke={2.1} /></button>
+    <button class="fmt" class:on={active.code} onmousedown={keep} onclick={() => editor.chain().focus().toggleCode().run()} data-tip="Inline code" data-tip-key="{MOD}+E"><Icon name="code" stroke={2.1} /></button>
+    <button class="fmt" onmousedown={keep} onclick={() => editor.chain().focus().insertInlineMath().run()} data-tip="Math" data-tip-key="{MOD}+Shift+E"><Icon name="function" stroke={2.1} /></button>
+    <button class="fmt" class:on={active.highlight} onmousedown={keep} onclick={() => editor.chain().focus().toggleHighlight().run()} data-tip="Highlight" data-tip-key="{MOD}+Shift+H"><Icon name="highlight" stroke={2} /></button>
     <button class="fmt" onmousedown={keep} onclick={() => (mode = 'color')} data-tip="Color" aria-label="Color">
       <span class="glyph swatch-ink" class:text={!!active.textColor} class:tint={!!active.highlightColor && active.highlightColor !== 'default'} data-ink={active.textColor ?? active.highlightColor}>A</span>
     </button>
     <span class="sep"></span>
-    <button class="fmt link" class:on={active.link} onmousedown={keep} onclick={startLink} data-tip="Link" data-tip-key="Ctrl+K"><Icon name="link" stroke={2} /><span>Link</span></button>
+    <button class="fmt link" class:on={active.link} onmousedown={keep} onclick={startLink} data-tip="Link" data-tip-key="{MOD}+K"><Icon name="link" stroke={2} /><span>Link</span></button>
   {:else if mode === 'color'}
     <div class="colors">
       <div class="color-row" role="group" aria-label="Text color">

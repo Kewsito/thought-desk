@@ -1,6 +1,7 @@
 /** Menu actions for a page, shared by the sidebar and the title bar. */
 
 import { generateJSON, type AnyExtension } from '@tiptap/core';
+import { MOD } from './platform';
 import { api } from './api';
 import { toMarkdown, type JNode } from './markdown';
 import { titleOf } from './editor/page-link';
@@ -108,7 +109,7 @@ function databaseMenuItems(id: string, sidebar: boolean): MenuItem[] {
   const view = databases.view(id, prefs.dbViews[id]);
   return [
     { label: page.favorite ? 'Remove from Favorites' : 'Add to Favorites', icon: 'star', action: () => store.toggleFavorite(id) },
-    { label: 'Open in New Tab', icon: 'plus', hint: 'Ctrl+click', action: () => void tabs.openPage(id) },
+    { label: 'Open in New Tab', icon: 'plus', hint: `${MOD}+click`, action: () => void tabs.openPage(id) },
     { label: 'Open to the Side', icon: 'split', hint: 'Alt+click', action: () => split.show(id) },
     ...(sidebar
       ? [
@@ -142,7 +143,7 @@ export function pageMenuItems(id: string, opts: { words?: number; sidebar?: bool
       icon: 'star',
       action: () => store.toggleFavorite(id),
     },
-    { label: 'Open in New Tab', icon: 'plus', hint: 'Ctrl+click', action: () => void tabs.openPage(id) },
+    { label: 'Open in New Tab', icon: 'plus', hint: `${MOD}+click`, action: () => void tabs.openPage(id) },
     { label: 'Open to the Side', icon: 'split', hint: 'Alt+click', action: () => split.show(id) },
     cowork.isLive(id)
       ? { label: 'Live Session…', icon: 'user', hint: 'writing together', action: () => (ui.liveSheet = id) }

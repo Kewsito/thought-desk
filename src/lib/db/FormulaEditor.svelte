@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { MOD } from '../platform';
   /**
    * Writes a formula: properties and functions are suggested as you type
    * ({ for a property), the result for a real row shows live, and errors
@@ -218,7 +219,7 @@
     </div>
   </div>
   <div class="modal-foot">
-    <span><kbd>Ctrl</kbd> <kbd>Enter</kbd> to save</span>
+    <span><kbd>{MOD}</kbd> <kbd>Enter</kbd> to save</span>
     <div class="actions">
       <button class="btn" onclick={onclose}>Cancel</button>
       <button class="btn primary" onclick={save}>Done</button>

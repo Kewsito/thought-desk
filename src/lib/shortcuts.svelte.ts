@@ -2,9 +2,10 @@
  * Keyboard shortcuts: the commands that have one, their defaults, and the
  * user's own choices (Settings → Keyboard). A shortcut is written as
  * modifiers then a key code, e.g. "Mod+Shift+KeyL" or "Alt+ArrowLeft"; "Mod"
- * is Ctrl. Key codes name physical keys, so they work on any layout.
+ * is Ctrl, or Cmd on a Mac. Key codes name physical keys, so they work on any layout.
  */
 
+import { ALT, MOD, isMac } from './platform';
 import { prefs } from './prefs.svelte';
 
 export type ShortcutId =
@@ -103,10 +104,10 @@ export const RESERVED: Record<string, string> = {
 export const EDITOR_KEYS: { label: string; keys: string[][] }[] = [
   { label: 'Insert a block', keys: [['/']] },
   { label: 'Link a page, assignment or file', keys: [['@']] },
-  { label: 'Add a link to selected text', keys: [['Ctrl', 'K']] },
-  { label: 'Bold, italic, underline', keys: [['Ctrl', 'B'], ['Ctrl', 'I'], ['Ctrl', 'U']] },
-  { label: 'Duplicate block', keys: [['Ctrl', 'D']] },
-  { label: 'Inline math (or turn selected text into math)', keys: [['Ctrl', 'Shift', 'E']] },
+  { label: 'Add a link to selected text', keys: [[MOD, 'K']] },
+  { label: 'Bold, italic, underline', keys: [[MOD, 'B'], [MOD, 'I'], [MOD, 'U']] },
+  { label: 'Duplicate block', keys: [[MOD, 'D']] },
+  { label: 'Inline math (or turn selected text into math)', keys: [[MOD, 'Shift', 'E']] },
   { label: 'Inline math as you type', keys: [['$', 'x^2', '$']] },
   { label: 'In a formula: suggestions, next gap, done', keys: [['\\'], ['Tab'], ['Enter']] },
   { label: 'Indent list item', keys: [['Tab'], ['Shift', 'Tab']] },
@@ -131,7 +132,9 @@ const MODIFIER_CODES = new Set(['ControlLeft', 'ControlRight', 'ShiftLeft', 'Shi
 export function comboOf(e: KeyboardEvent): string | null {
   if (MODIFIER_CODES.has(e.code) || !e.code) return null;
   const parts: string[] = [];
-  if (e.ctrlKey || e.metaKey) parts.push('Mod');
+  // On a Mac, Ctrl keeps its own uses (Ctrl+A goes to the start of a line).
+  if (isMac ? e.metaKey : e.ctrlKey || e.metaKey) parts.push('Mod');
+  if (isMac && e.ctrlKey) parts.push('Ctrl');
   if (e.altKey) parts.push('Alt');
   if (e.shiftKey) parts.push('Shift');
   parts.push(e.code);
@@ -139,7 +142,8 @@ export function comboOf(e: KeyboardEvent): string | null {
 }
 
 const KEY_NAMES: Record<string, string> = {
-  Mod: 'Ctrl',
+  Mod: MOD,
+  Alt: ALT,
   Backslash: '\\',
   Slash: '/',
   Comma: ',',

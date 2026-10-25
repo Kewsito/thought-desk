@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { MOD } from '../platform';
   import Icon from '../components/Icon.svelte';
   import Modal from '../components/Modal.svelte';
   import PageIcon from '../components/PageIcon.svelte';
@@ -225,7 +226,7 @@
 
   <footer class="modal-foot">
     {#if history.length}
-      <button class="btn small undo" onclick={undo} disabled={busy} data-tip="Take back the last answer" data-tip-key="Ctrl Z">
+      <button class="btn small undo" onclick={undo} disabled={busy} data-tip="Take back the last answer" data-tip-key="{MOD} Z">
         <Icon name="undo" size={14} stroke={2} /> Undo
       </button>
     {:else if card}

@@ -8,6 +8,7 @@
 </script>
 
 <script lang="ts">
+  import { MOD } from '../platform';
   /**
    * Editing a formula's LaTeX: the formula itself updates as you type (the
    * caller draws it), with suggestions after a backslash, Tab between the
@@ -307,7 +308,7 @@
       <Icon name="sigma" size={13} /> Symbols
     </button>
     <span class="hint">
-      {#if display}<kbd>Ctrl</kbd><kbd>Enter</kbd> done · <kbd>Tab</kbd> next slot{:else}<kbd>Enter</kbd> done · <kbd>Tab</kbd> next slot{/if}
+      {#if display}<kbd>{MOD}</kbd><kbd>Enter</kbd> done · <kbd>Tab</kbd> next slot{:else}<kbd>Enter</kbd> done · <kbd>Tab</kbd> next slot{/if}
     </span>
   </div>
 </div>

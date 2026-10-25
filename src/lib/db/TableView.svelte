@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { MOD } from '../platform';
   /**
    * The table: a spreadsheet you can type into.
    *
@@ -653,7 +654,7 @@
                 <Icon name="corner-down-right" size={12} />
               </button>
             {/if}
-            <button class="open" tabindex="-1" onclick={() => store.open(row.id)} data-tip="Open as a page" data-tip-key="Ctrl+Enter">
+            <button class="open" tabindex="-1" onclick={() => store.open(row.id)} data-tip="Open as a page" data-tip-key="{MOD}+Enter">
               <Icon name="expand" size={12} /> Open
             </button>
           </span>

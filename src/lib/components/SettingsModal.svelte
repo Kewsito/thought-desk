@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { isMac } from '../platform';
   import { onMount } from 'svelte';
   import Icon from './Icon.svelte';
   import Modal from './Modal.svelte';
@@ -353,7 +354,7 @@
       <div class="group-row">
         <div class="row-label">
           Zoom
-          <small>Everything bigger or smaller, also with Ctrl and the scroll wheel</small>
+          <small>Everything bigger or smaller, also with {isMac ? 'a pinch on the trackpad' : 'Ctrl and the scroll wheel'}</small>
         </div>
         <div class="stepper" role="group" aria-label="Zoom">
           <button onclick={zoomOut} disabled={prefs.zoom <= MIN_ZOOM} aria-label="Zoom out" data-tip="Zoom out" data-tip-key={shortcuts.label('zoomOut')}><Icon name="minus" size={14} stroke={2} /></button>

@@ -2,6 +2,7 @@ import { Extension, type Editor, type Range } from '@tiptap/core';
 import { PluginKey } from '@tiptap/pm/state';
 import Suggestion from '@tiptap/suggestion';
 import { clock } from '../clock.svelte';
+import { MOD } from '../platform';
 import { planner } from '../planner.svelte';
 import { store } from '../store.svelte';
 import { ui } from '../ui.svelte';
@@ -165,7 +166,7 @@ export const SLASH_ITEMS: MenuEntry[] = [
     title: 'Inline Math',
     description: 'A formula within the sentence',
     icon: 'function',
-    hint: 'Ctrl+Shift+E',
+    hint: `${MOD}+Shift+E`,
     keywords: 'equation latex tex formula katex inline',
     run: (e, r) => clear(e, r).insertInlineMath().run(),
   },

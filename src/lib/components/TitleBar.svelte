@@ -4,6 +4,7 @@
   import { onMount } from 'svelte';
   import Icon from './Icon.svelte';
   import WindowControls from './WindowControls.svelte';
+  import { isMac } from '../platform';
   import { changeLook } from '../look-transition';
   import { drag, dragLater, endDrag, pageDragImage } from './TreeItem.svelte';
   import { prefs } from '../prefs.svelte';
@@ -111,7 +112,7 @@
   }
 </script>
 
-<header class="titlebar" class:scrolled class:tabbed={tabs.list.length > 1} data-tauri-drag-region>
+<header class="titlebar" class:scrolled class:tabbed={tabs.list.length > 1} class:bare={!prefs.sidebarOpen} data-tauri-drag-region>
   <div class="nav">
     {#if !prefs.sidebarOpen}
       <button class="icon-btn" onclick={() => (prefs.sidebarOpen = true)} data-tip="Show sidebar" data-tip-key={shortcuts.label('sidebar')}>
@@ -223,10 +224,14 @@
     </button>
   </div>
   <span class="divider"></span>
-  <WindowControls />
+  {#if !isMac}<WindowControls />{/if}
 </header>
 
 <style>
+  /* With the sidebar hidden, the title bar holds the corner macOS draws its window buttons in. */
+  .titlebar.bare {
+    padding-left: var(--traffic-lights);
+  }
   .titlebar {
     position: relative;
     height: var(--titlebar-h);

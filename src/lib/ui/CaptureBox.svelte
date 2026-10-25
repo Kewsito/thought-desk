@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { MOD } from '../platform';
   /** Type something, pick what it is, press Enter. Used on Home and in the capture sheet. */
   import { onMount } from 'svelte';
   import Icon from '../components/Icon.svelte';
@@ -99,7 +100,7 @@
   {#if inline}
     <p class="hint">
       <Icon name="bolt" size={12} stroke={2} />
-      Press <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>Space</kbd> anywhere to capture without opening the app first.
+      Press <kbd>{MOD}</kbd><kbd>Shift</kbd><kbd>Space</kbd> anywhere to capture without opening the app first.
     </p>
   {/if}
 </div>

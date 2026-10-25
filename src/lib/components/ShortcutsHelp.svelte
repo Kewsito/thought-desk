@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { MOD } from '../platform';
   /**
    * Every keyboard shortcut on one sheet (Ctrl+/). The app's own shortcuts
    * show the keys the user picked; "Change shortcuts" opens Settings there.
@@ -14,7 +15,7 @@
     { label: 'Next cell', keys: [['Tab']] },
     { label: 'New line in text', keys: [['Shift', 'Enter']] },
     { label: 'Cancel the edit', keys: [['Esc']] },
-    { label: 'Undo a change', keys: [['Ctrl', 'Z']] },
+    { label: 'Undo a change', keys: [[MOD, 'Z']] },
   ];
 
   const close = () => (ui.shortcutsHelp = false);
@@ -96,7 +97,7 @@
     </div>
 
     <div class="foot">
-      <span>Open this sheet any time with <kbd>Ctrl</kbd><kbd>/</kbd></span>
+      <span>Open this sheet any time with <kbd>{MOD}</kbd><kbd>/</kbd></span>
       <button class="btn small raised" onclick={customize}><Icon name="settings" size={13} /> Change Shortcuts</button>
     </div>
   </div>

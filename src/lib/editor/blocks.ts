@@ -1,6 +1,7 @@
 /** Block-level actions used by the block menu and the bubble menu. */
 
 import type { Editor } from '@tiptap/core';
+import { MOD } from '../platform';
 import { TextSelection } from '@tiptap/pm/state';
 import type { MenuItem } from '../ui.svelte';
 import type { BlockTarget } from './block-handle';
@@ -114,7 +115,7 @@ export function blockMenuItems(editor: Editor, target: BlockTarget): MenuItem[] 
     {
       label: 'Duplicate',
       icon: 'copy',
-      hint: 'Ctrl+D',
+      hint: `${MOD}+D`,
       action: () => {
         const { tr } = editor.state;
         editor.view.dispatch(tr.insert(pos + node.nodeSize, node));

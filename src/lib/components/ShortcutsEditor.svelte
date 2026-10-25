@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ALT, MOD } from '../platform';
   /**
    * Settings → Keyboard: every command's shortcut, which can be changed by
    * clicking it and pressing new keys. Esc cancels, Backspace removes it.
@@ -41,7 +42,7 @@
     const hasMod = /^(Mod|Alt)\+/.test(combo);
     const fKey = /(^|\+)F\d{1,2}$/.test(combo);
     if (!hasMod && !fKey && !def.bare) {
-      note = { id, text: 'Add Ctrl or Alt, so it doesn’t get in the way of typing', error: true };
+      note = { id, text: `Add ${MOD} or ${ALT}, so it doesn’t get in the way of typing`, error: true };
       return;
     }
     const clash = shortcuts.conflict(id, combo);
