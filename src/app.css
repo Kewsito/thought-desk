@@ -1198,6 +1198,18 @@ html.printing .prose > :is(ul, ol) > li {
   color: white;
   white-space: nowrap;
   user-select: none;
+  /* Shown only while they type or move (cowork.svelte.ts), so it doesn't
+     sit over the line above. */
+  opacity: 0;
+  transform: translateY(2px);
+  transition:
+    opacity 300ms var(--ease),
+    transform 300ms var(--ease);
+}
+.collaboration-carets__caret.awake .collaboration-carets__label {
+  opacity: 1;
+  transform: none;
+  transition-duration: 120ms;
 }
 .collaboration-carets__selection {
   opacity: 0.25;

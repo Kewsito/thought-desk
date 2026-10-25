@@ -92,6 +92,11 @@ test('invite, join, write together in a new tab, end: both keep the page', async
     await expect(editor(ana)).toContainText('Ben too.', LIVE);
     await expect(ana.locator('.collaboration-carets__label', { hasText: 'Ben Ito' })).toBeVisible(LIVE);
     await expect(ben.locator('.collaboration-carets__label', { hasText: 'Ana Lima' })).toBeVisible(LIVE);
+    // A name shows while its person types, then fades off the words above.
+    await typeAtEnd(ben, ' Still here.');
+    const benOnAna = ana.locator('.collaboration-carets__caret', { hasText: 'Ben Ito' });
+    await expect(benOnAna).toHaveClass(/awake/, LIVE);
+    await expect(benOnAna).not.toHaveClass(/awake/, { timeout: 6000 });
   });
 
   await test.step('a new title reaches the other side', async () => {

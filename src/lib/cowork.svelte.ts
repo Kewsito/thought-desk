@@ -72,6 +72,9 @@ const MAX_DOC = 32 * 1024 * 1024;
 /** Their colour reaches styles, so only a #rrggbb code gets through. */
 const safeColor = (c: unknown) => (typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c) ? c : '#8e8e93');
 
+/** How long someone's name shows by their cursor after they type or move. */
+const NAME_FOR = 2500;
+
 /** Cursor colours: hex (the cursor extension takes only that), dark enough for white names in either theme. */
 const CURSOR_COLORS = ['#e5484d', '#e2620e', '#2b9a66', '#0d9488', '#0b7ee8', '#3e63dd', '#8e4ec6', '#d6409f'];
 
@@ -97,7 +100,8 @@ export class Session {
   /** Who's here and where their cursors are. It outlives connections, so the
    *  editor's cursors keep working across reconnects. */
   readonly awareness = new Awareness(this.doc);
-  readonly user: { name: string; color: string };
+  /** id: this copy's Yjs client id, which marks its cursor in the other's editor. */
+  readonly user: { name: string; color: string; id: number };
   /** Paused: let go of the relay while nobody writes or is at the page. */
   status = $state<'connecting' | 'live' | 'offline' | 'paused'>('connecting');
   /** Has heard from the relay since opening (so the title is the real one). */
@@ -112,8 +116,11 @@ export class Session {
   /** The last edit from either side, or sign of someone at the page here. */
   #lastActive = Date.now();
   #idle: ReturnType<typeof setTimeout> | undefined;
-  /** Editors showing the page now. */
+  /** Editors showing the page now, and their elements. */
   #views = 0;
+  #hosts = new Set<HTMLElement>();
+  /** When each other person's name, shown by their cursor, fades again. */
+  #names = new Map<number, ReturnType<typeof setTimeout>>();
   /** Wake-ups to and from the other person's app (through the cloud). */
   #nudges: { send(): void; stop(): void } | null = null;
   #nudged = 0;
@@ -145,10 +152,13 @@ export class Session {
     readonly pageId: string,
     readonly room: string,
   ) {
-    this.user = { name: account.name, color: CURSOR_COLORS[this.doc.clientID % CURSOR_COLORS.length] };
+    this.user = { name: account.name, color: CURSOR_COLORS[this.doc.clientID % CURSOR_COLORS.length], id: this.doc.clientID };
     // Cursors change in the middle of anything (a blur while the page redraws):
     // update who's here just after, never during.
-    this.awareness.on('change', () => queueMicrotask(() => this.#readPeople()));
+    this.awareness.on('change', ({ added, updated }: { added: number[]; updated: number[] }, origin: unknown) => {
+      queueMicrotask(() => this.#readPeople());
+      if (origin !== 'local') for (const id of [...added, ...updated]) if (id !== this.doc.clientID) this.#showName(id);
+    });
     this.awareness.setLocalStateField('user', this.user);
     this.doc.on('update', (_update: Uint8Array, origin: unknown) => {
       this.#scheduleSave();
@@ -265,11 +275,25 @@ export class Session {
     const events = ['keydown', 'pointerdown', 'pointermove', 'wheel', 'focusin'];
     for (const type of events) el.addEventListener(type, here, { passive: true });
     this.#views++;
+    this.#hosts.add(el);
     this.touch();
     return () => {
       for (const type of events) el.removeEventListener(type, here);
       this.#views--;
+      this.#hosts.delete(el);
     };
+  }
+
+  /** Someone typed or moved: their name shows by their cursor for a moment,
+   *  then fades, so it doesn't sit over the words above. */
+  #showName(id: number) {
+    const mark = (on: boolean) => {
+      for (const host of this.#hosts) host.querySelector(`.collaboration-carets__caret[data-who="${id}"]`)?.classList.toggle('awake', on);
+    };
+    clearTimeout(this.#names.get(id));
+    // After the editor has drawn the cursor where it now is.
+    requestAnimationFrame(() => mark(true));
+    this.#names.set(id, setTimeout(() => (mark(false), this.#names.delete(id)), NAME_FOR));
   }
 
   /** Reads the state kept here, then connects. */
@@ -340,6 +364,7 @@ export class Session {
     document.removeEventListener('visibilitychange', this.#back);
     clearTimeout(this.#idle);
     clearInterval(this.#renew);
+    for (const timer of this.#names.values()) clearTimeout(timer);
     this.#nudges?.stop();
     this.#stopEffects();
     if (this.#timer !== undefined) await this.save();

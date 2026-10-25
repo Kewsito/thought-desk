@@ -167,13 +167,28 @@ const SharedImage = Image.extend({
 export interface CollabSetup {
   doc: YDoc;
   provider: unknown;
-  user: { name: string; color: string };
+  user: { name: string; color: string; id: number };
+}
+
+/** Another person's cursor, marked with their client id so their name can
+ *  show only while they're active (Session.showName in cowork.svelte.ts). */
+function caret(user: Record<string, unknown>): HTMLElement {
+  const cursor = document.createElement('span');
+  cursor.className = 'collaboration-carets__caret';
+  cursor.style.borderColor = String(user.color);
+  cursor.dataset.who = String(Number(user.id) || '');
+  const label = document.createElement('div');
+  label.className = 'collaboration-carets__label';
+  label.style.backgroundColor = String(user.color);
+  label.textContent = String(user.name ?? '');
+  cursor.append(label);
+  return cursor;
 }
 
 export function buildExtensions(handle: BlockHandleOptions, collab?: CollabSetup): AnyExtension[] {
   return [
     ...(collab
-      ? [Collaboration.configure({ document: collab.doc }), CollaborationCaret.configure({ provider: collab.provider, user: collab.user })]
+      ? [Collaboration.configure({ document: collab.doc }), CollaborationCaret.configure({ provider: collab.provider, user: collab.user, render: caret })]
       : []),
     StarterKit.configure({
       // A shared page's undo comes with Collaboration (and undoes only your own edits).
