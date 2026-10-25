@@ -4,7 +4,7 @@ A fast, local-first notes workspace in the spirit of Notion: nested pages, a blo
 
 ## Download
 
-**Windows 10 and 11:** get the `_x64-setup.exe` installer (about 3 MB) from the [latest release](https://github.com/kusule1351-hue/thought-desk/releases/latest). The installer isn't code-signed yet, so Windows may show "Windows protected your PC": click **More info**, then **Run anyway**. From 0.5.1 on, the app updates itself: it checks for a new version when it starts, and installs it with one click. A Microsoft Store version and Linux builds are coming soon.
+**Windows 10 and 11:** get the `_x64-setup.exe` installer (about 3 MB) from the [latest release](https://github.com/kusule1351-hue/thought-desk/releases/latest). The installer isn't code-signed yet, so Windows may show "Windows protected your PC": click **More info**, then **Run anyway** (Smart App Control, if it's on, blocks it outright). Signing through SignPath is being set up: see the [code signing policy](https://thoughtdesk.org/code-signing). From 0.5.1 on, the app updates itself: it checks for a new version when it starts, and installs it with one click. A Microsoft Store version and Linux builds are coming soon.
 
 ## Why it's light
 
