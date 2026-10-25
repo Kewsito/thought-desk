@@ -18,11 +18,12 @@
   // The Supabase project that knows who is in which session (its publishable
   // key is public by design: row-level security protects the data), the Clerk
   // instances people sign in with (development, then production), and where
-  // the app runs (the desktop app, and the browser preview while developing).
+  // the app runs (the desktop app on Windows, then on macOS and Linux, and the
+  // browser preview while developing).
   "vars": {
     "SUPABASE_URL": "https://nbzojbfkkpeisitbkwpg.supabase.co",
     "SUPABASE_KEY": "sb_publishable_6W6p3hj5pIszsSA36NWUbQ_TXB4YwLD",
     "CLERK_ISSUERS": "https://smiling-sunbird-3571.clerk.accounts.dev,https://clerk.thoughtdesk.org",
-    "APP_ORIGINS": "http://tauri.localhost,http://localhost:1420"
+    "APP_ORIGINS": "http://tauri.localhost,tauri://localhost,http://localhost:1420"
   }
 }
