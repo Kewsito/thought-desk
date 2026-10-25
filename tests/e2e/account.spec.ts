@@ -85,3 +85,14 @@ test('editing the profile, then signing out', async ({ page }) => {
   await page.keyboard.press(`${MOD}+Comma`);
   await expect(page.getByRole('button', { name: 'Sign In…' })).toBeVisible();
 });
+
+test('the sign-in sheet closes with its button too', async ({ page }) => {
+  const cloud = new FakeCloud();
+  await cloud.attach(page.context());
+  await open(page);
+  await openAccount(page);
+  const sheet = page.getByRole('dialog', { name: 'Account' });
+  await expect(sheet.getByRole('heading', { name: 'Sign in' })).toBeVisible();
+  await sheet.getByRole('button', { name: 'Close' }).click();
+  await expect(sheet).toHaveCount(0);
+});

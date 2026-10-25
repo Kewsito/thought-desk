@@ -26,7 +26,7 @@
   }
 </script>
 
-<Modal onclose={close} width={420} label="Live session">
+<Modal onclose={close} width={420} label="Live session" closeButton>
   <div class="live">
     <h2>{row ? `Writing with ${cowork.otherName(row)}` : 'Live session'}</h2>
     <p class="lead">“{page?.title || 'Untitled'}” is the only page you share. When either of you ends the session, you both keep the page.</p>
@@ -62,6 +62,8 @@
   }
   h2 {
     margin: 0 0 8px;
+    /* Clear of the close button. */
+    padding-right: 28px;
     font-size: 18px;
     font-weight: var(--fw-600);
   }

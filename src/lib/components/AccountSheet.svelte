@@ -99,7 +99,7 @@
   }
 </script>
 
-<Modal onclose={close} width={420} label="Account">
+<Modal onclose={close} width={420} label="Account" closeButton>
   <div class="account">
     {#if !account.user}
       <h2>Sign in</h2>
@@ -209,6 +209,8 @@
   }
   h2 {
     margin: 0 0 8px;
+    /* Clear of the close button. */
+    padding-right: 28px;
     font-size: 18px;
     font-weight: var(--fw-600);
   }

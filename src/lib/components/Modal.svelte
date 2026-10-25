@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import Icon from './Icon.svelte';
   import { fadeOut, sheet, sheetOut } from '../motion';
 
   let {
@@ -8,8 +9,18 @@
     top = '10vh',
     label,
     glass = false,
+    closeButton = false,
     children,
-  }: { onclose: () => void; width?: number; top?: string; label: string; glass?: boolean; children: Snippet } = $props();
+  }: {
+    onclose: () => void;
+    width?: number;
+    top?: string;
+    label: string;
+    glass?: boolean;
+    /** A close button in the corner, for sheets without a header of their own. */
+    closeButton?: boolean;
+    children: Snippet;
+  } = $props();
 
   // A sheet stays on screen while it fades out; by then the keys and clicks
   // belong to whatever is opening next.
@@ -47,6 +58,7 @@
     out:sheetOut|global={{ duration: 180 }}
   >
     {@render children()}
+    {#if closeButton}<button class="icon-btn close" onclick={onclose} aria-label="Close" data-tip="Close"><Icon name="x" /></button>{/if}
   </div>
 </div>
 
@@ -69,6 +81,7 @@
     }
   }
   .modal {
+    position: relative;
     max-width: calc(100vw - 32px);
     max-height: 80vh;
     display: flex;
@@ -78,6 +91,11 @@
     border-radius: var(--r-xl);
     box-shadow: var(--shadow-modal);
     transform-origin: 50% 30%;
+  }
+  .close {
+    position: absolute;
+    top: 14px;
+    right: 14px;
   }
   /* Spotlight-style: frosted panel over a lighter scrim. */
   .backdrop.leaving {

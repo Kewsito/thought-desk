@@ -17,7 +17,7 @@
   const waiting = $derived(cowork.outgoing.find((r) => prefs.coworkPages[r.id] === pageId));
 </script>
 
-<Modal onclose={close} width={420} label="Invite a friend">
+<Modal onclose={close} width={420} label="Invite a friend" closeButton>
   <div class="invite">
     <h2>Write “{page?.title || 'Untitled'}” together</h2>
     <p class="lead">Your friend gets an invite; when they join, this page opens in a new tab for both of you and you write together. Only this page is shared, and you both keep it afterwards.</p>
@@ -70,6 +70,8 @@
   }
   h2 {
     margin: 0 0 8px;
+    /* Clear of the close button. */
+    padding-right: 28px;
     font-size: 18px;
     font-weight: var(--fw-600);
   }
