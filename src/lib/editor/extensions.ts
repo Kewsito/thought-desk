@@ -24,6 +24,7 @@ import { MathPaste } from './math-paste';
 import { ColorHighlight, TextColor } from './text-color';
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCaret from '@tiptap/extension-collaboration-caret';
+import { RemoteGlow } from './remote-glow';
 import type { Doc as YDoc } from 'yjs';
 import { storedName } from '../api';
 import { ui } from '../ui.svelte';
@@ -168,6 +169,8 @@ export interface CollabSetup {
   doc: YDoc;
   provider: unknown;
   user: { name: string; color: string; id: number };
+  /** The other person's cursor colour, for the glow on what they just typed. */
+  friendColor: () => string | undefined;
 }
 
 /** Another person's cursor, marked with their client id so their name can
@@ -188,7 +191,11 @@ function caret(user: Record<string, unknown>): HTMLElement {
 export function buildExtensions(handle: BlockHandleOptions, collab?: CollabSetup): AnyExtension[] {
   return [
     ...(collab
-      ? [Collaboration.configure({ document: collab.doc }), CollaborationCaret.configure({ provider: collab.provider, user: collab.user, render: caret })]
+      ? [
+          Collaboration.configure({ document: collab.doc }),
+          CollaborationCaret.configure({ provider: collab.provider, user: collab.user, render: caret }),
+          RemoteGlow.configure({ color: collab.friendColor }),
+        ]
       : []),
     StarterKit.configure({
       // A shared page's undo comes with Collaboration (and undoes only your own edits).

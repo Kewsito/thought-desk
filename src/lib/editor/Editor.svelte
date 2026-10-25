@@ -126,7 +126,12 @@
       const made = new Editor({
         element: host,
         content,
-        extensions: buildExtensions(handle, session ? { doc: session.doc, provider: { awareness: session.awareness }, user: session.user } : undefined),
+        extensions: buildExtensions(
+          handle,
+          session
+            ? { doc: session.doc, provider: { awareness: session.awareness }, user: session.user, friendColor: () => session?.people.find((p) => !p.me)?.color }
+            : undefined,
+        ),
         editorProps: {
           attributes: {
             class: 'prose',

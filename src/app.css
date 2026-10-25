@@ -1214,6 +1214,27 @@ html.printing .prose > :is(ul, ol) > li {
 .collaboration-carets__selection {
   opacity: 0.25;
 }
+/* What the other person just typed (editor/remote-glow.ts): a tint of their
+   colour that holds a moment, then fades out over GLOW_MS. */
+.remote-glow {
+  border-radius: 2px;
+  animation: remote-glow 3s ease-in forwards;
+}
+@keyframes remote-glow {
+  from,
+  40% {
+    background-color: color-mix(in srgb, var(--glow) 30%, transparent);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .remote-glow {
+    animation: none;
+    background-color: color-mix(in srgb, var(--glow) 30%, transparent);
+  }
+}
 
 /* Coloured text and highlights (editor/text-color.ts): a palette colour,
    darkened for text on light pages, lightened on dark ones, and a tint of it

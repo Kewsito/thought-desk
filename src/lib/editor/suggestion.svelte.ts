@@ -44,12 +44,22 @@ export function suggestionRenderer(empty: string) {
       },
     });
 
+    /** What was typed after the "/" or "@" for the list shown now. */
+    let query = '';
     const sync = (props: SuggestionProps<MenuEntry, MenuEntry>) => {
       command = props.command;
-      const changed = props.items.length !== ctl.items.length || props.items.some((it, i) => it.id !== ctl.items[i]?.id);
-      ctl.items = props.items;
-      if (changed) ctl.selected = 0;
       ctl.rect = props.clientRect?.() ?? null;
+      // Tiptap empties the list while it fetches it again, which it also does
+      // when only the text moved (the other person in a shared page typed
+      // above it): keep showing the list until the new one comes.
+      if (props.loading && !props.items.length) return;
+      const changed = props.items.length !== ctl.items.length || props.items.some((it, i) => it.id !== ctl.items[i]?.id);
+      const picked = ctl.items[ctl.selected]?.id;
+      ctl.items = props.items;
+      // A new list starts at the top, unless the search is the same, when
+      // the highlighted entry stays highlighted.
+      if (changed) ctl.selected = props.query === query ? Math.max(0, props.items.findIndex((it) => it.id === picked)) : 0;
+      query = props.query;
     };
 
     return {

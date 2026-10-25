@@ -319,6 +319,22 @@ export class Session {
       .filter(([, s]) => s.user)
       .map(([id, s]) => ({ id, name: String(s.user.name ?? 'Guest').slice(0, MAX_NAME), color: safeColor(s.user.color), me: id === me }))
       .sort((a, b) => Number(b.me) - Number(a.me) || a.name.localeCompare(b.name));
+    this.#ownColor();
+  }
+
+  /** Two people with the same colour can't be told apart, so the one who
+   *  came later (the higher client id) takes a colour nobody here has. The
+   *  editor shares this.user, so a cursor drawn later keeps the new one. */
+  #ownColor() {
+    const me = this.doc.clientID;
+    const others = this.people.filter((p) => !p.me);
+    if (!others.some((p) => p.id < me && p.color.toLowerCase() === this.user.color.toLowerCase())) return;
+    const taken = new Set(others.map((p) => p.color.toLowerCase()));
+    const free = CURSOR_COLORS.find((c) => !taken.has(c));
+    if (!free) return;
+    this.user.color = free;
+    // A new object: awareness sends only what differs from the last state.
+    this.awareness.setLocalStateField('user', { ...this.user });
   }
 
   #scheduleSave() {

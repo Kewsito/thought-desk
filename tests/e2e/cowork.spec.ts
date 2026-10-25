@@ -11,8 +11,10 @@ test.use({ viewport: { width: 1280, height: 820 } });
 const LIVE = { timeout: 10_000 };
 
 /** Ana (this page) and Ben (a second profile), friends, both signed in.
- *  `idleMs` shortens how long a quiet session waits before letting go of the relay. */
-async function twoFriends(ana: Page, browser: Browser, { idleMs }: { idleMs?: number } = {}) {
+ *  `idleMs` shortens how long a quiet session waits before letting go of the relay;
+ *  `sameColor` makes both start with the same cursor colour (it comes from the
+ *  Yjs client id, a random number, modulo the number of colours). */
+async function twoFriends(ana: Page, browser: Browser, { idleMs, sameColor }: { idleMs?: number; sameColor?: boolean } = {}) {
   const cloud = new FakeCloud();
   const anaUser = cloud.addUser({ email: 'ana@example.com', name: 'Ana Lima', username: 'ana' });
   const benUser = cloud.addUser({ email: 'ben@example.com', name: 'Ben Ito', username: 'ben' });
@@ -21,6 +23,16 @@ async function twoFriends(ana: Page, browser: Browser, { idleMs }: { idleMs?: nu
   context.on('page', (p) => p.on('pageerror', (e) => console.error(`[Ben] ${e.stack}`)));
   if (idleMs)
     for (const c of [ana.context(), context]) await c.addInitScript((ms) => ((window as unknown as { __coworkIdleMs: number }).__coworkIdleMs = ms), idleMs);
+  if (sameColor)
+    for (const c of [ana.context(), context])
+      await c.addInitScript(() => {
+        const real = crypto.getRandomValues.bind(crypto);
+        crypto.getRandomValues = <T extends ArrayBufferView | null>(a: T): T => {
+          real(a);
+          if (a instanceof Uint32Array && a.length === 1) a[0] = (a[0] & ~7) | 3;
+          return a;
+        };
+      });
   await cloud.attach(ana.context());
   cloud.signIn(ana.context(), anaUser);
   await open(ana);
@@ -59,7 +71,7 @@ async function inviteBen(ana: Page) {
 
 test('invite, join, write together in a new tab, end: both keep the page', async ({ page: ana, browser }) => {
   test.setTimeout(120_000);
-  const { cloud, ben } = await twoFriends(ana, browser);
+  const { cloud, ben } = await twoFriends(ana, browser, { sameColor: true });
   const sockets: string[] = [];
   ana.on('websocket', (ws) => sockets.push(ws.url()));
 
@@ -92,11 +104,47 @@ test('invite, join, write together in a new tab, end: both keep the page', async
     await expect(editor(ana)).toContainText('Ben too.', LIVE);
     await expect(ana.locator('.collaboration-carets__label', { hasText: 'Ben Ito' })).toBeVisible(LIVE);
     await expect(ben.locator('.collaboration-carets__label', { hasText: 'Ana Lima' })).toBeVisible(LIVE);
+    // Both started with the same colour; the one who came later took another.
+    const colorOf = (page: Page, name: string) => page.locator('.collaboration-carets__label', { hasText: name }).evaluate((el) => getComputedStyle(el).backgroundColor);
+    await expect.poll(async () => (await colorOf(ana, 'Ben Ito')) !== (await colorOf(ben, 'Ana Lima')), LIVE).toBe(true);
     // A name shows while its person types, then fades off the words above.
     await typeAtEnd(ben, ' Still here.');
     const benOnAna = ana.locator('.collaboration-carets__caret', { hasText: 'Ben Ito' });
     await expect(benOnAna).toHaveClass(/awake/, LIVE);
     await expect(benOnAna).not.toHaveClass(/awake/, { timeout: 6000 });
+    // What he types glows on Ana's side in his colour, then fades away.
+    await typeAtEnd(ben, ' Glowing words.');
+    const glow = ana.locator('.scroller .remote-glow');
+    await expect.poll(() => glow.allTextContents().then((t) => t.join('')), LIVE).toContain('Glowing');
+    expect((await glow.allTextContents()).join(''), 'only the new words').not.toContain('Still here');
+    const inHisColor = await ana.evaluate(() => {
+      const glowing = document.querySelector<HTMLElement>('.scroller .remote-glow')!;
+      const caret = [...document.querySelectorAll<HTMLElement>('.collaboration-carets__caret')].find((el) => el.textContent?.includes('Ben Ito'))!;
+      const probe = document.body.appendChild(document.createElement('span'));
+      probe.style.color = glowing.style.getPropertyValue('--glow');
+      const glowColor = getComputedStyle(probe).color;
+      probe.remove();
+      return glowColor === getComputedStyle(caret).borderLeftColor;
+    });
+    expect(inHisColor, "in Ben's colour").toBe(true);
+    await expect(glow).toHaveCount(0, { timeout: 6000 });
+  });
+
+  await test.step("Ana's / menu holds still while Ben types above it", async () => {
+    await typeAtEnd(ana, ' /');
+    const picked = ana.locator('.suggest .row[aria-selected=true]');
+    await expect(picked).toHaveCount(1);
+    for (let i = 0; i < 3; i++) await ana.keyboard.press('ArrowDown');
+    const choice = await picked.locator('.title').textContent();
+    // Ben writes at the start of the page, which moves Ana's "/" along.
+    await editor(ben).click();
+    await ben.keyboard.press(`${MOD}+Home`);
+    await ben.keyboard.type('Ben above. ');
+    await expect(editor(ana)).toContainText('Ben above.', LIVE);
+    await ana.waitForTimeout(500);
+    await expect(picked.locator('.title')).toHaveText(choice!);
+    await ana.keyboard.press('Escape');
+    await ana.keyboard.press('Backspace');
   });
 
   await test.step('a new title reaches the other side', async () => {
