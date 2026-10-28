@@ -110,8 +110,10 @@
       "arrows": "Flechas",
       "@arrows": "pestaña de la paleta de símbolos matemáticos: →, ⇒, ↔ y similares"
     },
-    "casesIf": "if",
-    "@casesIf": "escrito en una fórmula cuando alguien inserta una definición por partes (\\begin{cases}): “valor si condición”. Solo palabras simples: no { } \\ | $ & # ^ _ % o ~",
+    "casesIf": "si",
+    "@casesIf": "escrito en una fórmula cuando alguien inserta una definición por partes (\\begin{cases}): “valor si condición”. Solo palabras simples: sin { } \\ | $ & # ^ _ % o ~",
+    "casesOtherwise": "en otro caso",
+    "@casesOtherwise": "escrito en una fórmula cuando alguien inserta una definición por partes (\\begin{cases}), como la condicion del ultimo caso. Solo palabras simples : sin { } \\ | $ & # ^ _ % o ~",
     "@search": "Palabras que encuentran un comando LaTeX cuando se escriben después de una barra invertida en una fórmula (\\fract… encuentra \\frac), nunca se muestran. Separadas por espacios, en minúsculas. Solo se pueden escribir las letras a–z después de la barra invertida, así que escribe palabras sin acentos donde tu idioma permita; las palabras en inglés siguen funcionando también",
     "search": {
       "frac": "fracción",
